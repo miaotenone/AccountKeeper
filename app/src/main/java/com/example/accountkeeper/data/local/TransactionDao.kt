@@ -16,6 +16,9 @@ interface TransactionDao {
     @Query("SELECT * FROM transactions WHERE date >= :startDate AND date <= :endDate ORDER BY date DESC")
     fun getTransactionsBetween(startDate: Long, endDate: Long): Flow<List<Transaction>>
 
+    @Query("SELECT * FROM transactions WHERE id = :id")
+    suspend fun getTransactionById(id: Long): Transaction?
+
     @Insert
     suspend fun insertTransaction(transaction: Transaction)
 

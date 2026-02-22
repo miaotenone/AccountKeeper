@@ -23,6 +23,24 @@ class CategoryViewModel @Inject constructor(
             initialValue = emptyList()
         )
 
+    init {
+        viewModelScope.launch {
+            categories.collect { list ->
+                if (list.isEmpty()) {
+                    val defaults = listOf(
+                        Category(name = "餐饮", type = com.example.accountkeeper.data.model.TransactionType.EXPENSE, isDefault = true),
+                        Category(name = "交通", type = com.example.accountkeeper.data.model.TransactionType.EXPENSE, isDefault = true),
+                        Category(name = "购物", type = com.example.accountkeeper.data.model.TransactionType.EXPENSE, isDefault = true),
+                        Category(name = "医疗", type = com.example.accountkeeper.data.model.TransactionType.EXPENSE, isDefault = true),
+                        Category(name = "工资", type = com.example.accountkeeper.data.model.TransactionType.INCOME, isDefault = true),
+                        Category(name = "理财", type = com.example.accountkeeper.data.model.TransactionType.INCOME, isDefault = true)
+                    )
+                    defaults.forEach { addCategory(it) }
+                }
+            }
+        }
+    }
+
     fun addCategory(category: Category) {
         viewModelScope.launch {
             categoryRepository.insertCategory(category)

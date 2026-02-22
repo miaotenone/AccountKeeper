@@ -11,6 +11,7 @@ class TransactionRepository @Inject constructor(
     fun getAllTransactions(): Flow<List<Transaction>> = transactionDao.getAllTransactions()
     fun getTransactionsBetween(startDate: Long, endDate: Long): Flow<List<Transaction>> = 
         transactionDao.getTransactionsBetween(startDate, endDate)
+    suspend fun getTransactionById(id: Long): Transaction? = transactionDao.getTransactionById(id)
     suspend fun insertTransaction(transaction: Transaction) = transactionDao.insertTransaction(transaction)
     suspend fun updateTransaction(transaction: Transaction) = transactionDao.updateTransaction(transaction)
     suspend fun deleteTransaction(transaction: Transaction) = transactionDao.deleteTransaction(transaction)

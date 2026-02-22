@@ -18,6 +18,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.accountkeeper.data.model.Transaction
 import com.example.accountkeeper.data.model.TransactionType
 import com.example.accountkeeper.ui.viewmodel.TransactionViewModel
+import com.example.accountkeeper.ui.viewmodel.CategoryViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -27,9 +28,11 @@ import java.util.Locale
 fun HomeScreen(
     onNavigateToAddTransaction: () -> Unit,
     onNavigateToEditTransaction: (Long) -> Unit,
-    viewModel: TransactionViewModel = hiltViewModel()
+    viewModel: TransactionViewModel = hiltViewModel(),
+    categoryViewModel: CategoryViewModel = hiltViewModel()
 ) {
     val transactions by viewModel.transactions.collectAsState()
+    val categories by categoryViewModel.categories.collectAsState()
     
     val totalIncome = transactions.filter { it.type == TransactionType.INCOME }.sumOf { it.amount }
     val totalExpense = transactions.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount }
@@ -90,8 +93,10 @@ fun HomeScreen(
                 contentPadding = PaddingValues(bottom = 80.dp)
             ) {
                 items(transactions, key = { it.id }) { transaction ->
+                    val categoryName = categories.find { it.id == transaction.categoryId }?.name ?: "Other"
                     TransactionItem(
                         transaction = transaction,
+                        categoryName = categoryName,
                         onClick = { onNavigateToEditTransaction(transaction.id) }
                     )
                 }
@@ -101,12 +106,19 @@ fun HomeScreen(
 }
 
 @Composable
-fun TransactionItem(transaction: Transaction, onClick: () -> Unit) {
+fun TransactionItem(transaction: Transaction, categoryName: String, onClick: () -> Unit) {
     val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
     
     ListItem(
-        headlineContent = { Text(transaction.note.ifEmpty { "No Note" }) },
-        supportingContent = { Text(dateFormat.format(Date(transaction.date))) },
+        headlineContent = { Text(categoryName, fontWeight = FontWeight.SemiBold) },
+        supportingContent = { 
+            Column {
+                if (transaction.note.isNotBlank()) {
+                    Text(transaction.note, style = MaterialTheme.typography.bodySmall)
+                }
+                Text(dateFormat.format(Date(transaction.date)), style = MaterialTheme.typography.bodySmall)
+            }
+        },
         trailingContent = {
             val isIncome = transaction.type == TransactionType.INCOME
             Text(

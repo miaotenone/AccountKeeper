@@ -1,33 +1,87 @@
 package com.example.accountkeeper.ui.screens
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.accountkeeper.data.model.Transaction
 import com.example.accountkeeper.data.model.TransactionType
+import com.example.accountkeeper.ui.viewmodel.CategoryViewModel
 import com.example.accountkeeper.ui.viewmodel.TransactionViewModel
+import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddEditTransactionScreen(
+    transactionId: Long = -1L,
     onNavigateBack: () -> Unit,
-    viewModel: TransactionViewModel = hiltViewModel()
+    viewModel: TransactionViewModel = hiltViewModel(),
+    categoryViewModel: CategoryViewModel = hiltViewModel()
 ) {
     var amountText by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
     var isExpense by remember { mutableStateOf(true) }
+    var selectedCategoryId by remember { mutableStateOf<Long?>(null) }
+    var transactionDate by remember { mutableStateOf(System.currentTimeMillis()) }
+
+    var showDatePicker by remember { mutableStateOf(false) }
+
+    val categories by categoryViewModel.categories.collectAsState()
+    val filteredCategories = categories.filter { if (isExpense) it.type == TransactionType.EXPENSE else it.type == TransactionType.INCOME }
+
+    val scope = rememberCoroutineScope()
+    val isEditMode = transactionId != -1L
+
+    LaunchedEffect(transactionId) {
+        if (isEditMode) {
+            val existingTx = viewModel.getTransactionById(transactionId)
+            existingTx?.let { tx ->
+                amountText = tx.amount.toString()
+                note = tx.note
+                isExpense = tx.type == TransactionType.EXPENSE
+                selectedCategoryId = tx.categoryId
+                transactionDate = tx.date
+            }
+        }
+    }
+
+    if (showDatePicker) {
+        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = transactionDate)
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    datePickerState.selectedDateMillis?.let {
+                        transactionDate = it
+                    }
+                    showDatePicker = false
+                }) { Text("OK") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) { Text("Cancel") }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Add Transaction") },
+                title = { Text(if (isEditMode) "Edit Transaction" else "Add Transaction") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -43,21 +97,29 @@ fun AddEditTransactionScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // Type Selector
             Row(modifier = Modifier.fillMaxWidth()) {
                 FilterChip(
                     selected = isExpense,
-                    onClick = { isExpense = true },
+                    onClick = { 
+                        isExpense = true
+                        selectedCategoryId = null 
+                    },
                     label = { Text("Expense") },
                     modifier = Modifier.weight(1f).padding(end = 8.dp)
                 )
                 FilterChip(
                     selected = !isExpense,
-                    onClick = { isExpense = false },
+                    onClick = { 
+                        isExpense = false
+                        selectedCategoryId = null 
+                    },
                     label = { Text("Income") },
                     modifier = Modifier.weight(1f).padding(start = 8.dp)
                 )
             }
 
+            // Amount Input
             OutlinedTextField(
                 value = amountText,
                 onValueChange = { amountText = it },
@@ -67,6 +129,51 @@ fun AddEditTransactionScreen(
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
             )
 
+            // Date Selection
+            val dateFormatter = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+            OutlinedTextField(
+                value = dateFormatter.format(Date(transactionDate)),
+                onValueChange = {},
+                label = { Text("Date") },
+                modifier = Modifier.fillMaxWidth(),
+                readOnly = true,
+                trailingIcon = {
+                    TextButton(onClick = { showDatePicker = true }) {
+                        Text("Change")
+                    }
+                }
+            )
+
+            // Category Selection (Grid)
+            Text("Category", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(3),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(filteredCategories, key = { it.id }) { category ->
+                    val isSelected = selectedCategoryId == category.id
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(60.dp)
+                            .clickable { selectedCategoryId = category.id }
+                    ) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text(text = category.name)
+                        }
+                    }
+                }
+            }
+
+            // Note Input
             OutlinedTextField(
                 value = note,
                 onValueChange = { note = it },
@@ -74,23 +181,28 @@ fun AddEditTransactionScreen(
                 modifier = Modifier.fillMaxWidth()
             )
 
+            // Save Button
             Button(
                 onClick = {
                     val amount = amountText.toDoubleOrNull() ?: 0.0
                     if (amount > 0) {
-                        viewModel.addTransaction(
-                            Transaction(
-                                type = if (isExpense) TransactionType.EXPENSE else TransactionType.INCOME,
-                                amount = amount,
-                                note = note,
-                                date = System.currentTimeMillis(),
-                                categoryId = null
-                            )
+                        val transaction = Transaction(
+                            id = if (isEditMode) transactionId else 0,
+                            type = if (isExpense) TransactionType.EXPENSE else TransactionType.INCOME,
+                            amount = amount,
+                            note = note,
+                            date = transactionDate,
+                            categoryId = selectedCategoryId
                         )
+                        if (isEditMode) {
+                            viewModel.updateTransaction(transaction)
+                        } else {
+                            viewModel.addTransaction(transaction)
+                        }
                         onNavigateBack()
                     }
                 },
-                modifier = Modifier.fillMaxWidth().padding(top = 16.dp)
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
             ) {
                 Text("Save")
             }

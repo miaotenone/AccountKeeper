@@ -6,6 +6,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.toRoute
 import com.example.accountkeeper.ui.screens.AddEditTransactionScreen
 import com.example.accountkeeper.ui.screens.HomeScreen
 import com.example.accountkeeper.ui.screens.ImportExportScreen
@@ -40,8 +41,10 @@ fun AppNavigation(
                 onNavigateToEditTransaction = { transactionId -> navController.navigate(AddEditTransactionRoute(transactionId)) }
             )
         }
-        composable<AddEditTransactionRoute> {
+        composable<AddEditTransactionRoute> { backStackEntry ->
+            val args = backStackEntry.toRoute<AddEditTransactionRoute>()
             AddEditTransactionScreen(
+                transactionId = args.transactionId,
                 onNavigateBack = { navController.popBackStack() }
             )
         }

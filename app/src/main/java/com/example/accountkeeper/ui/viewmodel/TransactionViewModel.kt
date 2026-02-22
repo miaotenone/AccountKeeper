@@ -23,6 +23,10 @@ class TransactionViewModel @Inject constructor(
             initialValue = emptyList()
         )
 
+    suspend fun getTransactionById(id: Long): Transaction? {
+        return transactionRepository.getTransactionById(id)
+    }
+
     fun addTransaction(transaction: Transaction) {
         viewModelScope.launch {
             transactionRepository.insertTransaction(transaction)
