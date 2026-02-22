@@ -23,6 +23,7 @@ import com.example.accountkeeper.data.model.TransactionType
 import com.example.accountkeeper.ui.viewmodel.CategoryViewModel
 import com.example.accountkeeper.ui.viewmodel.TransactionViewModel
 import com.example.accountkeeper.ui.theme.LocalAppStrings
+import com.example.accountkeeper.utils.CurrencyUtils
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -40,8 +41,10 @@ fun HomeScreen(
     val currency = LocalCurrencySymbol.current
     val strings = LocalAppStrings.current
     
-    val totalIncome = transactions.filter { it.type == TransactionType.INCOME }.sumOf { it.amount }
-    val totalExpense = transactions.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount }
+    val totalIncomeBase = transactions.filter { it.type == TransactionType.INCOME }.sumOf { it.amount }
+    val totalExpenseBase = transactions.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount }
+    val totalIncome = CurrencyUtils.convertToDisplay(totalIncomeBase, currency)
+    val totalExpense = CurrencyUtils.convertToDisplay(totalExpenseBase, currency)
     val totalBalance = totalIncome - totalExpense
 
     // Grouping transactions by Date (yyyy-MM-dd)
@@ -99,8 +102,10 @@ fun HomeScreen(
             ) {
                 groupedTransactions.forEach { (dateString, txList) ->
                     stickyHeader {
-                        val dayIncome = txList.filter { it.type == TransactionType.INCOME }.sumOf { it.amount }
-                        val dayExpense = txList.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount }
+                        val dayIncomeBase = txList.filter { it.type == TransactionType.INCOME }.sumOf { it.amount }
+                        val dayExpenseBase = txList.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount }
+                        val dayIncome = CurrencyUtils.convertToDisplay(dayIncomeBase, currency)
+                        val dayExpense = CurrencyUtils.convertToDisplay(dayExpenseBase, currency)
 
                         Row(
                             modifier = Modifier
@@ -149,8 +154,9 @@ fun TransactionItem(transaction: Transaction, categoryName: String, currency: St
         },
         trailingContent = {
             val isIncome = transaction.type == TransactionType.INCOME
+            val displayAmount = CurrencyUtils.convertToDisplay(transaction.amount, currency)
             Text(
-                text = "${if (isIncome) "+" else "-"}$currency${String.format(Locale.US, "%.2f", transaction.amount)}",
+                text = "${if (isIncome) "+" else "-"}$currency${String.format(Locale.US, "%.2f", displayAmount)}",
                 color = if (isIncome) androidx.compose.ui.graphics.Color(0xFF4CAF50) else MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold

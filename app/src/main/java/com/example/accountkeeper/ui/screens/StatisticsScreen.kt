@@ -3,6 +3,7 @@ package com.example.accountkeeper.ui.screens
 import android.graphics.Paint
 import android.graphics.Typeface
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -27,12 +28,14 @@ import com.example.accountkeeper.data.model.TransactionType
 import com.example.accountkeeper.ui.theme.LocalAppStrings
 import com.example.accountkeeper.ui.viewmodel.CategoryViewModel
 import com.example.accountkeeper.ui.viewmodel.TransactionViewModel
+import com.example.accountkeeper.utils.CurrencyUtils
 import java.text.SimpleDateFormat
 import java.util.*
 import kotlin.math.cos
 import kotlin.math.sin
 
 enum class TimeRange { DAILY, WEEKLY, MONTHLY, YEARLY, CUSTOM }
+enum class PickerType { ANCHOR, CUSTOM_START, CUSTOM_END }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -48,30 +51,33 @@ fun StatisticsScreen(
     var selectedRange by remember { mutableStateOf(TimeRange.MONTHLY) }
     var isExpenseView by remember { mutableStateOf(true) }
 
-    // Offset for navigating previous/next periods (0 means current)
-    var timeOffset by remember { mutableIntStateOf(0) }
+    // Offset for navigating previous/next periods (0 means current) is removed
+    // We strictly use selected date to anchor our period
+    var anchorDate by remember { mutableStateOf(System.currentTimeMillis()) }
     
     // Custom date range state
     var customStartDate by remember { mutableStateOf<Long?>(null) }
     var customEndDate by remember { mutableStateOf<Long?>(null) }
-    var showDateRangePicker by remember { mutableStateOf(false) }
+    
+    // Which picker is currently active
+    var activePicker by remember { mutableStateOf<PickerType?>(null) }
 
-    // Reset offset when changing range
+    // Reset anchor date when changing range to bring us to the present
     LaunchedEffect(selectedRange) {
         if (selectedRange != TimeRange.CUSTOM) {
-            timeOffset = 0
+            anchorDate = System.currentTimeMillis()
         }
     }
 
-    val (startTime, endTime, displayPeriodStr) = remember(selectedRange, timeOffset, customStartDate, customEndDate) {
+    val (startTime, endTime, displayPeriodStr) = remember(selectedRange, anchorDate, customStartDate, customEndDate) {
         val calendar = Calendar.getInstance()
+        calendar.timeInMillis = anchorDate
         var start = 0L
         var end = 0L
         var periodStr = ""
 
         when (selectedRange) {
             TimeRange.DAILY -> {
-                calendar.add(Calendar.DAY_OF_YEAR, timeOffset)
                 calendar.set(Calendar.HOUR_OF_DAY, 0)
                 calendar.set(Calendar.MINUTE, 0)
                 calendar.set(Calendar.SECOND, 0)
@@ -82,7 +88,6 @@ fun StatisticsScreen(
                 periodStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(start))
             }
             TimeRange.WEEKLY -> {
-                calendar.add(Calendar.WEEK_OF_YEAR, timeOffset)
                 calendar.set(Calendar.DAY_OF_WEEK, calendar.firstDayOfWeek)
                 calendar.set(Calendar.HOUR_OF_DAY, 0)
                 calendar.set(Calendar.MINUTE, 0)
@@ -96,7 +101,6 @@ fun StatisticsScreen(
                 periodStr = "${year} Week $weekNum"
             }
             TimeRange.MONTHLY -> {
-                calendar.add(Calendar.MONTH, timeOffset)
                 calendar.set(Calendar.DAY_OF_MONTH, 1)
                 calendar.set(Calendar.HOUR_OF_DAY, 0)
                 calendar.set(Calendar.MINUTE, 0)
@@ -108,7 +112,6 @@ fun StatisticsScreen(
                 periodStr = SimpleDateFormat("yyyy-MM", Locale.getDefault()).format(Date(start))
             }
             TimeRange.YEARLY -> {
-                calendar.add(Calendar.YEAR, timeOffset)
                 calendar.set(Calendar.DAY_OF_YEAR, 1)
                 calendar.set(Calendar.HOUR_OF_DAY, 0)
                 calendar.set(Calendar.MINUTE, 0)
@@ -123,8 +126,8 @@ fun StatisticsScreen(
                 start = customStartDate ?: 0L
                 end = customEndDate ?: Long.MAX_VALUE
                 if (customStartDate != null && customEndDate != null) {
-                    val s = SimpleDateFormat("MM-dd", Locale.getDefault()).format(Date(start))
-                    val e = SimpleDateFormat("MM-dd", Locale.getDefault()).format(Date(end))
+                    val s = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(start))
+                    val e = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(end))
                     periodStr = "$s -> $e"
                 } else {
                     periodStr = strings.selectRange
@@ -141,41 +144,59 @@ fun StatisticsScreen(
         }
     }
 
-    val totalAmount = displayTransactions.sumOf { it.amount }
+    // Currency Conversion
+    val totalAmountBase = displayTransactions.sumOf { it.amount }
+    val totalAmount = CurrencyUtils.convertToDisplay(totalAmountBase, currency)
 
     // Aggregate by category
-    val categoryTotals = displayTransactions.groupBy { it.categoryId }
+    val categoryTotalsBase = displayTransactions.groupBy { it.categoryId }
         .mapValues { entry -> entry.value.sumOf { it.amount } }
         .toList()
         .sortedByDescending { it.second }
+    val categoryTotals = categoryTotalsBase.map { it.first to CurrencyUtils.convertToDisplay(it.second, currency) }
 
-    if (showDateRangePicker) {
-        val dateRangePickerState = rememberDateRangePickerState()
+    if (activePicker != null) {
+        val initialSelected = when (activePicker) {
+            PickerType.ANCHOR -> anchorDate
+            PickerType.CUSTOM_START -> customStartDate ?: System.currentTimeMillis()
+            PickerType.CUSTOM_END -> customEndDate ?: System.currentTimeMillis()
+            else -> System.currentTimeMillis()
+        }
+        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = initialSelected)
         DatePickerDialog(
-            onDismissRequest = { showDateRangePicker = false },
+            onDismissRequest = { activePicker = null },
             confirmButton = {
                 TextButton(onClick = {
-                    customStartDate = dateRangePickerState.selectedStartDateMillis
-                    // Default to end of the selected end day if picked
-                    customEndDate = dateRangePickerState.selectedEndDateMillis?.let {
-                        val c = Calendar.getInstance()
-                        c.timeInMillis = it
-                        c.set(Calendar.HOUR_OF_DAY, 23)
-                        c.set(Calendar.MINUTE, 59)
-                        c.set(Calendar.SECOND, 59)
-                        c.timeInMillis
+                    datePickerState.selectedDateMillis?.let { dateVal ->
+                        when(activePicker) {
+                            PickerType.ANCHOR -> anchorDate = dateVal
+                            PickerType.CUSTOM_START -> {
+                                val c = Calendar.getInstance()
+                                c.timeInMillis = dateVal
+                                c.set(Calendar.HOUR_OF_DAY, 0)
+                                c.set(Calendar.MINUTE, 0)
+                                c.set(Calendar.SECOND, 0)
+                                customStartDate = c.timeInMillis
+                            }
+                            PickerType.CUSTOM_END -> {
+                                val c = Calendar.getInstance()
+                                c.timeInMillis = dateVal
+                                c.set(Calendar.HOUR_OF_DAY, 23)
+                                c.set(Calendar.MINUTE, 59)
+                                c.set(Calendar.SECOND, 59)
+                                customEndDate = c.timeInMillis
+                            }
+                            else -> {}
+                        }
                     }
-                    if (customStartDate != null) {
-                        selectedRange = TimeRange.CUSTOM
-                    }
-                    showDateRangePicker = false
+                    activePicker = null
                 }) { Text(strings.ok) }
             },
             dismissButton = {
-                TextButton(onClick = { showDateRangePicker = false }) { Text(strings.cancel) }
+                TextButton(onClick = { activePicker = null }) { Text(strings.cancel) }
             }
         ) {
-            DateRangePicker(state = dateRangePickerState, modifier = Modifier.weight(1f))
+            DatePicker(state = datePickerState)
         }
     }
 
@@ -200,7 +221,8 @@ fun StatisticsScreen(
                         onClick = { 
                             selectedRange = range
                             if (range == TimeRange.CUSTOM) {
-                                showDateRangePicker = true
+                                // Default selection for custom range avoids immediately popping dialog if we don't want to
+                                // Setting to CUSTOM range keeps the distinct UI
                             }
                         },
                         text = { 
@@ -225,22 +247,33 @@ fun StatisticsScreen(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (selectedRange != TimeRange.CUSTOM) {
-                        IconButton(onClick = { timeOffset-- }) {
-                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Previous")
-                        }
-                    }
-                    Text(
-                        text = displayPeriodStr,
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.padding(horizontal = 8.dp)
-                    )
-                    if (selectedRange != TimeRange.CUSTOM) {
-                        IconButton(onClick = { timeOffset++ }, enabled = timeOffset < 0) {
-                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Next")
-                        }
+                        Text(
+                            text = displayPeriodStr,
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier
+                                .padding(horizontal = 8.dp)
+                                .clickable { activePicker = PickerType.ANCHOR }
+                        )
                     } else {
-                        IconButton(onClick = { showDateRangePicker = true }) {
-                            Icon(Icons.Default.DateRange, contentDescription = "Pick Range")
+                        Column {
+                            val startStr = customStartDate?.let { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(it)) } ?: "Start Date"
+                            val endStr = customEndDate?.let { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(it)) } ?: "End Date"
+                            
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = startStr,
+                                    modifier = Modifier.clickable { activePicker = PickerType.CUSTOM_START },
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(" -> ", modifier = Modifier.padding(horizontal = 4.dp))
+                                Text(
+                                    text = endStr,
+                                    modifier = Modifier.clickable { activePicker = PickerType.CUSTOM_END },
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
                     }
                 }

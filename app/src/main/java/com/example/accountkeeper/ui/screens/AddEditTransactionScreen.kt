@@ -23,6 +23,7 @@ import com.example.accountkeeper.data.model.TransactionType
 import com.example.accountkeeper.ui.theme.LocalAppStrings
 import com.example.accountkeeper.ui.viewmodel.CategoryViewModel
 import com.example.accountkeeper.ui.viewmodel.TransactionViewModel
+import com.example.accountkeeper.utils.CurrencyUtils
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -60,7 +61,7 @@ fun AddEditTransactionScreen(
         if (isEditMode) {
             val existingTx = viewModel.getTransactionById(transactionId)
             existingTx?.let { tx ->
-                amountText = tx.amount.toString()
+                amountText = CurrencyUtils.convertToDisplay(tx.amount, currency).toString()
                 note = tx.note
                 isExpense = tx.type == TransactionType.EXPENSE
                 selectedCategoryId = tx.categoryId
@@ -253,7 +254,8 @@ fun AddEditTransactionScreen(
             // Save Button
             Button(
                 onClick = {
-                    val amount = amountText.toDoubleOrNull() ?: 0.0
+                    val displayAmount = amountText.toDoubleOrNull() ?: 0.0
+                    val amount = CurrencyUtils.convertToBase(displayAmount, currency)
                     if (amount > 0) {
                         val transaction = Transaction(
                             id = if (isEditMode) transactionId else 0,
