@@ -27,26 +27,34 @@ class CategoryViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             categories.collect { list ->
-                if (list.isEmpty()) {
-                    val defaultCategories = listOf(
-                        Category(name = "Food & Drink", type = TransactionType.EXPENSE, isDefault = true),
-                        Category(name = "Transportation", type = TransactionType.EXPENSE, isDefault = true),
-                        Category(name = "Shopping", type = TransactionType.EXPENSE, isDefault = true),
-                        Category(name = "Entertainment", type = TransactionType.EXPENSE, isDefault = true),
-                        Category(name = "Housing", type = TransactionType.EXPENSE, isDefault = true),
-                        Category(name = "Utilities", type = TransactionType.EXPENSE, isDefault = true),
-                        Category(name = "Family", type = TransactionType.EXPENSE, isDefault = true),
-                        Category(name = "Health", type = TransactionType.EXPENSE, isDefault = true),
-                        Category(name = "Education", type = TransactionType.EXPENSE, isDefault = true),
-                        Category(name = "Transfer Out", type = TransactionType.EXPENSE, isDefault = true),
+                // Clean up any previously inserted English defaults that are cluttering the UI
+                val defaultDeleted = list.filter { it.isDefault && it.name.matches(Regex(".*[a-zA-Z].*")) }
+                defaultDeleted.forEach { categoryRepository.deleteCategory(it) }
 
-                        Category(name = "Salary", type = TransactionType.INCOME, isDefault = true),
-                        Category(name = "Investment", type = TransactionType.INCOME, isDefault = true),
-                        Category(name = "Part-time", type = TransactionType.INCOME, isDefault = true),
-                        Category(name = "Red Packet", type = TransactionType.INCOME, isDefault = true),
-                        Category(name = "Transfer In", type = TransactionType.INCOME, isDefault = true)
+                if (list.isEmpty() || defaultDeleted.isNotEmpty()) {
+                    val defaultCategories = listOf(
+                        Category(name = "餐饮美食", type = TransactionType.EXPENSE, isDefault = true),
+                        Category(name = "交通出行", type = TransactionType.EXPENSE, isDefault = true),
+                        Category(name = "日用购物", type = TransactionType.EXPENSE, isDefault = true),
+                        Category(name = "休闲娱乐", type = TransactionType.EXPENSE, isDefault = true),
+                        Category(name = "住房物业", type = TransactionType.EXPENSE, isDefault = true),
+                        Category(name = "水电煤气", type = TransactionType.EXPENSE, isDefault = true),
+                        Category(name = "家庭开支", type = TransactionType.EXPENSE, isDefault = true),
+                        Category(name = "医疗健康", type = TransactionType.EXPENSE, isDefault = true),
+                        Category(name = "教育培训", type = TransactionType.EXPENSE, isDefault = true),
+                        Category(name = "转出", type = TransactionType.EXPENSE, isDefault = true),
+
+                        Category(name = "职业薪金", type = TransactionType.INCOME, isDefault = true),
+                        Category(name = "投资理财", type = TransactionType.INCOME, isDefault = true),
+                        Category(name = "兼职外快", type = TransactionType.INCOME, isDefault = true),
+                        Category(name = "红包礼金", type = TransactionType.INCOME, isDefault = true),
+                        Category(name = "转入", type = TransactionType.INCOME, isDefault = true)
                     )
-                    defaultCategories.forEach { addCategory(it) }
+                    defaultCategories.forEach { newCat -> 
+                        if (list.none { it.name == newCat.name }) {
+                            addCategory(newCat)
+                        }
+                    }
                 }
             }
         }

@@ -29,6 +29,9 @@ import com.example.accountkeeper.ui.navigation.HomeRoute
 import com.example.accountkeeper.ui.navigation.ImportExportRoute
 import com.example.accountkeeper.ui.navigation.StatisticsRoute
 import com.example.accountkeeper.ui.theme.AccountKeeperTheme
+import com.example.accountkeeper.ui.theme.EnStrings
+import com.example.accountkeeper.ui.theme.LocalAppStrings
+import com.example.accountkeeper.ui.theme.ZhStrings
 import dagger.hilt.android.AndroidEntryPoint
 
 import androidx.compose.runtime.compositionLocalOf
@@ -48,11 +51,13 @@ class MainActivity : ComponentActivity() {
 
             // TODO: In a real app, you can use appSettings.isDarkMode to override system theme
             // and appSettings.language to override Locale
+            val strings = if (appSettings.language == "zh") ZhStrings else EnStrings
             
             CompositionLocalProvider(
-                LocalCurrencySymbol provides appSettings.currencySymbol
+                LocalCurrencySymbol provides appSettings.currencySymbol,
+                LocalAppStrings provides strings
             ) {
-                AccountKeeperTheme {
+                AccountKeeperTheme(darkTheme = appSettings.isDarkMode) {
                     AccountKeeperMainApp()
                 }
             }
@@ -82,17 +87,24 @@ fun AccountKeeperMainApp() {
         currentRouteName?.contains(it.route::class.simpleName ?: "") == true
     } ?: AppDestinations.HOME
 
+    val strings = LocalAppStrings.current
+
     NavigationSuiteScaffold(
         navigationSuiteItems = {
             AppDestinations.entries.forEach { destination ->
+                val localizedLabel = when (destination) {
+                    AppDestinations.HOME -> strings.home
+                    AppDestinations.STATISTICS -> strings.statistics
+                    AppDestinations.SETTINGS -> strings.settings
+                }
                 item(
                     icon = {
                         Icon(
                             destination.icon,
-                            contentDescription = destination.label
+                            contentDescription = localizedLabel
                         )
                     },
-                    label = { Text(destination.label) },
+                    label = { Text(localizedLabel) },
                     selected = destination == currentSelected,
                     onClick = {
                         navController.navigate(destination.route) {

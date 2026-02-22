@@ -22,6 +22,7 @@ import com.example.accountkeeper.data.model.Transaction
 import com.example.accountkeeper.data.model.TransactionType
 import com.example.accountkeeper.ui.viewmodel.CategoryViewModel
 import com.example.accountkeeper.ui.viewmodel.TransactionViewModel
+import com.example.accountkeeper.ui.theme.LocalAppStrings
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -37,6 +38,7 @@ fun HomeScreen(
     val transactions by viewModel.transactions.collectAsState()
     val categories by categoryViewModel.categories.collectAsState()
     val currency = LocalCurrencySymbol.current
+    val strings = LocalAppStrings.current
     
     val totalIncome = transactions.filter { it.type == TransactionType.INCOME }.sumOf { it.amount }
     val totalExpense = transactions.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount }
@@ -50,7 +52,7 @@ fun HomeScreen(
     Scaffold(
         floatingActionButton = {
             FloatingActionButton(onClick = onNavigateToAddTransaction) {
-                Icon(Icons.Default.Add, contentDescription = "Add Transaction")
+                Icon(Icons.Default.Add, contentDescription = strings.addTransaction)
             }
         }
     ) { paddingValues ->
@@ -70,7 +72,7 @@ fun HomeScreen(
                     modifier = Modifier.padding(16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text("Total Assets", style = MaterialTheme.typography.titleMedium)
+                    Text(strings.totalAssets, style = MaterialTheme.typography.titleMedium)
                     Text("$currency${String.format(Locale.US, "%.2f", totalBalance)}", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
                     
                     Row(
@@ -80,11 +82,11 @@ fun HomeScreen(
                         horizontalArrangement = Arrangement.SpaceEvenly
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("Income", style = MaterialTheme.typography.bodyMedium)
+                            Text(strings.income, style = MaterialTheme.typography.bodyMedium)
                             Text("$currency${String.format(Locale.US, "%.2f", totalIncome)}", color = androidx.compose.ui.graphics.Color(0xFF4CAF50))
                         }
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("Expense", style = MaterialTheme.typography.bodyMedium)
+                            Text(strings.expense, style = MaterialTheme.typography.bodyMedium)
                             Text("$currency${String.format(Locale.US, "%.2f", totalExpense)}", color = MaterialTheme.colorScheme.error)
                         }
                     }
@@ -110,14 +112,14 @@ fun HomeScreen(
                         ) {
                             Text(dateString, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                if (dayIncome > 0) Text("In: $currency${String.format(Locale.US, "%.2f", dayIncome)}", style = MaterialTheme.typography.labelSmall, color = androidx.compose.ui.graphics.Color(0xFF4CAF50))
-                                if (dayExpense > 0) Text("Out: $currency${String.format(Locale.US, "%.2f", dayExpense)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                                if (dayIncome > 0) Text("${strings.income}: $currency${String.format(Locale.US, "%.2f", dayIncome)}", style = MaterialTheme.typography.labelSmall, color = androidx.compose.ui.graphics.Color(0xFF4CAF50))
+                                if (dayExpense > 0) Text("${strings.expense}: $currency${String.format(Locale.US, "%.2f", dayExpense)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
                             }
                         }
                     }
 
                     items(txList, key = { it.id }) { transaction ->
-                        val categoryName = categories.find { it.id == transaction.categoryId }?.name ?: "Other"
+                        val categoryName = categories.find { it.id == transaction.categoryId }?.name ?: strings.other
                         TransactionItem(
                             transaction = transaction,
                             categoryName = categoryName,

@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.accountkeeper.LocalCurrencySymbol
 import com.example.accountkeeper.data.model.TransactionType
+import com.example.accountkeeper.ui.theme.LocalAppStrings
 import com.example.accountkeeper.ui.viewmodel.CategoryViewModel
 import com.example.accountkeeper.ui.viewmodel.TransactionViewModel
 import java.text.SimpleDateFormat
@@ -42,6 +43,7 @@ fun StatisticsScreen(
     val allTransactions by viewModel.transactions.collectAsState()
     val categories by categoryViewModel.categories.collectAsState()
     val currency = LocalCurrencySymbol.current
+    val strings = LocalAppStrings.current
 
     var selectedRange by remember { mutableStateOf(TimeRange.MONTHLY) }
     var isExpenseView by remember { mutableStateOf(true) }
@@ -123,9 +125,9 @@ fun StatisticsScreen(
                 if (customStartDate != null && customEndDate != null) {
                     val s = SimpleDateFormat("MM-dd", Locale.getDefault()).format(Date(start))
                     val e = SimpleDateFormat("MM-dd", Locale.getDefault()).format(Date(end))
-                    periodStr = "$s to $e"
+                    periodStr = "$s -> $e"
                 } else {
-                    periodStr = "Select Range"
+                    periodStr = strings.selectRange
                 }
             }
         }
@@ -167,10 +169,10 @@ fun StatisticsScreen(
                         selectedRange = TimeRange.CUSTOM
                     }
                     showDateRangePicker = false
-                }) { Text("OK") }
+                }) { Text(strings.ok) }
             },
             dismissButton = {
-                TextButton(onClick = { showDateRangePicker = false }) { Text("Cancel") }
+                TextButton(onClick = { showDateRangePicker = false }) { Text(strings.cancel) }
             }
         ) {
             DateRangePicker(state = dateRangePickerState, modifier = Modifier.weight(1f))
@@ -178,7 +180,7 @@ fun StatisticsScreen(
     }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Statistics") }) }
+        topBar = { TopAppBar(title = { Text(strings.statistics) }) }
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -196,13 +198,21 @@ fun StatisticsScreen(
                     Tab(
                         selected = selectedRange == range,
                         onClick = { 
+                            selectedRange = range
                             if (range == TimeRange.CUSTOM) {
                                 showDateRangePicker = true
-                            } else {
-                                selectedRange = range 
                             }
                         },
-                        text = { Text(range.name.lowercase().replaceFirstChar { it.uppercase() }) }
+                        text = { 
+                            val label = when(range) {
+                                TimeRange.DAILY -> strings.daily
+                                TimeRange.WEEKLY -> strings.weekly
+                                TimeRange.MONTHLY -> strings.monthly
+                                TimeRange.YEARLY -> strings.yearly
+                                TimeRange.CUSTOM -> strings.custom
+                            }
+                            Text(label) 
+                        }
                     )
                 }
             }
@@ -239,13 +249,13 @@ fun StatisticsScreen(
                     FilterChip(
                         selected = isExpenseView,
                         onClick = { isExpenseView = true },
-                        label = { Text("Exp") },
+                        label = { Text(strings.expense) },
                         modifier = Modifier.padding(end = 4.dp)
                     )
                     FilterChip(
                         selected = !isExpenseView,
                         onClick = { isExpenseView = false },
-                        label = { Text("Inc") }
+                        label = { Text(strings.income) }
                     )
                 }
             }
@@ -257,7 +267,7 @@ fun StatisticsScreen(
                         .fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text("Total ${if (isExpenseView) "Expense" else "Income"}", style = MaterialTheme.typography.titleMedium)
+                    Text(if (isExpenseView) strings.totalExpense else strings.totalIncome, style = MaterialTheme.typography.titleMedium)
                     Text("$currency${String.format(Locale.US, "%.2f", totalAmount)}", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                 }
             }
@@ -306,7 +316,7 @@ fun StatisticsScreen(
 
                             // Only draw label if it occupies a decent slice (>5%) to prevent clutter
                             if (sweepAngle > 18f) {
-                                val catName = categories.find { it.id == pair.first }?.name ?: "Other"
+                                val catName = categories.find { it.id == pair.first }?.name ?: strings.other
                                 drawContext.canvas.nativeCanvas.drawText(
                                     catName,
                                     textX,
@@ -321,11 +331,11 @@ fun StatisticsScreen(
                 }
 
                 // Category Breakdowns
-                Text("Category Ranking", style = MaterialTheme.typography.titleMedium)
+                Text(strings.categoryRanking, style = MaterialTheme.typography.titleMedium)
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
                     items(categoryTotals.size) { index ->
                         val (categoryId, amount) = categoryTotals[index]
-                        val categoryName = categories.find { it.id == categoryId }?.name ?: "Other"
+                        val categoryName = categories.find { it.id == categoryId }?.name ?: strings.other
                         val percentage = if (totalAmount > 0) (amount / totalAmount) * 100 else 0.0
                         
                         ListItem(
@@ -352,7 +362,7 @@ fun StatisticsScreen(
                 Box(modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f), contentAlignment = Alignment.Center) {
-                    Text("No transactions found for this period.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(strings.noTransactions, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }

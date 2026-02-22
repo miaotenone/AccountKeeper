@@ -20,6 +20,7 @@ import com.example.accountkeeper.LocalCurrencySymbol
 import com.example.accountkeeper.data.model.Category
 import com.example.accountkeeper.data.model.Transaction
 import com.example.accountkeeper.data.model.TransactionType
+import com.example.accountkeeper.ui.theme.LocalAppStrings
 import com.example.accountkeeper.ui.viewmodel.CategoryViewModel
 import com.example.accountkeeper.ui.viewmodel.TransactionViewModel
 import kotlinx.coroutines.launch
@@ -48,11 +49,12 @@ fun AddEditTransactionScreen(
     val categories by categoryViewModel.categories.collectAsState()
     // currentType is computed manually since we rely on boolean 'isExpense'
     val currentType = if (isExpense) TransactionType.EXPENSE else TransactionType.INCOME
-    val filteredCategories = categories.filter { it.type == currentType }
+    val filteredCategories = categories.filter { it.type == currentType }.distinctBy { it.name.lowercase() }
 
     val scope = rememberCoroutineScope()
     val isEditMode = transactionId != -1L
     val currency = LocalCurrencySymbol.current
+    val strings = LocalAppStrings.current
 
     LaunchedEffect(transactionId) {
         if (isEditMode) {
@@ -77,10 +79,10 @@ fun AddEditTransactionScreen(
                         transactionDate = it
                     }
                     showDatePicker = false
-                }) { Text("OK") }
+                }) { Text(strings.ok) }
             },
             dismissButton = {
-                TextButton(onClick = { showDatePicker = false }) { Text("Cancel") }
+                TextButton(onClick = { showDatePicker = false }) { Text(strings.cancel) }
             }
         ) {
             DatePicker(state = datePickerState)
@@ -94,7 +96,7 @@ fun AddEditTransactionScreen(
                 customCategoryName = ""
                 categoryError = null
             },
-            title = { Text("New Category") },
+            title = { Text(strings.newCategory) },
             text = {
                 Column {
                     OutlinedTextField(
@@ -103,7 +105,7 @@ fun AddEditTransactionScreen(
                             customCategoryName = it
                             categoryError = null
                         },
-                        label = { Text("Name") },
+                        label = { Text(strings.name) },
                         singleLine = true,
                         isError = categoryError != null,
                         supportingText = { categoryError?.let { Text(it) } }
@@ -114,18 +116,18 @@ fun AddEditTransactionScreen(
                 TextButton(onClick = {
                     val name = customCategoryName.trim()
                     if (name.isEmpty()) {
-                        categoryError = "Name cannot be empty"
+                        categoryError = strings.nameEmptyError
                     } else if (filteredCategories.any { it.name.equals(name, ignoreCase = true) }) {
-                        categoryError = "Category already exists in this type"
+                        categoryError = strings.nameExistsError
                     } else {
                         categoryViewModel.addCategory(Category(name = name, type = currentType, isDefault = false))
                         showCustomCategoryDialog = false
                         customCategoryName = ""
                     }
-                }) { Text("Add") }
+                }) { Text(strings.add) }
             },
             dismissButton = {
-                TextButton(onClick = { showCustomCategoryDialog = false }) { Text("Cancel") }
+                TextButton(onClick = { showCustomCategoryDialog = false }) { Text(strings.cancel) }
             }
         )
     }
@@ -133,7 +135,7 @@ fun AddEditTransactionScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (isEditMode) "Edit Transaction" else "Add Transaction") },
+                title = { Text(if (isEditMode) strings.editTransaction else strings.addTransaction) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -157,7 +159,7 @@ fun AddEditTransactionScreen(
                         isExpense = true
                         selectedCategoryId = null 
                     },
-                    label = { Text("Expense") },
+                    label = { Text(strings.expense) },
                     modifier = Modifier.weight(1f).padding(end = 8.dp)
                 )
                 FilterChip(
@@ -166,7 +168,7 @@ fun AddEditTransactionScreen(
                         isExpense = false
                         selectedCategoryId = null 
                     },
-                    label = { Text("Income") },
+                    label = { Text(strings.income) },
                     modifier = Modifier.weight(1f).padding(start = 8.dp)
                 )
             }
@@ -175,7 +177,7 @@ fun AddEditTransactionScreen(
             OutlinedTextField(
                 value = amountText,
                 onValueChange = { amountText = it },
-                label = { Text("Amount ($currency)") },
+                label = { Text("${strings.amount} ($currency)") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
@@ -186,18 +188,18 @@ fun AddEditTransactionScreen(
             OutlinedTextField(
                 value = dateFormatter.format(Date(transactionDate)),
                 onValueChange = {},
-                label = { Text("Date") },
+                label = { Text(strings.date) },
                 modifier = Modifier.fillMaxWidth(),
                 readOnly = true,
                 trailingIcon = {
                     TextButton(onClick = { showDatePicker = true }) {
-                        Text("Change")
+                        Text(strings.change)
                     }
                 }
             )
 
             // Category Selection (Grid)
-            Text("Category", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
+            Text(strings.category, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
             LazyVerticalGrid(
                 columns = GridCells.Fixed(3),
                 modifier = Modifier
@@ -244,7 +246,7 @@ fun AddEditTransactionScreen(
             OutlinedTextField(
                 value = note,
                 onValueChange = { note = it },
-                label = { Text("Note") },
+                label = { Text(strings.note) },
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -271,7 +273,7 @@ fun AddEditTransactionScreen(
                 },
                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
             ) {
-                Text("Save")
+                Text(strings.save)
             }
         }
     }

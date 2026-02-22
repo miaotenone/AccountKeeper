@@ -19,6 +19,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.accountkeeper.LocalCurrencySymbol
 import com.example.accountkeeper.data.model.Transaction
 import com.example.accountkeeper.data.model.TransactionType
+import com.example.accountkeeper.ui.theme.LocalAppStrings
 import com.example.accountkeeper.ui.viewmodel.CategoryViewModel
 import com.example.accountkeeper.ui.viewmodel.SettingsViewModel
 import com.example.accountkeeper.ui.viewmodel.TransactionViewModel
@@ -44,6 +45,7 @@ fun ImportExportScreen(
     val categories by categoryViewModel.categories.collectAsState()
     val appSettings by settingsViewModel.appSettings.collectAsState()
     val currentCurrency = LocalCurrencySymbol.current
+    val strings = LocalAppStrings.current
 
     // Launcher for Export (Create Document)
     val exportCsvLauncher = rememberLauncherForActivityResult(
@@ -121,8 +123,8 @@ fun ImportExportScreen(
     }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Settings & Sync") }) },
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
+        topBar = { TopAppBar(title = { Text(strings.settings) }) },
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -167,7 +169,7 @@ fun ImportExportScreen(
             }
 
             // Section 2: CSV Data Management
-            Text("Manual Data Management", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp))
+            Text(strings.manualDataManagement, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp))
             Card(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
@@ -177,7 +179,7 @@ fun ImportExportScreen(
                         Icon(Icons.Default.Info, contentDescription = "Info", tint = MaterialTheme.colorScheme.primary)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Due to API limitations from WeChat and Alipay for personal developers, automatic syncing is disabled. Please upload a standard CSV file exported from this app to restore backups.",
+                            text = strings.infoLimitation,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -187,7 +189,7 @@ fun ImportExportScreen(
                         onClick = { importCsvLauncher.launch("text/csv") },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Upload Standard Backup CSV")
+                        Text(strings.uploadBackup)
                     }
 
                     OutlinedButton(
@@ -198,13 +200,13 @@ fun ImportExportScreen(
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Export All Transactions to CSV")
+                        Text(strings.exportAll)
                     }
                 }
             }
             
             // Section 3: App Settings
-            Text("General Settings", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp))
+            Text(strings.generalSettings, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp))
             Card(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
@@ -215,7 +217,7 @@ fun ImportExportScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Dark Mode", style = MaterialTheme.typography.bodyLarge)
+                        Text(strings.darkMode, style = MaterialTheme.typography.bodyLarge)
                         Switch(
                             checked = appSettings.isDarkMode, 
                             onCheckedChange = { settingsViewModel.updateTheme(it) }
@@ -227,12 +229,12 @@ fun ImportExportScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Language", style = MaterialTheme.typography.bodyLarge)
+                        Text(strings.language, style = MaterialTheme.typography.bodyLarge)
                         TextButton(onClick = {
                             val newLang = if (appSettings.language == "zh") "en" else "zh"
                             settingsViewModel.updateLanguage(newLang)
                         }) {
-                            Text(if (appSettings.language == "zh") "Chinese" else "English", fontWeight = FontWeight.Bold)
+                            Text(if (appSettings.language == "zh") "中文" else "English", fontWeight = FontWeight.Bold)
                         }
                     }
                     HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
@@ -241,7 +243,7 @@ fun ImportExportScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Currency Symbol", style = MaterialTheme.typography.bodyLarge)
+                        Text(strings.currencySymbol, style = MaterialTheme.typography.bodyLarge)
                         TextButton(onClick = {
                             val nextSymbol = when (currentCurrency) {
                                 "¥" -> "$"
