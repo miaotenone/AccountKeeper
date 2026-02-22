@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -15,6 +16,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.accountkeeper.LocalCurrencySymbol
+import com.example.accountkeeper.data.model.Category
 import com.example.accountkeeper.data.model.Transaction
 import com.example.accountkeeper.data.model.TransactionType
 import com.example.accountkeeper.ui.viewmodel.CategoryViewModel
@@ -38,12 +41,18 @@ fun AddEditTransactionScreen(
     var transactionDate by remember { mutableStateOf(System.currentTimeMillis()) }
 
     var showDatePicker by remember { mutableStateOf(false) }
+    var showCustomCategoryDialog by remember { mutableStateOf(false) }
+    var customCategoryName by remember { mutableStateOf("") }
+    var categoryError by remember { mutableStateOf<String?>(null) }
 
     val categories by categoryViewModel.categories.collectAsState()
-    val filteredCategories = categories.filter { if (isExpense) it.type == TransactionType.EXPENSE else it.type == TransactionType.INCOME }
+    // currentType is computed manually since we rely on boolean 'isExpense'
+    val currentType = if (isExpense) TransactionType.EXPENSE else TransactionType.INCOME
+    val filteredCategories = categories.filter { it.type == currentType }
 
     val scope = rememberCoroutineScope()
     val isEditMode = transactionId != -1L
+    val currency = LocalCurrencySymbol.current
 
     LaunchedEffect(transactionId) {
         if (isEditMode) {
@@ -76,6 +85,49 @@ fun AddEditTransactionScreen(
         ) {
             DatePicker(state = datePickerState)
         }
+    }
+
+    if (showCustomCategoryDialog) {
+        AlertDialog(
+            onDismissRequest = { 
+                showCustomCategoryDialog = false
+                customCategoryName = ""
+                categoryError = null
+            },
+            title = { Text("New Category") },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = customCategoryName,
+                        onValueChange = { 
+                            customCategoryName = it
+                            categoryError = null
+                        },
+                        label = { Text("Name") },
+                        singleLine = true,
+                        isError = categoryError != null,
+                        supportingText = { categoryError?.let { Text(it) } }
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val name = customCategoryName.trim()
+                    if (name.isEmpty()) {
+                        categoryError = "Name cannot be empty"
+                    } else if (filteredCategories.any { it.name.equals(name, ignoreCase = true) }) {
+                        categoryError = "Category already exists in this type"
+                    } else {
+                        categoryViewModel.addCategory(Category(name = name, type = currentType, isDefault = false))
+                        showCustomCategoryDialog = false
+                        customCategoryName = ""
+                    }
+                }) { Text("Add") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCustomCategoryDialog = false }) { Text("Cancel") }
+            }
+        )
     }
 
     Scaffold(
@@ -123,7 +175,7 @@ fun AddEditTransactionScreen(
             OutlinedTextField(
                 value = amountText,
                 onValueChange = { amountText = it },
-                label = { Text("Amount") },
+                label = { Text("Amount ($currency)") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
@@ -171,6 +223,21 @@ fun AddEditTransactionScreen(
                         }
                     }
                 }
+                item {
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(60.dp)
+                            .clickable { showCustomCategoryDialog = true }
+                    ) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.Add, contentDescription = "Add Custom")
+                        }
+                    }
+                }
             }
 
             // Note Input
@@ -188,7 +255,7 @@ fun AddEditTransactionScreen(
                     if (amount > 0) {
                         val transaction = Transaction(
                             id = if (isEditMode) transactionId else 0,
-                            type = if (isExpense) TransactionType.EXPENSE else TransactionType.INCOME,
+                            type = currentType,
                             amount = amount,
                             note = note,
                             date = transactionDate,

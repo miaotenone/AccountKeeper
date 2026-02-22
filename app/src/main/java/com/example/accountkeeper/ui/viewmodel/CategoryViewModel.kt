@@ -3,6 +3,7 @@ package com.example.accountkeeper.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.accountkeeper.data.model.Category
+import com.example.accountkeeper.data.model.TransactionType
 import com.example.accountkeeper.data.repository.CategoryRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
@@ -27,15 +28,25 @@ class CategoryViewModel @Inject constructor(
         viewModelScope.launch {
             categories.collect { list ->
                 if (list.isEmpty()) {
-                    val defaults = listOf(
-                        Category(name = "餐饮", type = com.example.accountkeeper.data.model.TransactionType.EXPENSE, isDefault = true),
-                        Category(name = "交通", type = com.example.accountkeeper.data.model.TransactionType.EXPENSE, isDefault = true),
-                        Category(name = "购物", type = com.example.accountkeeper.data.model.TransactionType.EXPENSE, isDefault = true),
-                        Category(name = "医疗", type = com.example.accountkeeper.data.model.TransactionType.EXPENSE, isDefault = true),
-                        Category(name = "工资", type = com.example.accountkeeper.data.model.TransactionType.INCOME, isDefault = true),
-                        Category(name = "理财", type = com.example.accountkeeper.data.model.TransactionType.INCOME, isDefault = true)
+                    val defaultCategories = listOf(
+                        Category(name = "Food & Drink", type = TransactionType.EXPENSE, isDefault = true),
+                        Category(name = "Transportation", type = TransactionType.EXPENSE, isDefault = true),
+                        Category(name = "Shopping", type = TransactionType.EXPENSE, isDefault = true),
+                        Category(name = "Entertainment", type = TransactionType.EXPENSE, isDefault = true),
+                        Category(name = "Housing", type = TransactionType.EXPENSE, isDefault = true),
+                        Category(name = "Utilities", type = TransactionType.EXPENSE, isDefault = true),
+                        Category(name = "Family", type = TransactionType.EXPENSE, isDefault = true),
+                        Category(name = "Health", type = TransactionType.EXPENSE, isDefault = true),
+                        Category(name = "Education", type = TransactionType.EXPENSE, isDefault = true),
+                        Category(name = "Transfer Out", type = TransactionType.EXPENSE, isDefault = true),
+
+                        Category(name = "Salary", type = TransactionType.INCOME, isDefault = true),
+                        Category(name = "Investment", type = TransactionType.INCOME, isDefault = true),
+                        Category(name = "Part-time", type = TransactionType.INCOME, isDefault = true),
+                        Category(name = "Red Packet", type = TransactionType.INCOME, isDefault = true),
+                        Category(name = "Transfer In", type = TransactionType.INCOME, isDefault = true)
                     )
-                    defaults.forEach { addCategory(it) }
+                    defaultCategories.forEach { addCategory(it) }
                 }
             }
         }

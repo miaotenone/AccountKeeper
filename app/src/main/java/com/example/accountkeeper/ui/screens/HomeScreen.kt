@@ -1,5 +1,7 @@
 package com.example.accountkeeper.ui.screens
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -15,15 +17,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.accountkeeper.LocalCurrencySymbol
 import com.example.accountkeeper.data.model.Transaction
 import com.example.accountkeeper.data.model.TransactionType
-import com.example.accountkeeper.ui.viewmodel.TransactionViewModel
 import com.example.accountkeeper.ui.viewmodel.CategoryViewModel
+import com.example.accountkeeper.ui.viewmodel.TransactionViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun HomeScreen(
     onNavigateToAddTransaction: () -> Unit,
@@ -33,10 +36,16 @@ fun HomeScreen(
 ) {
     val transactions by viewModel.transactions.collectAsState()
     val categories by categoryViewModel.categories.collectAsState()
+    val currency = LocalCurrencySymbol.current
     
     val totalIncome = transactions.filter { it.type == TransactionType.INCOME }.sumOf { it.amount }
     val totalExpense = transactions.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount }
     val totalBalance = totalIncome - totalExpense
+
+    // Grouping transactions by Date (yyyy-MM-dd)
+    val groupedTransactions = transactions.groupBy {
+        SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(it.date))
+    }.toSortedMap(reverseOrder())
 
     Scaffold(
         floatingActionButton = {
@@ -62,7 +71,7 @@ fun HomeScreen(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text("Total Assets", style = MaterialTheme.typography.titleMedium)
-                    Text("¥${String.format(Locale.US, "%.2f", totalBalance)}", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+                    Text("$currency${String.format(Locale.US, "%.2f", totalBalance)}", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
                     
                     Row(
                         modifier = Modifier
@@ -72,33 +81,50 @@ fun HomeScreen(
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("Income", style = MaterialTheme.typography.bodyMedium)
-                            Text("¥${String.format(Locale.US, "%.2f", totalIncome)}", color = androidx.compose.ui.graphics.Color(0xFF4CAF50))
+                            Text("$currency${String.format(Locale.US, "%.2f", totalIncome)}", color = androidx.compose.ui.graphics.Color(0xFF4CAF50))
                         }
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("Expense", style = MaterialTheme.typography.bodyMedium)
-                            Text("¥${String.format(Locale.US, "%.2f", totalExpense)}", color = MaterialTheme.colorScheme.error)
+                            Text("$currency${String.format(Locale.US, "%.2f", totalExpense)}", color = MaterialTheme.colorScheme.error)
                         }
                     }
                 }
             }
 
-            Text(
-                "Recent Transactions",
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-            )
-
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = 80.dp)
             ) {
-                items(transactions, key = { it.id }) { transaction ->
-                    val categoryName = categories.find { it.id == transaction.categoryId }?.name ?: "Other"
-                    TransactionItem(
-                        transaction = transaction,
-                        categoryName = categoryName,
-                        onClick = { onNavigateToEditTransaction(transaction.id) }
-                    )
+                groupedTransactions.forEach { (dateString, txList) ->
+                    stickyHeader {
+                        val dayIncome = txList.filter { it.type == TransactionType.INCOME }.sumOf { it.amount }
+                        val dayExpense = txList.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount }
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(dateString, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                if (dayIncome > 0) Text("In: $currency${String.format(Locale.US, "%.2f", dayIncome)}", style = MaterialTheme.typography.labelSmall, color = androidx.compose.ui.graphics.Color(0xFF4CAF50))
+                                if (dayExpense > 0) Text("Out: $currency${String.format(Locale.US, "%.2f", dayExpense)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                            }
+                        }
+                    }
+
+                    items(txList, key = { it.id }) { transaction ->
+                        val categoryName = categories.find { it.id == transaction.categoryId }?.name ?: "Other"
+                        TransactionItem(
+                            transaction = transaction,
+                            categoryName = categoryName,
+                            currency = currency,
+                            onClick = { onNavigateToEditTransaction(transaction.id) }
+                        )
+                    }
                 }
             }
         }
@@ -106,8 +132,8 @@ fun HomeScreen(
 }
 
 @Composable
-fun TransactionItem(transaction: Transaction, categoryName: String, onClick: () -> Unit) {
-    val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
+fun TransactionItem(transaction: Transaction, categoryName: String, currency: String, onClick: () -> Unit) {
+    val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
     
     ListItem(
         headlineContent = { Text(categoryName, fontWeight = FontWeight.SemiBold) },
@@ -116,13 +142,13 @@ fun TransactionItem(transaction: Transaction, categoryName: String, onClick: () 
                 if (transaction.note.isNotBlank()) {
                     Text(transaction.note, style = MaterialTheme.typography.bodySmall)
                 }
-                Text(dateFormat.format(Date(transaction.date)), style = MaterialTheme.typography.bodySmall)
+                Text(timeFormat.format(Date(transaction.date)), style = MaterialTheme.typography.bodySmall)
             }
         },
         trailingContent = {
             val isIncome = transaction.type == TransactionType.INCOME
             Text(
-                text = "${if (isIncome) "+" else "-"}¥${String.format(Locale.US, "%.2f", transaction.amount)}",
+                text = "${if (isIncome) "+" else "-"}$currency${String.format(Locale.US, "%.2f", transaction.amount)}",
                 color = if (isIncome) androidx.compose.ui.graphics.Color(0xFF4CAF50) else MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold

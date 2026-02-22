@@ -1,6 +1,5 @@
 package com.example.accountkeeper.ui.screens
 
-import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -8,7 +7,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -17,9 +16,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.accountkeeper.LocalCurrencySymbol
+import com.example.accountkeeper.data.model.Transaction
 import com.example.accountkeeper.data.model.TransactionType
 import com.example.accountkeeper.ui.viewmodel.CategoryViewModel
+import com.example.accountkeeper.ui.viewmodel.SettingsViewModel
 import com.example.accountkeeper.ui.viewmodel.TransactionViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.io.OutputStreamWriter
 import java.text.SimpleDateFormat
@@ -30,7 +33,8 @@ import java.util.Locale
 @Composable
 fun ImportExportScreen(
     viewModel: TransactionViewModel = hiltViewModel(),
-    categoryViewModel: CategoryViewModel = hiltViewModel()
+    categoryViewModel: CategoryViewModel = hiltViewModel(),
+    settingsViewModel: SettingsViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -38,6 +42,8 @@ fun ImportExportScreen(
 
     val transactions by viewModel.transactions.collectAsState()
     val categories by categoryViewModel.categories.collectAsState()
+    val appSettings by settingsViewModel.appSettings.collectAsState()
+    val currentCurrency = LocalCurrencySymbol.current
 
     // Launcher for Export (Create Document)
     val exportCsvLauncher = rememberLauncherForActivityResult(
@@ -72,10 +78,44 @@ fun ImportExportScreen(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         if (uri != null) {
-            scope.launch {
-                // Here we would call the actual CSV parsing framework
-                // For now, we simulate the import process
-                snackbarHostState.showSnackbar("CSV Selected. Starting import engine...")
+            scope.launch(Dispatchers.IO) {
+                try {
+                    var successCount = 0
+                    context.contentResolver.openInputStream(uri)?.bufferedReader()?.useLines { lines ->
+                        // Skip header
+                        val dataLines = lines.drop(1)
+                        dataLines.forEach { line ->
+                            val parts = line.split(",")
+                            // Naive parsing: ID,Date,Type,Amount,CategoryName,Note
+                            if (parts.size >= 6) {
+                                val typeString = parts[2]
+                                val amount = parts[3].toDoubleOrNull() ?: 0.0
+                                val categoryName = parts[4]
+                                val note = parts[5]
+                                
+                                val type = if (typeString.equals("Income", ignoreCase = true)) TransactionType.INCOME else TransactionType.EXPENSE
+                                val catMatch = categories.find { it.name.equals(categoryName, ignoreCase = true) && it.type == type }
+                                
+                                val categoryId = catMatch?.id ?: categories.firstOrNull { it.type == type }?.id
+
+                                if (amount > 0 && categoryId != null) {
+                                    val transaction = Transaction(
+                                        type = type,
+                                        amount = amount,
+                                        note = note,
+                                        date = System.currentTimeMillis(), // In generic import, use current time to avoid complex exact-date parsing for now
+                                        categoryId = categoryId
+                                    )
+                                    viewModel.addTransaction(transaction)
+                                    successCount++
+                                }
+                            }
+                        }
+                    }
+                    snackbarHostState.showSnackbar("Successfully imported $successCount transactions!")
+                } catch (e: Exception) {
+                    snackbarHostState.showSnackbar("Failed to parse CSV: ${e.localizedMessage}")
+                }
             }
         }
     }
@@ -133,11 +173,21 @@ fun ImportExportScreen(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
             ) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Info, contentDescription = "Info", tint = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Due to API limitations from WeChat and Alipay for personal developers, automatic syncing is disabled. Please upload a standard CSV file exported from this app to restore backups.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
                     OutlinedButton(
                         onClick = { importCsvLauncher.launch("text/csv") },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Upload Fallback CSV (WeChat/Alipay)")
+                        Text("Upload Standard Backup CSV")
                     }
 
                     OutlinedButton(
@@ -166,7 +216,10 @@ fun ImportExportScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text("Dark Mode", style = MaterialTheme.typography.bodyLarge)
-                        Switch(checked = true, onCheckedChange = { /* TODO System theme sync */ })
+                        Switch(
+                            checked = appSettings.isDarkMode, 
+                            onCheckedChange = { settingsViewModel.updateTheme(it) }
+                        )
                     }
                     HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                     Row(
@@ -175,7 +228,30 @@ fun ImportExportScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text("Language", style = MaterialTheme.typography.bodyLarge)
-                        Text("English", fontWeight = FontWeight.Bold)
+                        TextButton(onClick = {
+                            val newLang = if (appSettings.language == "zh") "en" else "zh"
+                            settingsViewModel.updateLanguage(newLang)
+                        }) {
+                            Text(if (appSettings.language == "zh") "Chinese" else "English", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Currency Symbol", style = MaterialTheme.typography.bodyLarge)
+                        TextButton(onClick = {
+                            val nextSymbol = when (currentCurrency) {
+                                "¥" -> "$"
+                                "$" -> "€"
+                                else -> "¥"
+                            }
+                            settingsViewModel.updateCurrency(nextSymbol)
+                        }) {
+                            Text(currentCurrency, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                        }
                     }
                 }
             }

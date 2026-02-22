@@ -15,6 +15,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -29,14 +31,30 @@ import com.example.accountkeeper.ui.navigation.StatisticsRoute
 import com.example.accountkeeper.ui.theme.AccountKeeperTheme
 import dagger.hilt.android.AndroidEntryPoint
 
+import androidx.compose.runtime.compositionLocalOf
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.accountkeeper.ui.viewmodel.SettingsViewModel
+
+val LocalCurrencySymbol = compositionLocalOf { "¥" }
+
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            AccountKeeperTheme {
-                AccountKeeperMainApp()
+            val settingsViewModel: SettingsViewModel = hiltViewModel()
+            val appSettings by settingsViewModel.appSettings.collectAsState()
+
+            // TODO: In a real app, you can use appSettings.isDarkMode to override system theme
+            // and appSettings.language to override Locale
+            
+            CompositionLocalProvider(
+                LocalCurrencySymbol provides appSettings.currencySymbol
+            ) {
+                AccountKeeperTheme {
+                    AccountKeeperMainApp()
+                }
             }
         }
     }

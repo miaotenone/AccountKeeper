@@ -1,9 +1,15 @@
 package com.example.accountkeeper.ui.screens
 
+import android.graphics.Paint
+import android.graphics.Typeface
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -12,17 +18,20 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.example.accountkeeper.data.model.Transaction
+import com.example.accountkeeper.LocalCurrencySymbol
 import com.example.accountkeeper.data.model.TransactionType
 import com.example.accountkeeper.ui.viewmodel.CategoryViewModel
 import com.example.accountkeeper.ui.viewmodel.TransactionViewModel
-import java.util.Calendar
-import java.util.Locale
+import java.text.SimpleDateFormat
+import java.util.*
+import kotlin.math.cos
+import kotlin.math.sin
 
-enum class TimeRange { DAILY, MONTHLY, YEARLY }
+enum class TimeRange { DAILY, WEEKLY, MONTHLY, YEARLY, CUSTOM }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -32,47 +41,102 @@ fun StatisticsScreen(
 ) {
     val allTransactions by viewModel.transactions.collectAsState()
     val categories by categoryViewModel.categories.collectAsState()
-    
+    val currency = LocalCurrencySymbol.current
+
     var selectedRange by remember { mutableStateOf(TimeRange.MONTHLY) }
     var isExpenseView by remember { mutableStateOf(true) }
 
-    // Filter transactions based on selected time range
-    val filteredTransactions = remember(allTransactions, selectedRange) {
+    // Offset for navigating previous/next periods (0 means current)
+    var timeOffset by remember { mutableIntStateOf(0) }
+    
+    // Custom date range state
+    var customStartDate by remember { mutableStateOf<Long?>(null) }
+    var customEndDate by remember { mutableStateOf<Long?>(null) }
+    var showDateRangePicker by remember { mutableStateOf(false) }
+
+    // Reset offset when changing range
+    LaunchedEffect(selectedRange) {
+        if (selectedRange != TimeRange.CUSTOM) {
+            timeOffset = 0
+        }
+    }
+
+    val (startTime, endTime, displayPeriodStr) = remember(selectedRange, timeOffset, customStartDate, customEndDate) {
         val calendar = Calendar.getInstance()
-        val now = calendar.timeInMillis
-        
+        var start = 0L
+        var end = 0L
+        var periodStr = ""
+
         when (selectedRange) {
             TimeRange.DAILY -> {
+                calendar.add(Calendar.DAY_OF_YEAR, timeOffset)
                 calendar.set(Calendar.HOUR_OF_DAY, 0)
                 calendar.set(Calendar.MINUTE, 0)
                 calendar.set(Calendar.SECOND, 0)
                 calendar.set(Calendar.MILLISECOND, 0)
-                val startOfDay = calendar.timeInMillis
-                allTransactions.filter { it.date >= startOfDay }
+                start = calendar.timeInMillis
+                calendar.add(Calendar.DAY_OF_YEAR, 1)
+                end = calendar.timeInMillis
+                periodStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(start))
+            }
+            TimeRange.WEEKLY -> {
+                calendar.add(Calendar.WEEK_OF_YEAR, timeOffset)
+                calendar.set(Calendar.DAY_OF_WEEK, calendar.firstDayOfWeek)
+                calendar.set(Calendar.HOUR_OF_DAY, 0)
+                calendar.set(Calendar.MINUTE, 0)
+                calendar.set(Calendar.SECOND, 0)
+                calendar.set(Calendar.MILLISECOND, 0)
+                start = calendar.timeInMillis
+                calendar.add(Calendar.WEEK_OF_YEAR, 1)
+                end = calendar.timeInMillis
+                val weekNum = calendar.get(Calendar.WEEK_OF_YEAR) - 1 // week before addition
+                val year = calendar.get(Calendar.YEAR)
+                periodStr = "${year} Week $weekNum"
             }
             TimeRange.MONTHLY -> {
+                calendar.add(Calendar.MONTH, timeOffset)
                 calendar.set(Calendar.DAY_OF_MONTH, 1)
                 calendar.set(Calendar.HOUR_OF_DAY, 0)
                 calendar.set(Calendar.MINUTE, 0)
                 calendar.set(Calendar.SECOND, 0)
                 calendar.set(Calendar.MILLISECOND, 0)
-                val startOfMonth = calendar.timeInMillis
-                allTransactions.filter { it.date >= startOfMonth }
+                start = calendar.timeInMillis
+                calendar.add(Calendar.MONTH, 1)
+                end = calendar.timeInMillis
+                periodStr = SimpleDateFormat("yyyy-MM", Locale.getDefault()).format(Date(start))
             }
             TimeRange.YEARLY -> {
+                calendar.add(Calendar.YEAR, timeOffset)
                 calendar.set(Calendar.DAY_OF_YEAR, 1)
                 calendar.set(Calendar.HOUR_OF_DAY, 0)
                 calendar.set(Calendar.MINUTE, 0)
                 calendar.set(Calendar.SECOND, 0)
                 calendar.set(Calendar.MILLISECOND, 0)
-                val startOfYear = calendar.timeInMillis
-                allTransactions.filter { it.date >= startOfYear }
+                start = calendar.timeInMillis
+                calendar.add(Calendar.YEAR, 1)
+                end = calendar.timeInMillis
+                periodStr = SimpleDateFormat("yyyy", Locale.getDefault()).format(Date(start))
+            }
+            TimeRange.CUSTOM -> {
+                start = customStartDate ?: 0L
+                end = customEndDate ?: Long.MAX_VALUE
+                if (customStartDate != null && customEndDate != null) {
+                    val s = SimpleDateFormat("MM-dd", Locale.getDefault()).format(Date(start))
+                    val e = SimpleDateFormat("MM-dd", Locale.getDefault()).format(Date(end))
+                    periodStr = "$s to $e"
+                } else {
+                    periodStr = "Select Range"
+                }
             }
         }
+        Triple(start, end, periodStr)
     }
 
-    val displayTransactions = filteredTransactions.filter { 
-        it.type == if (isExpenseView) TransactionType.EXPENSE else TransactionType.INCOME 
+    val displayTransactions = remember(allTransactions, startTime, endTime, isExpenseView) {
+        allTransactions.filter { 
+            it.date in startTime until endTime &&
+            it.type == if (isExpenseView) TransactionType.EXPENSE else TransactionType.INCOME 
+        }
     }
 
     val totalAmount = displayTransactions.sumOf { it.amount }
@@ -82,6 +146,36 @@ fun StatisticsScreen(
         .mapValues { entry -> entry.value.sumOf { it.amount } }
         .toList()
         .sortedByDescending { it.second }
+
+    if (showDateRangePicker) {
+        val dateRangePickerState = rememberDateRangePickerState()
+        DatePickerDialog(
+            onDismissRequest = { showDateRangePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    customStartDate = dateRangePickerState.selectedStartDateMillis
+                    // Default to end of the selected end day if picked
+                    customEndDate = dateRangePickerState.selectedEndDateMillis?.let {
+                        val c = Calendar.getInstance()
+                        c.timeInMillis = it
+                        c.set(Calendar.HOUR_OF_DAY, 23)
+                        c.set(Calendar.MINUTE, 59)
+                        c.set(Calendar.SECOND, 59)
+                        c.timeInMillis
+                    }
+                    if (customStartDate != null) {
+                        selectedRange = TimeRange.CUSTOM
+                    }
+                    showDateRangePicker = false
+                }) { Text("OK") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDateRangePicker = false }) { Text("Cancel") }
+            }
+        ) {
+            DateRangePicker(state = dateRangePickerState, modifier = Modifier.weight(1f))
+        }
+    }
 
     Scaffold(
         topBar = { TopAppBar(title = { Text("Statistics") }) }
@@ -94,65 +188,133 @@ fun StatisticsScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // Time Range Selector
-            TabRow(selectedTabIndex = selectedRange.ordinal) {
-                Tab(
-                    selected = selectedRange == TimeRange.DAILY,
-                    onClick = { selectedRange = TimeRange.DAILY },
-                    text = { Text("Daily") }
-                )
-                Tab(
-                    selected = selectedRange == TimeRange.MONTHLY,
-                    onClick = { selectedRange = TimeRange.MONTHLY },
-                    text = { Text("Monthly") }
-                )
-                Tab(
-                    selected = selectedRange == TimeRange.YEARLY,
-                    onClick = { selectedRange = TimeRange.YEARLY },
-                    text = { Text("Yearly") }
-                )
+            ScrollableTabRow(
+                selectedTabIndex = selectedRange.ordinal,
+                edgePadding = 8.dp
+            ) {
+                TimeRange.entries.forEachIndexed { index, range ->
+                    Tab(
+                        selected = selectedRange == range,
+                        onClick = { 
+                            if (range == TimeRange.CUSTOM) {
+                                showDateRangePicker = true
+                            } else {
+                                selectedRange = range 
+                            }
+                        },
+                        text = { Text(range.name.lowercase().replaceFirstChar { it.uppercase() }) }
+                    )
+                }
             }
 
-            // Type Toggle
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                FilterChip(
-                    selected = isExpenseView,
-                    onClick = { isExpenseView = true },
-                    label = { Text("Expense") },
-                    modifier = Modifier.padding(end = 8.dp)
-                )
-                FilterChip(
-                    selected = !isExpenseView,
-                    onClick = { isExpenseView = false },
-                    label = { Text("Income") }
-                )
+            // Period Navigation & Type Toggle
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (selectedRange != TimeRange.CUSTOM) {
+                        IconButton(onClick = { timeOffset-- }) {
+                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Previous")
+                        }
+                    }
+                    Text(
+                        text = displayPeriodStr,
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(horizontal = 8.dp)
+                    )
+                    if (selectedRange != TimeRange.CUSTOM) {
+                        IconButton(onClick = { timeOffset++ }, enabled = timeOffset < 0) {
+                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Next")
+                        }
+                    } else {
+                        IconButton(onClick = { showDateRangePicker = true }) {
+                            Icon(Icons.Default.DateRange, contentDescription = "Pick Range")
+                        }
+                    }
+                }
+
+                Row {
+                    FilterChip(
+                        selected = isExpenseView,
+                        onClick = { isExpenseView = true },
+                        label = { Text("Exp") },
+                        modifier = Modifier.padding(end = 4.dp)
+                    )
+                    FilterChip(
+                        selected = !isExpenseView,
+                        onClick = { isExpenseView = false },
+                        label = { Text("Inc") }
+                    )
+                }
             }
 
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(
-                    modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                    modifier = Modifier
+                        .padding(16.dp)
+                        .fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text("Total ${if (isExpenseView) "Expense" else "Income"}", style = MaterialTheme.typography.titleMedium)
-                    Text("¥${String.format(Locale.US, "%.2f", totalAmount)}", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                    Text("$currency${String.format(Locale.US, "%.2f", totalAmount)}", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                 }
             }
 
-            // Pie Chart implementation
+            // Pie Chart implementation with Labels
             if (categoryTotals.isNotEmpty() && totalAmount > 0) {
-                val colors = listOf(Color(0xFFE57373), Color(0xFF81C784), Color(0xFF64B5F6), Color(0xFFFFD54F), Color(0xFFBA68C8))
+                val colors = listOf(Color(0xFFE57373), Color(0xFF81C784), Color(0xFF64B5F6), Color(0xFFFFD54F), Color(0xFFBA68C8), Color(0xFF4DB6AC), Color(0xFFFF8A65))
                 
-                Box(modifier = Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
-                    Canvas(modifier = Modifier.size(160.dp)) {
+                Box(modifier = Modifier
+                    .fillMaxWidth()
+                    .height(260.dp), contentAlignment = Alignment.Center) {
+                    Canvas(modifier = Modifier.size(180.dp)) {
                         var startAngle = -90f
+                        val center = Offset(size.width / 2, size.height / 2)
+                        val radius = size.width / 2
+                        
+                        // Use native canvas to draw text
+                        val textPaint = Paint().apply {
+                            color = android.graphics.Color.DKGRAY
+                            textSize = 32f
+                            textAlign = Paint.Align.CENTER
+                            typeface = Typeface.DEFAULT_BOLD
+                        }
+
                         categoryTotals.forEachIndexed { index, pair ->
                             val sweepAngle = (pair.second / totalAmount).toFloat() * 360f
+                            val color = colors[index % colors.size]
+                            
+                            // Draw the arc section
                             drawArc(
-                                color = colors[index % colors.size],
+                                color = color,
                                 startAngle = startAngle,
                                 sweepAngle = sweepAngle,
                                 useCenter = false,
-                                style = Stroke(width = 40f)
+                                style = Stroke(width = 50f)
                             )
+                            
+                            // Calculate position for text (middle of the arc, pushed outwards)
+                            val midAngle = startAngle + sweepAngle / 2
+                            val midAngleRad = Math.toRadians(midAngle.toDouble())
+                            // Extend text positioning outside the stroke
+                            val textRadius = radius + 60f 
+                            
+                            val textX = (center.x + textRadius * cos(midAngleRad)).toFloat()
+                            val textY = (center.y + textRadius * sin(midAngleRad)).toFloat()
+
+                            // Only draw label if it occupies a decent slice (>5%) to prevent clutter
+                            if (sweepAngle > 18f) {
+                                val catName = categories.find { it.id == pair.first }?.name ?: "Other"
+                                drawContext.canvas.nativeCanvas.drawText(
+                                    catName,
+                                    textX,
+                                    textY,
+                                    textPaint
+                                )
+                            }
+                            
                             startAngle += sweepAngle
                         }
                     }
@@ -171,13 +333,15 @@ fun StatisticsScreen(
                             supportingContent = { 
                                 LinearProgressIndicator(
                                     progress = { (amount / totalAmount).toFloat() },
-                                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 4.dp),
                                     color = colors[index % colors.size]
                                 )
                             },
                             trailingContent = { 
                                 Column(horizontalAlignment = Alignment.End) {
-                                    Text("¥${String.format(Locale.US, "%.2f", amount)}", fontWeight = FontWeight.Bold)
+                                    Text("$currency${String.format(Locale.US, "%.2f", amount)}", fontWeight = FontWeight.Bold)
                                     Text(String.format(Locale.US, "%.1f%%", percentage), style = MaterialTheme.typography.bodySmall)
                                 }
                             }
@@ -185,7 +349,9 @@ fun StatisticsScreen(
                     }
                 }
             } else {
-                Box(modifier = Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                Box(modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f), contentAlignment = Alignment.Center) {
                     Text("No transactions found for this period.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
