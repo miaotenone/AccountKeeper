@@ -79,7 +79,17 @@ data class AppStrings(
     val noManualBackup: String,
     val close: String,
     val enterBackupName: String,
-    val backupNamePlaceholder: String
+    val backupNamePlaceholder: String,
+    val about: String,
+    val version: String,
+    val helpTutorial: String,
+    val helpTutorialDescription: String,
+    val github: String,
+    val githubDescription: String,
+    val contactAuthor: String,
+    val contactAuthorDescription: String,
+    val poweredBy: String,
+    val authorName: String
 )
 
 val EnStrings = AppStrings(
@@ -161,7 +171,17 @@ val EnStrings = AppStrings(
     noManualBackup = "No manual backup",
     close = "Close",
     enterBackupName = "Enter a name for this backup:",
-    backupNamePlaceholder = "My Backup"
+    backupNamePlaceholder = "My Backup",
+    about = "About",
+    version = "Version 1.0.0",
+    helpTutorial = "Help & Tutorial",
+    helpTutorialDescription = "Learn how to use AccountKeeper to manage your finances",
+    github = "GitHub",
+    githubDescription = "Follow our open source project",
+    contactAuthor = "Contact Author",
+    contactAuthorDescription = "Feel free to contact us if you have questions or suggestions",
+    poweredBy = "Powered by",
+    authorName = "Ricky Miao"
 )
 
 val ZhStrings = AppStrings(
@@ -243,7 +263,17 @@ noBackupFound = "尚未发现可用备份文件",
     noManualBackup = "无手动备份",
     close = "关闭",
     enterBackupName = "为此备份输入名称：",
-    backupNamePlaceholder = "我的备份"
+    backupNamePlaceholder = "我的备份",
+    about = "关于",
+    version = "版本 1.0.0",
+    helpTutorial = "帮助教程",
+    helpTutorialDescription = "了解如何使用AccountKeeper来管理您的财务",
+    github = "GitHub",
+    githubDescription = "欢迎关注我们的开源项目",
+    contactAuthor = "联系作者",
+    contactAuthorDescription = "如有问题或建议，欢迎联系我们",
+    poweredBy = "Powered by",
+    authorName = "Ricky Miao"
 )
 
 val LocalAppStrings = androidx.compose.runtime.compositionLocalOf { EnStrings }

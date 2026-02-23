@@ -3,6 +3,7 @@ package com.example.accountkeeper.ui.screens
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -36,6 +37,7 @@ import java.util.Locale
 @Composable
 fun ImportExportScreen(
     onNavigateToCategorySettings: () -> Unit = {},
+    onNavigateToAbout: () -> Unit = {},
     viewModel: TransactionViewModel = hiltViewModel(),
     categoryViewModel: CategoryViewModel = hiltViewModel(),
     settingsViewModel: SettingsViewModel = hiltViewModel()
@@ -52,15 +54,10 @@ fun ImportExportScreen(
 
     var showClearConfirmDialog by remember { mutableStateOf(false) }
     var refreshBackupTrigger by remember { mutableStateOf(0) }
-    var latestBackupTime by remember { mutableStateOf<String?>(null) }
     var showManualBackupsDialog by remember { mutableStateOf(false) }
     var showCustomBackupNameDialog by remember { mutableStateOf(false) }
     var customBackupName by remember { mutableStateOf("") }
     
-    LaunchedEffect(refreshBackupTrigger) {
-        latestBackupTime = settingsViewModel.backupManager.getLatestAutoBackupDateStr()
-    }
-
     // Launcher for Export (Create Document)
     val exportCsvLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("text/csv")
@@ -126,110 +123,110 @@ fun ImportExportScreen(
 
             // First pass: Find categories
             openStream()?.bufferedReader()?.useLines { lines ->
-                        val iterator = lines.iterator()
-                        if (!iterator.hasNext()) return@useLines
+                val iterator = lines.iterator()
+                if (!iterator.hasNext()) return@useLines
+                
+                // Parse header
+                val headerLine = iterator.next()
+                val headerParts = parseCsvLine(headerLine)
+                if (headerParts.any { it.equals("Date", true) || it.contains("日期") || it.contains("时间") } || 
+                    headerParts.any { it.equals("Amount", true) || it.contains("金额") }) {
+                    idIdx = headerParts.indexOfFirst { it.equals("ID", true) || it.contains("单号") }
+                    dateIdx = headerParts.indexOfFirst { it.equals("Date", true) || it.contains("日期") || it.contains("时间") }.takeIf { it >= 0 } ?: 0
+                    typeIdx = headerParts.indexOfFirst { it.equals("Type", true) || it.contains("类型") || it.contains("收支") }.takeIf { it >= 0 } ?: 1
+                    amountIdx = headerParts.indexOfFirst { it.equals("Amount", true) || it.contains("金额") }.takeIf { it >= 0 } ?: 2
+                    catIdx = headerParts.indexOfFirst { it.equals("Category", true) || it.contains("分类") || it.contains("类别") }.takeIf { it >= 0 } ?: 3
+                    noteIdx = headerParts.indexOfFirst { it.equals("Note", true) || it.contains("备注") || it.contains("说明") || it.contains("商品") }.takeIf { it >= 0 } ?: 4
+                }
+                
+                while(iterator.hasNext()) {
+                    val line = iterator.next()
+                    val parts = parseCsvLine(line)
+                    if (parts.size >= 5) {
+                        val typeString = parts.getOrNull(typeIdx) ?: ""
+                        val categoryName = parts.getOrNull(catIdx)?.trim() ?: ""
                         
-                        // Parse header
-                        val headerLine = iterator.next()
-                        val headerParts = parseCsvLine(headerLine)
-                        if (headerParts.any { it.equals("Date", true) || it.contains("期") || it.contains("时间") } || 
-                            headerParts.any { it.equals("Amount", true) || it.contains("金额") }) {
-                            idIdx = headerParts.indexOfFirst { it.equals("ID", true) || it.contains("单号") }
-                            dateIdx = headerParts.indexOfFirst { it.equals("Date", true) || it.contains("期") || it.contains("时间") }.takeIf { it >= 0 } ?: 0
-                            typeIdx = headerParts.indexOfFirst { it.equals("Type", true) || it.contains("类型") || it.contains("收支") }.takeIf { it >= 0 } ?: 1
-                            amountIdx = headerParts.indexOfFirst { it.equals("Amount", true) || it.contains("金额") }.takeIf { it >= 0 } ?: 2
-                            catIdx = headerParts.indexOfFirst { it.equals("Category", true) || it.contains("分类") || it.contains("类别") }.takeIf { it >= 0 } ?: 3
-                            noteIdx = headerParts.indexOfFirst { it.equals("Note", true) || it.contains("备注") || it.contains("说明") || it.contains("商品") }.takeIf { it >= 0 } ?: 4
-                        }
+                        val type = if (typeString.equals("Income", ignoreCase = true) || typeString.contains("收入") || typeString.contains("退款")) TransactionType.INCOME else TransactionType.EXPENSE
+                        val catMatch = categories.find { it.name.equals(categoryName, ignoreCase = true) && it.type == type }
                         
-                        while(iterator.hasNext()) {
-                            val line = iterator.next()
-                            val parts = parseCsvLine(line)
-                            if (parts.size >= 5) {
-                                val typeString = parts.getOrNull(typeIdx) ?: ""
-                                val categoryName = parts.getOrNull(catIdx)?.trim() ?: ""
-                                
-                                val type = if (typeString.equals("Income", ignoreCase = true) || typeString.contains("收入") || typeString.contains("退款")) TransactionType.INCOME else TransactionType.EXPENSE
-                                var catMatch = categories.find { it.name.equals(categoryName, ignoreCase = true) && it.type == type }
-                                
-                                // Auto-create category if missing
-                                if (catMatch == null && categoryName.isNotBlank() && categoryName != "Other" && categoryName != "/") {
-                                    importNewCategoriesMap[categoryName to type] = true
-                                }
-                            }
+                        // Auto-create category if missing
+                        if (catMatch == null && categoryName.isNotBlank() && categoryName != "Other" && categoryName != "/") {
+                            importNewCategoriesMap[categoryName to type] = true
                         }
                     }
+                }
+            }
+                
+            // Create required missing categories
+            for ((name, type) in importNewCategoriesMap.keys) {
+                categoryViewModel.addCategory(com.example.accountkeeper.data.model.Category(name = name, type = type, isDefault = false))
+            }
+            
+            // Wait a bit for Room to process categories
+            kotlinx.coroutines.delay(500)
+            
+            // Now real insertion
+            val latestCategories = categoryViewModel.categories.value
+            val latestTransactions = viewModel.transactions.value // Get local data for conflict resolution
+            
+            // Second pass: Insert transactions
+            openStream()?.bufferedReader()?.useLines { lines ->
+                val iterator = lines.iterator()
+                if (!iterator.hasNext()) return@useLines
+                iterator.next() // Skip header
+                
+                while(iterator.hasNext()) {
+                    val line = iterator.next()
+                    val parts = parseCsvLine(line)
+                    if (parts.size >= 5) {
+                        val parsedId = if (idIdx >= 0) parts.getOrNull(idIdx)?.toLongOrNull() ?: IdGenerator.generateId() else IdGenerator.generateId()
                         
-                    // Create required missing categories
-                    for ((name, type) in importNewCategoriesMap.keys) {
-                        categoryViewModel.addCategory(com.example.accountkeeper.data.model.Category(name = name, type = type, isDefault = false))
-                    }
-                    
-                    // Wait a bit for Room to process categories
-                    kotlinx.coroutines.delay(500)
-                    
-                    // Now real insertion
-                    val latestCategories = categoryViewModel.categories.value
-                    val latestTransactions = viewModel.transactions.value // Get local data for conflict resolution
-                    
-                    // Second pass: Insert transactions
-                    openStream()?.bufferedReader()?.useLines { lines ->
-                        val iterator = lines.iterator()
-                        if (!iterator.hasNext()) return@useLines
-                        iterator.next() // Skip header
-                        
-                        while(iterator.hasNext()) {
-                            val line = iterator.next()
-                            val parts = parseCsvLine(line)
-                            if (parts.size >= 5) {
-                                val parsedId = if (idIdx >= 0) parts.getOrNull(idIdx)?.toLongOrNull() ?: IdGenerator.generateId() else IdGenerator.generateId()
-                                
-                                // Conflict handling: App data takes precedence. Skip if ID exists in local DB.
-                                if (latestTransactions.any { it.id == parsedId }) {
-                                    continue
-                                }
+                        // Conflict handling: App data takes precedence. Skip if ID exists in local DB.
+                        if (latestTransactions.any { it.id == parsedId }) {
+                            continue
+                        }
 
-                                val typeString = parts.getOrNull(typeIdx) ?: ""
-                                val amountString = parts.getOrNull(amountIdx)?.replace(Regex("[^\\d.]"), "") ?: "0"
-                                val amount = amountString.toDoubleOrNull() ?: 0.0
-                                val categoryName = parts.getOrNull(catIdx)?.trim() ?: ""
-                                val note = parts.getOrNull(noteIdx) ?: ""
-                                val dateStr = parts.getOrNull(dateIdx) ?: ""
-                                
-                                // Enhanced Date Parsing
-                                var dateMillis = System.currentTimeMillis()
-                                val formats = listOf("yyyy-MM-dd HH:mm:ss", "yyyy/MM/dd HH:mm:ss", "yyyy-MM-dd", "yyyy/MM/dd")
-                                for (format in formats) {
-                                    try {
-                                        val parsed = SimpleDateFormat(format, Locale.getDefault()).parse(dateStr)
-                                        if (parsed != null) {
-                                            dateMillis = parsed.time
-                                            break
-                                        }
-                                    } catch (e: Exception) { /* Ignore */ }
+                        val typeString = parts.getOrNull(typeIdx) ?: ""
+                        val amountString = parts.getOrNull(amountIdx)?.replace(Regex("[^\\d.]"), "") ?: "0"
+                        val amount = amountString.toDoubleOrNull() ?: 0.0
+                        val categoryName = parts.getOrNull(catIdx)?.trim() ?: ""
+                        val note = parts.getOrNull(noteIdx) ?: ""
+                        val dateStr = parts.getOrNull(dateIdx) ?: ""
+                        
+                        // Enhanced Date Parsing
+                        var dateMillis = System.currentTimeMillis()
+                        val formats = listOf("yyyy-MM-dd HH:mm:ss", "yyyy/MM/dd HH:mm:ss", "yyyy-MM-dd", "yyyy/MM/dd")
+                        for (format in formats) {
+                            try {
+                                val parsed = SimpleDateFormat(format, Locale.getDefault()).parse(dateStr)
+                                if (parsed != null) {
+                                    dateMillis = parsed.time
+                                    break
                                 }
-                                
-                                val type = if (typeString.equals("Income", ignoreCase = true) || typeString.contains("收入") || typeString.contains("退款")) TransactionType.INCOME else TransactionType.EXPENSE
-                                var catMatch = latestCategories.find { it.name.equals(categoryName, ignoreCase = true) && it.type == type }
-                                
-                                val categoryId = catMatch?.id ?: latestCategories.firstOrNull { it.type == type }?.id
-                                
-                                if (amount > 0 && categoryId != null) {
-                                    val transaction = Transaction(
-                                        id = parsedId,
-                                        type = type,
-                                        amount = amount,
-                                        note = note,
-                                        date = dateMillis,
-                                        categoryId = categoryId
-                                    )
-                                    viewModel.addTransaction(transaction)
-                                    successCount++
-                                }
-                            }
+                            } catch (e: Exception) { /* Ignore */ }
+                        }
+                        
+                        val type = if (typeString.equals("Income", ignoreCase = true) || typeString.contains("收入") || typeString.contains("退款")) TransactionType.INCOME else TransactionType.EXPENSE
+                        val catMatch = latestCategories.find { it.name.equals(categoryName, ignoreCase = true) && it.type == type }
+                        
+                        val categoryId = catMatch?.id ?: latestCategories.firstOrNull { it.type == type }?.id
+                        
+                        if (amount > 0 && categoryId != null) {
+                            val transaction = Transaction(
+                                id = parsedId,
+                                type = type,
+                                amount = amount,
+                                note = note,
+                                date = dateMillis,
+                                categoryId = categoryId
+                            )
+                            viewModel.addTransaction(transaction)
+                            successCount++
                         }
                     }
-                    snackbarHostState.showSnackbar(if (successCount > 0) "成功融合 $successCount 笔数据！" else "合并完毕：但未识别出任何需要补充的新数据。")
+                }
+            }
+            snackbarHostState.showSnackbar(if (successCount > 0) "成功融合 $successCount 笔数据！" else "合并完毕：但未识别出任何需要补充的新数据")
         } catch (e: Exception) {
             e.printStackTrace()
             snackbarHostState.showSnackbar("合并解析失败: ${e.localizedMessage}")
@@ -258,45 +255,7 @@ fun ImportExportScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Section 1: Platform Bill Import
-            Text("第三方账单导入 (微信/支付宝)", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp))
-            Card(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-            ) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("请在微信或支付宝的账单页面中通过“导出账单”生成 CSV 文件，传输到手机后在此处导入。", style = MaterialTheme.typography.bodySmall)
-                    
-                    Button(
-                        onClick = {
-                            // Reusing the same generic CSV import launcher for now, 
-                            // a robust real app would parse the specific 17-line header of WeChat and 5-line of Alipay.
-                            // We will prompt the user to use the generic import for now but parse according to standard AccountKeeper CSV format.
-                            scope.launch {
-                                snackbarHostState.showSnackbar("提示：目前支持标准格式导入，请确保微信/支付宝数据已转换为标准模板，或直接使用下方的导入备份功能。")
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = androidx.compose.ui.graphics.Color(0xFF07C160)) // WeChat Green
-                    ) {
-                        Text("导入微信账单 (CSV)")
-                    }
-
-                    Button(
-                        onClick = {
-                            scope.launch {
-                                snackbarHostState.showSnackbar("提示：目前支持标准格式导入，请确保微信/支付宝数据已转换为标准模板，或直接使用下方的导入备份功能。")
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = androidx.compose.ui.graphics.Color(0xFF1677FF)) // Alipay Blue
-                    ) {
-                        Text("导入支付宝账单 (CSV)")
-                    }
-                }
-            }
-
-            // Section 2: Category Management
+            // Section 1: Category Management
             Text(strings.categoryManagement, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp))
             Card(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
@@ -313,7 +272,7 @@ fun ImportExportScreen(
                 }
             }
 
-            // Section 3: CSV Data Management
+            // Section 2: CSV Data Management
             Text(strings.manualDataManagement, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp))
             Card(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
@@ -350,7 +309,7 @@ fun ImportExportScreen(
                 }
             }
             
-            // Section 4: Local Internal Backup Management
+            // Section 3: Local Internal Backup Management
             Text(strings.localBackupVault, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp))
             Card(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
@@ -470,7 +429,7 @@ fun ImportExportScreen(
                 }
             }
             
-            // Section 5: App Settings
+            // Section 4: App Settings
             Text(strings.generalSettings, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp))
             Card(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
@@ -523,7 +482,32 @@ fun ImportExportScreen(
                 }
             }
 
-            // Danger Section: Clear All Data
+            // Section 5: About
+            Text(strings.about, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp))
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).clickable { onNavigateToAbout() },
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text("AccountKeeper", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                            Text(strings.version, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = "About",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+
+            
             Spacer(modifier = Modifier.height(16.dp))
             OutlinedButton(
                 onClick = { showClearConfirmDialog = true },
@@ -540,14 +524,14 @@ fun ImportExportScreen(
         if (showClearConfirmDialog) {
             AlertDialog(
                 onDismissRequest = { showClearConfirmDialog = false },
-                title = { Text("危险警告！") },
+                title = { Text("危险警告") },
                 text = { Text("清空操作将永久删除包含在当前数据库内的所有记录信息！如果您未妥善备份这些数据将无法找回。您确定要执行此清空操作吗？") },
                 confirmButton = {
                     Button(
                         onClick = {
                             viewModel.deleteAllTransactions()
                             showClearConfirmDialog = false
-                            scope.launch { snackbarHostState.showSnackbar("已成功清空所有账单记录。") }
+                            scope.launch { snackbarHostState.showSnackbar("已成功清空所有账单记录") }
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                     ) {

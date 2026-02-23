@@ -28,6 +28,7 @@ import com.example.accountkeeper.ui.screens.HomeScreen
 import com.example.accountkeeper.ui.screens.ImportExportScreen
 import com.example.accountkeeper.ui.screens.StatisticsScreen
 import com.example.accountkeeper.ui.screens.CategorySettingsScreen
+import com.example.accountkeeper.ui.screens.AboutScreen
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -44,6 +45,9 @@ object SettingsRoute
 
 @Serializable
 object CategorySettingsRoute
+
+@Serializable
+object AboutRoute
 
 sealed class BottomNavItem(
     val route: String,
@@ -91,6 +95,9 @@ fun AppNavigation(
             ImportExportScreen(
                 onNavigateToCategorySettings = {
                     navController.navigate(CategorySettingsRoute)
+                },
+                onNavigateToAbout = {
+                    navController.navigate(AboutRoute)
                 }
             )
         }
@@ -103,6 +110,11 @@ fun AppNavigation(
         }
         composable<CategorySettingsRoute> {
             CategorySettingsScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        composable<AboutRoute> {
+            AboutScreen(
                 onNavigateBack = { navController.popBackStack() }
             )
         }
