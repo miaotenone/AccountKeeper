@@ -54,6 +54,8 @@ fun ImportExportScreen(
     var refreshBackupTrigger by remember { mutableStateOf(0) }
     var latestBackupTime by remember { mutableStateOf<String?>(null) }
     var showManualBackupsDialog by remember { mutableStateOf(false) }
+    var showCustomBackupNameDialog by remember { mutableStateOf(false) }
+    var customBackupName by remember { mutableStateOf("") }
     
     LaunchedEffect(refreshBackupTrigger) {
         latestBackupTime = settingsViewModel.backupManager.getLatestAutoBackupDateStr()
@@ -405,11 +407,20 @@ fun ImportExportScreen(
                     ) {
                         Column {
                             Text(strings.currentBackupStatus, style = MaterialTheme.typography.bodyLarge)
-                            Text(
-                                text = if (latestBackupTime != null) strings.latestBackupFile + latestBackupTime else strings.noBackupFound,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = if (latestBackupTime != null) androidx.compose.ui.graphics.Color(0xFF07C160) else MaterialTheme.colorScheme.error
-                            )
+                            val latestAuto = settingsViewModel.backupManager.getLatestAutoBackupDateStr()
+                            val latestManual = settingsViewModel.backupManager.getLatestManualBackupDateStr()
+                            Column {
+                                Text(
+                                    text = strings.latestAutoBackup + (latestAuto ?: strings.noAutoBackup),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (latestAuto != null) androidx.compose.ui.graphics.Color(0xFF07C160) else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = strings.latestManualBackup + (latestManual ?: strings.noManualBackup),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (latestManual != null) androidx.compose.ui.graphics.Color(0xFF5BD9CA) else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     }
 
@@ -418,28 +429,16 @@ fun ImportExportScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Button(
-                            onClick = { 
-                                scope.launch(Dispatchers.IO) {
-                                    val safeCsvSequence = sequence {
-                                        yield("ID,Date,Type,Amount,Category,Note")
-                                        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-                                        for (tx in transactions) {
-                                            val categoryName = categories.find { it.id == tx.categoryId }?.name ?: "Other"
-                                            val typeString = if (tx.type == TransactionType.INCOME) "Income" else "Expense"
-                                            val safeNote = tx.note.replace("\"", "\"\"")
-                                            yield("${tx.id},${dateFormat.format(Date(tx.date))},${typeString},${tx.amount},${categoryName},\"${safeNote}\"")
-                                        }
-                                    }
-                                    settingsViewModel.backupManager.writeNewBackup(safeCsvSequence, appSettings.backupRetentionLimit, isAuto = false)
-                                    refreshBackupTrigger++
-                                    snackbarHostState.showSnackbar(strings.manualBackupSuccess)
-                                }
-                            },
+                            onClick = { showCustomBackupNameDialog = true },
                             modifier = Modifier.weight(1f)
                         ) {
                             Text(strings.createManualBackup)
                         }
-                        
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         OutlinedButton(
                             onClick = { 
                                 settingsViewModel.backupManager.clearAllAutoBackups()
@@ -448,14 +447,25 @@ fun ImportExportScreen(
                             },
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text(strings.clearAllBackups)
+                            Text(strings.clearAutoBackups)
+                        }
+                        
+                        OutlinedButton(
+                            onClick = { 
+                                settingsViewModel.backupManager.clearAllManualBackups()
+                                refreshBackupTrigger++
+                                scope.launch { snackbarHostState.showSnackbar(strings.manualBackupsCleared) }
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(strings.clearManualBackups)
                         }
                     }
                     OutlinedButton(
                         onClick = { showManualBackupsDialog = true },
                         modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
                     ) {
-                        Text(strings.openManualBackupVault)
+                        Text(strings.backupVault)
                     }
                 }
             }
@@ -555,40 +565,148 @@ fun ImportExportScreen(
         if (showManualBackupsDialog) {
             AlertDialog(
                 onDismissRequest = { showManualBackupsDialog = false },
-                title = { Text("管理您的手动备份") },
+                title = { Text(strings.backupVault) },
                 text = {
-                    val backups = settingsViewModel.backupManager.getAllManualBackups()
-                    if (backups.isEmpty()) {
-                        Text("您当前还没有生成任何手动备份。")
-                    } else {
-                        androidx.compose.foundation.lazy.LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp)) {
-                            items(backups.size) { index ->
-                                val file = backups[index]
-                                val displayFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-                                val dateStr = displayFormat.format(Date(file.lastModified()))
-                                Card(
-                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                                ) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        // Auto Backups Section
+                        Text(strings.autoBackup, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
+                        val autoBackups = settingsViewModel.backupManager.getAllAutoBackups()
+                        if (autoBackups.isEmpty()) {
+                            Text(strings.noAutoBackup, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 8.dp))
+                        } else {
+                            androidx.compose.foundation.lazy.LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 200.dp)) {
+                                items(autoBackups.size) { index ->
+                                    val file = autoBackups[index]
+                                    val displayFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+                                    val dateStr = displayFormat.format(Date(file.lastModified()))
+                                    Card(
+                                        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                                     ) {
-                                        Text(dateStr, style = MaterialTheme.typography.bodySmall)
-                                        Row {
-                                            TextButton(onClick = {
-                                                scope.launch(Dispatchers.IO) {
-                                                    performCsvImport { java.io.FileInputStream(file) }
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth().padding(12.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Column {
+                                                Text(
+                                                    text = dateStr,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    fontWeight = FontWeight.Medium
+                                                )
+                                                Text(
+                                                    text = strings.autoBackup,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.primary
+                                                )
+                                            }
+                                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                TextButton(
+                                                    onClick = {
+                                                        scope.launch(Dispatchers.IO) {
+                                                            performCsvImport { java.io.FileInputStream(file) }
+                                                        }
+                                                        showManualBackupsDialog = false
+                                                    },
+                                                    modifier = Modifier.height(32.dp)
+                                                ) { 
+                                                    Text(strings.restore, style = MaterialTheme.typography.labelSmall) 
                                                 }
-                                                showManualBackupsDialog = false
-                                            }) { Text("恢复") }
-                                            TextButton(onClick = {
-                                                settingsViewModel.backupManager.deleteBackupFile(file)
-                                                refreshBackupTrigger++
-                                                showManualBackupsDialog = false
-                                                scope.launch { snackbarHostState.showSnackbar("已成功删除选定的存档") }
-                                            }) { Text("删除", color = MaterialTheme.colorScheme.error) }
+                                                TextButton(
+                                                    onClick = {
+                                                        settingsViewModel.backupManager.deleteBackupFile(file)
+                                                        refreshBackupTrigger++
+                                                        scope.launch { snackbarHostState.showSnackbar(strings.deleteBackupSuccess) }
+                                                    },
+                                                    modifier = Modifier.height(32.dp)
+                                                ) { 
+                                                    Text(strings.delete, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error) 
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+
+                        // Manual Backups Section
+                        Text(strings.manualBackup, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
+                        val manualBackups = settingsViewModel.backupManager.getAllManualBackups()
+                        if (manualBackups.isEmpty()) {
+                            Text(strings.noManualBackups, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 8.dp))
+                        } else {
+                            androidx.compose.foundation.lazy.LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp)) {
+                                items(manualBackups.size) { index ->
+                                    val file = manualBackups[index]
+                                    val displayFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+                                    val dateStr = displayFormat.format(Date(file.lastModified()))
+                                    val fileName = file.nameWithoutExtension
+                                    // Extract custom name from filename
+                                    val customName = if (fileName.startsWith("AK_Manual_")) {
+                                        fileName.removePrefix("AK_Manual_")
+                                            .substringBeforeLast("_")
+                                            .replace("_", " ")
+                                    } else {
+                                        fileName
+                                    }
+                                    Card(
+                                        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                                    ) {
+                                        Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
+                                            // First row: Name and Manual tag
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Text(
+                                                        text = customName,
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        fontWeight = FontWeight.Medium,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
+                                                    )
+                                                    Text(
+                                                        text = strings.manualBackup,
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = MaterialTheme.colorScheme.secondary
+                                                    )
+                                                }
+                                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                    TextButton(
+                                                        onClick = {
+                                                            scope.launch(Dispatchers.IO) {
+                                                                performCsvImport { java.io.FileInputStream(file) }
+                                                            }
+                                                            showManualBackupsDialog = false
+                                                        },
+                                                        modifier = Modifier.height(32.dp)
+                                                    ) { 
+                                                        Text(strings.restore, style = MaterialTheme.typography.labelSmall) 
+                                                    }
+                                                    TextButton(
+                                                        onClick = {
+                                                            settingsViewModel.backupManager.deleteBackupFile(file)
+                                                            refreshBackupTrigger++
+                                                            scope.launch { snackbarHostState.showSnackbar(strings.deleteBackupSuccess) }
+                                                        },
+                                                        modifier = Modifier.height(32.dp)
+                                                    ) { 
+                                                        Text(strings.delete, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error) 
+                                                    }
+                                                }
+                                            }
+                                            // Second row: Date
+                                            Text(
+                                                text = dateStr,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.padding(top = 4.dp)
+                                            )
                                         }
                                     }
                                 }
@@ -597,7 +715,55 @@ fun ImportExportScreen(
                     }
                 },
                 confirmButton = {
-                    TextButton(onClick = { showManualBackupsDialog = false }) { Text("关闭") }
+                    TextButton(onClick = { showManualBackupsDialog = false }) { Text(strings.close) }
+                }
+            )
+        }
+
+        if (showCustomBackupNameDialog) {
+            AlertDialog(
+                onDismissRequest = { showCustomBackupNameDialog = false },
+                title = { Text(strings.createManualBackup) },
+                text = {
+                    Column {
+                        Text(strings.enterBackupName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = customBackupName,
+                            onValueChange = { customBackupName = it },
+                            placeholder = { Text(strings.backupNamePlaceholder) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            if (customBackupName.isNotBlank()) {
+                                scope.launch(Dispatchers.IO) {
+                                    val safeCsvSequence = sequence {
+                                        yield("ID,Date,Type,Amount,Category,Note")
+                                        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+                                        for (tx in transactions) {
+                                            val categoryName = categories.find { it.id == tx.categoryId }?.name ?: "Other"
+                                            val typeString = if (tx.type == TransactionType.INCOME) "Income" else "Expense"
+                                            val safeNote = tx.note.replace("\"", "\"\"")
+                                            yield("${tx.id},${dateFormat.format(Date(tx.date))},${typeString},${tx.amount},${categoryName},\"${safeNote}\"")
+                                        }
+                                    }
+                                    settingsViewModel.backupManager.writeNewBackup(safeCsvSequence, appSettings.backupRetentionLimit, isAuto = false, customName = customBackupName)
+                                    refreshBackupTrigger++
+                                    customBackupName = ""
+                                    showCustomBackupNameDialog = false
+                                    snackbarHostState.showSnackbar(strings.manualBackupSuccess)
+                                }
+                            }
+                        }
+                    ) { Text(strings.save) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showCustomBackupNameDialog = false }) { Text(strings.cancel) }
                 }
             )
         }

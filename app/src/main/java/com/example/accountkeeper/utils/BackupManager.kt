@@ -16,9 +16,16 @@ class BackupManager(private val context: Context) {
     // Date format for the backup files
     private val dateFormat = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
 
-    fun createBackupFileName(isAuto: Boolean = true): String {
-        val prefix = if (isAuto) "AK_AutoBackup_" else "AK_ManualBackup_"
-        return "$prefix${dateFormat.format(Date())}.csv"
+    fun createBackupFileName(isAuto: Boolean = true, customName: String? = null): String {
+        return when {
+            customName != null -> {
+                // Sanitize custom name and append timestamp
+                val sanitizedName = customName.replace(Regex("[^a-zA-Z0-9\\u4e00-\\u9fa5_-]"), "_")
+                "AK_Manual_${sanitizedName}_${dateFormat.format(Date())}.csv"
+            }
+            isAuto -> "AK_AutoBackup_${dateFormat.format(Date())}.csv"
+            else -> "AK_ManualBackup_${dateFormat.format(Date())}.csv"
+        }
     }
 
     /**
@@ -36,8 +43,8 @@ class BackupManager(private val context: Context) {
      * Write raw CSV content directly to a new internal backup file.
      * Also manages the retention limit.
      */
-    fun writeNewBackup(csvLineSequence: Sequence<String>, maxKeep: Int = 15, isAuto: Boolean = true) {
-        val newFile = File(backupDir, createBackupFileName(isAuto))
+    fun writeNewBackup(csvLineSequence: Sequence<String>, maxKeep: Int = 15, isAuto: Boolean = true, customName: String? = null) {
+        val newFile = File(backupDir, createBackupFileName(isAuto, customName))
         try {
             newFile.bufferedWriter().use { writer ->
                 csvLineSequence.forEach { line ->
@@ -68,11 +75,21 @@ class BackupManager(private val context: Context) {
     }
 
     /**
+     * Returns all auto backups sorted by latest first.
+     */
+    fun getAllAutoBackups(): List<File> {
+        val files = backupDir.listFiles { _, name -> 
+            name.endsWith(".csv") && name.contains("AutoBackup") 
+        } ?: return emptyList()
+        return files.sortedByDescending { it.lastModified() }
+    }
+
+    /**
      * Returns all manual backups sorted by latest first.
      */
     fun getAllManualBackups(): List<File> {
         val files = backupDir.listFiles { _, name -> 
-            name.endsWith(".csv") && name.contains("ManualBackup") 
+            name.endsWith(".csv") && (name.contains("Manual") || name.contains("AK_Manual"))
         } ?: return emptyList()
         return files.sortedByDescending { it.lastModified() }
     }
@@ -92,7 +109,17 @@ class BackupManager(private val context: Context) {
      */
     fun clearAllAutoBackups() {
         val files = backupDir.listFiles { _, name -> 
-            name.endsWith(".csv") && !name.contains("ManualBackup")
+            name.endsWith(".csv") && !name.contains("Manual")
+        }
+        files?.forEach { it.delete() }
+    }
+
+    /**
+     * Clear all current existing manual backups.
+     */
+    fun clearAllManualBackups() {
+        val files = backupDir.listFiles { _, name -> 
+            name.endsWith(".csv") && (name.contains("Manual") || name.contains("AK_Manual"))
         }
         files?.forEach { it.delete() }
     }
@@ -102,6 +129,18 @@ class BackupManager(private val context: Context) {
      */
     fun getLatestAutoBackupDateStr(): String? {
         val files = backupDir.listFiles { _, name -> name.endsWith(".csv") && !name.contains("ManualBackup") }
+        if (files.isNullOrEmpty()) return null
+        val latest = files.maxByOrNull { it.lastModified() } ?: return null
+        
+        val displayFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+        return displayFormat.format(Date(latest.lastModified()))
+    }
+
+    /**
+     * Returns the formatted date string of when the latest manual backup was modified.
+     */
+    fun getLatestManualBackupDateStr(): String? {
+        val files = backupDir.listFiles { _, name -> name.endsWith(".csv") && name.contains("ManualBackup") }
         if (files.isNullOrEmpty()) return null
         val latest = files.maxByOrNull { it.lastModified() } ?: return null
         
