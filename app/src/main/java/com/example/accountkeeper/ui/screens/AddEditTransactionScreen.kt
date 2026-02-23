@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -118,6 +119,7 @@ fun AddEditTransactionScreen(
                         selectedCategoryId = null 
                     },
                     label = { Text(strings.expense) },
+                    shape = RoundedCornerShape(16.dp),
                     modifier = Modifier.weight(1f).padding(end = 8.dp)
                 )
                 FilterChip(
@@ -127,6 +129,7 @@ fun AddEditTransactionScreen(
                         selectedCategoryId = null 
                     },
                     label = { Text(strings.income) },
+                    shape = RoundedCornerShape(16.dp),
                     modifier = Modifier.weight(1f).padding(start = 8.dp)
                 )
             }
@@ -138,6 +141,7 @@ fun AddEditTransactionScreen(
                 label = { Text("${strings.amount} ($currency)") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
+                shape = RoundedCornerShape(12.dp),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
             )
 
@@ -149,6 +153,7 @@ fun AddEditTransactionScreen(
                 label = { Text(strings.date) },
                 modifier = Modifier.fillMaxWidth(),
                 readOnly = true,
+                shape = RoundedCornerShape(12.dp),
                 trailingIcon = {
                     TextButton(onClick = { showDatePicker = true }) {
                         Text(strings.change)
@@ -174,6 +179,7 @@ fun AddEditTransactionScreen(
                             containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
                             contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
                         ),
+                        shape = RoundedCornerShape(16.dp),
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(60.dp)
@@ -191,6 +197,7 @@ fun AddEditTransactionScreen(
                 value = note,
                 onValueChange = { note = it },
                 label = { Text(strings.note) },
+                shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.fillMaxWidth()
             )
 

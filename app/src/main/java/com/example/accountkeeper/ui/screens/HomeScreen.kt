@@ -18,9 +18,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.accountkeeper.LocalCurrencySymbol
 import com.example.accountkeeper.data.model.Transaction
@@ -131,10 +137,21 @@ fun HomeScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                shape = RoundedCornerShape(24.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
             ) {
                 Column(
-                    modifier = Modifier.padding(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            brush = Brush.linearGradient(
+                                colors = listOf(
+                                    MaterialTheme.colorScheme.primary,
+                                    Color(0xFF0050B3) // Deep blue for gradient
+                                )
+                            )
+                        )
+                        .padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Row(
@@ -143,24 +160,24 @@ fun HomeScreen(
                             .clickable { isShowingMonthly = !isShowingMonthly }
                             .padding(4.dp)
                     ) {
-                        Text(if (isShowingMonthly) "本月资产" else strings.totalAssets, style = MaterialTheme.typography.titleMedium)
-                        Text(" 🔁", style = MaterialTheme.typography.titleMedium)
+                        Text(if (isShowingMonthly) "本月资产" else strings.totalAssets, style = MaterialTheme.typography.titleMedium, color = Color.White.copy(alpha = 0.9f))
+                        Text(" 🔁", style = MaterialTheme.typography.titleMedium, color = Color.White)
                     }
-                    Text("$currency${String.format(Locale.US, "%.2f", totalBalance)}", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+                    Text("$currency${String.format(Locale.US, "%.2f", totalBalance)}", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold, color = Color.White)
                     
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 16.dp),
+                            .padding(top = 24.dp),
                         horizontalArrangement = Arrangement.SpaceEvenly
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(strings.income, style = MaterialTheme.typography.bodyMedium)
-                            Text("$currency${String.format(Locale.US, "%.2f", totalIncome)}", color = androidx.compose.ui.graphics.Color(0xFF4CAF50))
+                            Text(strings.income, style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.8f))
+                            Text("$currency${String.format(Locale.US, "%.2f", totalIncome)}", color = Color.White, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleMedium)
                         }
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(strings.expense, style = MaterialTheme.typography.bodyMedium)
-                            Text("$currency${String.format(Locale.US, "%.2f", totalExpense)}", color = MaterialTheme.colorScheme.error)
+                            Text(strings.expense, style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.8f))
+                            Text("$currency${String.format(Locale.US, "%.2f", totalExpense)}", color = Color.White, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleMedium)
                         }
                     }
                 }
@@ -215,23 +232,39 @@ fun HomeScreen(
 @Composable
 fun TransactionItem(transaction: Transaction, categoryName: String, currency: String, onClick: () -> Unit, onLongClick: () -> Unit = {}) {
     val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+    val isIncome = transaction.type == TransactionType.INCOME
     
     ListItem(
+        leadingContent = {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(if (isIncome) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.errorContainer),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = categoryName.take(1),
+                    color = if (isIncome) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onErrorContainer,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        },
         headlineContent = { Text(categoryName, fontWeight = FontWeight.SemiBold) },
         supportingContent = { 
             Column {
                 if (transaction.note.isNotBlank()) {
-                    Text(transaction.note, style = MaterialTheme.typography.bodySmall)
+                    Text(transaction.note, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
-                Text(timeFormat.format(Date(transaction.date)), style = MaterialTheme.typography.bodySmall)
+                Text(timeFormat.format(Date(transaction.date)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         },
         trailingContent = {
-            val isIncome = transaction.type == TransactionType.INCOME
             val displayAmount = CurrencyUtils.convertToDisplay(transaction.amount, currency)
             Text(
                 text = "${if (isIncome) "+" else "-"}$currency${String.format(Locale.US, "%.2f", displayAmount)}",
-                color = if (isIncome) androidx.compose.ui.graphics.Color(0xFF4CAF50) else MaterialTheme.colorScheme.error,
+                color = if (isIncome) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )

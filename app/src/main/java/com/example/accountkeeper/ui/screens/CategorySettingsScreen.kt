@@ -103,6 +103,7 @@ fun CategorySettingsScreen(
                         label = { Text("分类名称") },
                         singleLine = true,
                         isError = nameError != null,
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
                         supportingText = { nameError?.let { Text(it) } }
                     )
                 },
@@ -139,6 +140,7 @@ fun CategorySettingsScreen(
                         label = { Text("新名称") },
                         singleLine = true,
                         isError = nameError != null,
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
                         supportingText = { nameError?.let { Text(it) } }
                     )
                 },
