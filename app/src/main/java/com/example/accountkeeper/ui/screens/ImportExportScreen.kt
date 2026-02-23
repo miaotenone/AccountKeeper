@@ -90,88 +90,142 @@ fun ImportExportScreen(
                 try {
                     var successCount = 0
                     val importNewCategoriesMap = mutableMapOf<Pair<String, TransactionType>, Boolean>()
+                    
+                    // Safe CSV line parser without regex catastrophic backtracking
+                    fun parseCsvLine(line: String): List<String> {
+                        val result = mutableListOf<String>()
+                        var current = java.lang.StringBuilder()
+                        var inQuotes = false
+                        for (char in line) {
+                            if (char == '\"') {
+                                inQuotes = !inQuotes
+                            } else if (char == ',' && !inQuotes) {
+                                result.add(current.toString().replace("\"\"", "\"").trim())
+                                current = java.lang.StringBuilder()
+                            } else {
+                                current.append(char)
+                            }
+                        }
+                        result.add(current.toString().replace("\"\"", "\"").trim())
+                        return result
+                    }
+                    
+                    var idIdx = -1
+                    var dateIdx = 0
+                    var typeIdx = 1
+                    var amountIdx = 2
+                    var catIdx = 3
+                    var noteIdx = 4
+
+                    // First pass: Find categories
                     context.contentResolver.openInputStream(uri)?.bufferedReader()?.useLines { lines ->
-                        // Skip header
-                        val dataLines = lines.drop(1)
-                        // Regex to split by comma but ignore commas inside quotes
-                        val csvRegex = ",(?=(?:[^\\\"]*\\\"[^\\\"]*\\\")*[^\\\"]*$)".toRegex()
+                        val iterator = lines.iterator()
+                        if (!iterator.hasNext()) return@useLines
                         
-                        dataLines.forEach { line ->
-                            val parts = line.split(csvRegex).map { it.removeSurrounding("\"").replace("\"\"", "\"") }
-                            if (parts.size >= 6) {
-                                val typeString = parts[2]
-                                val amount = parts[3].toDoubleOrNull() ?: 0.0
-                                val categoryName = parts[4].trim()
-                                val note = parts[5]
+                        // Parse header
+                        val headerLine = iterator.next()
+                        val headerParts = parseCsvLine(headerLine)
+                        if (headerParts.any { it.equals("Date", true) || it.contains("期") || it.contains("时间") } || 
+                            headerParts.any { it.equals("Amount", true) || it.contains("金额") }) {
+                            idIdx = headerParts.indexOfFirst { it.equals("ID", true) || it.contains("单号") }
+                            dateIdx = headerParts.indexOfFirst { it.equals("Date", true) || it.contains("期") || it.contains("时间") }.takeIf { it >= 0 } ?: 0
+                            typeIdx = headerParts.indexOfFirst { it.equals("Type", true) || it.contains("类型") || it.contains("收支") }.takeIf { it >= 0 } ?: 1
+                            amountIdx = headerParts.indexOfFirst { it.equals("Amount", true) || it.contains("金额") }.takeIf { it >= 0 } ?: 2
+                            catIdx = headerParts.indexOfFirst { it.equals("Category", true) || it.contains("分类") || it.contains("类别") }.takeIf { it >= 0 } ?: 3
+                            noteIdx = headerParts.indexOfFirst { it.equals("Note", true) || it.contains("备注") || it.contains("说明") || it.contains("商品") }.takeIf { it >= 0 } ?: 4
+                        }
+                        
+                        while(iterator.hasNext()) {
+                            val line = iterator.next()
+                            val parts = parseCsvLine(line)
+                            if (parts.size >= 5) {
+                                val typeString = parts.getOrNull(typeIdx) ?: ""
+                                val categoryName = parts.getOrNull(catIdx)?.trim() ?: ""
                                 
-                                val type = if (typeString.equals("Income", ignoreCase = true)) TransactionType.INCOME else TransactionType.EXPENSE
+                                val type = if (typeString.equals("Income", ignoreCase = true) || typeString.contains("收入") || typeString.contains("退款")) TransactionType.INCOME else TransactionType.EXPENSE
                                 var catMatch = categories.find { it.name.equals(categoryName, ignoreCase = true) && it.type == type }
                                 
                                 // Auto-create category if missing
-                                if (catMatch == null && categoryName.isNotBlank() && categoryName != "Other") {
+                                if (catMatch == null && categoryName.isNotBlank() && categoryName != "Other" && categoryName != "/") {
                                     importNewCategoriesMap[categoryName to type] = true
                                 }
                             }
                         }
+                    }
                         
-                        // Create required missing categories
-                        for ((name, type) in importNewCategoriesMap.keys) {
-                            categoryViewModel.addCategory(com.example.accountkeeper.data.model.Category(name = name, type = type, isDefault = false))
-                        }
+                    // Create required missing categories
+                    for ((name, type) in importNewCategoriesMap.keys) {
+                        categoryViewModel.addCategory(com.example.accountkeeper.data.model.Category(name = name, type = type, isDefault = false))
+                    }
+                    
+                    // Wait a bit for Room to process categories
+                    kotlinx.coroutines.delay(500)
+                    
+                    // Now real insertion
+                    val latestCategories = categoryViewModel.categories.value
+                    val latestTransactions = viewModel.transactions.value // Get local data for conflict resolution
+                    
+                    // Second pass: Insert transactions
+                    context.contentResolver.openInputStream(uri)?.bufferedReader()?.useLines { lines ->
+                        val iterator = lines.iterator()
+                        if (!iterator.hasNext()) return@useLines
+                        iterator.next() // Skip header
                         
-                        // Wait a bit for Room to process categories
-                        kotlinx.coroutines.delay(500)
-                        
-                        // Now real insertion
-                        val latestCategories = categoryViewModel.categories.value
-                        
-                        // Re-read file or we could have stored data
-                        context.contentResolver.openInputStream(uri)?.bufferedReader()?.useLines { secondLines ->
-                            val secondDataLines = secondLines.drop(1)
-                            val latestTransactions = viewModel.transactions.value // Get local data for conflict resolution
-                            
-                            secondDataLines.forEach { line ->
-                                val parts = line.split(csvRegex).map { it.removeSurrounding("\"").replace("\"\"", "\"") }
-                                if (parts.size >= 6) {
-                                    val idString = parts[0]
-                                    val parsedId = idString.toLongOrNull() ?: IdGenerator.generateId()
-                                    
-                                    // Conflict handling: App data takes precedence. Skip if ID exists in local DB.
-                                    if (latestTransactions.any { it.id == parsedId }) {
-                                        return@forEach
-                                    }
+                        while(iterator.hasNext()) {
+                            val line = iterator.next()
+                            val parts = parseCsvLine(line)
+                            if (parts.size >= 5) {
+                                val parsedId = if (idIdx >= 0) parts.getOrNull(idIdx)?.toLongOrNull() ?: IdGenerator.generateId() else IdGenerator.generateId()
+                                
+                                // Conflict handling: App data takes precedence. Skip if ID exists in local DB.
+                                if (latestTransactions.any { it.id == parsedId }) {
+                                    continue
+                                }
 
-                                    val typeString = parts[2]
-                                    val amount = parts[3].toDoubleOrNull() ?: 0.0
-                                    val categoryName = parts[4].trim()
-                                    val note = parts[5]
-                                    val dateStr = parts[1]
-                                    val dateMillis = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).parse(dateStr)?.time ?: System.currentTimeMillis()
-                                    
-                                    val type = if (typeString.equals("Income", ignoreCase = true)) TransactionType.INCOME else TransactionType.EXPENSE
-                                    var catMatch = latestCategories.find { it.name.equals(categoryName, ignoreCase = true) && it.type == type }
-                                    
-                                    val categoryId = catMatch?.id ?: latestCategories.firstOrNull { it.type == type }?.id
-                                    
-                                    if (amount > 0 && categoryId != null) {
-                                        val transaction = Transaction(
-                                            id = parsedId,
-                                            type = type,
-                                            amount = amount,
-                                            note = note,
-                                            date = dateMillis,
-                                            categoryId = categoryId
-                                        )
-                                        viewModel.addTransaction(transaction)
-                                        successCount++
-                                    }
+                                val typeString = parts.getOrNull(typeIdx) ?: ""
+                                val amountString = parts.getOrNull(amountIdx)?.replace(Regex("[^\\d.]"), "") ?: "0"
+                                val amount = amountString.toDoubleOrNull() ?: 0.0
+                                val categoryName = parts.getOrNull(catIdx)?.trim() ?: ""
+                                val note = parts.getOrNull(noteIdx) ?: ""
+                                val dateStr = parts.getOrNull(dateIdx) ?: ""
+                                
+                                // Enhanced Date Parsing
+                                var dateMillis = System.currentTimeMillis()
+                                val formats = listOf("yyyy-MM-dd HH:mm:ss", "yyyy/MM/dd HH:mm:ss", "yyyy-MM-dd", "yyyy/MM/dd")
+                                for (format in formats) {
+                                    try {
+                                        val parsed = SimpleDateFormat(format, Locale.getDefault()).parse(dateStr)
+                                        if (parsed != null) {
+                                            dateMillis = parsed.time
+                                            break
+                                        }
+                                    } catch (e: Exception) { /* Ignore */ }
+                                }
+                                
+                                val type = if (typeString.equals("Income", ignoreCase = true) || typeString.contains("收入") || typeString.contains("退款")) TransactionType.INCOME else TransactionType.EXPENSE
+                                var catMatch = latestCategories.find { it.name.equals(categoryName, ignoreCase = true) && it.type == type }
+                                
+                                val categoryId = catMatch?.id ?: latestCategories.firstOrNull { it.type == type }?.id
+                                
+                                if (amount > 0 && categoryId != null) {
+                                    val transaction = Transaction(
+                                        id = parsedId,
+                                        type = type,
+                                        amount = amount,
+                                        note = note,
+                                        date = dateMillis,
+                                        categoryId = categoryId
+                                    )
+                                    viewModel.addTransaction(transaction)
+                                    successCount++
                                 }
                             }
                         }
                     }
-                    snackbarHostState.showSnackbar("Successfully imported $successCount transactions!")
+                    snackbarHostState.showSnackbar(if (successCount > 0) "成功导入 $successCount 笔数据！" else "未能识别并导入任何数据，请检查文件格式。")
                 } catch (e: Exception) {
-                    snackbarHostState.showSnackbar("Failed to parse CSV: ${e.localizedMessage}")
+                    e.printStackTrace()
+                    snackbarHostState.showSnackbar("导入解析失败: ${e.localizedMessage}")
                 }
             }
         }
@@ -261,7 +315,7 @@ fun ImportExportScreen(
                     }
 
                     OutlinedButton(
-                        onClick = { importCsvLauncher.launch("text/csv") },
+                        onClick = { importCsvLauncher.launch("*/*") },
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(strings.uploadBackup)

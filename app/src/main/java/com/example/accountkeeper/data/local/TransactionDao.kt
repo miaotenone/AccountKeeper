@@ -19,6 +19,9 @@ interface TransactionDao {
     @Query("SELECT * FROM transactions WHERE id = :id")
     suspend fun getTransactionById(id: Long): Transaction?
 
+    @Query("UPDATE transactions SET categoryId = :newId WHERE categoryId = :oldId")
+    suspend fun updateTransactionCategory(oldId: Long, newId: Long)
+
     @Insert
     suspend fun insertTransaction(transaction: Transaction)
 
