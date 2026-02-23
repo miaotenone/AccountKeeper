@@ -36,6 +36,7 @@ import kotlin.math.sin
 
 enum class TimeRange { DAILY, WEEKLY, MONTHLY, YEARLY, CUSTOM }
 enum class PickerType { ANCHOR, CUSTOM_START, CUSTOM_END }
+enum class StatType { EXPENSE, INCOME, BALANCE }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -49,7 +50,7 @@ fun StatisticsScreen(
     val strings = LocalAppStrings.current
 
     var selectedRange by remember { mutableStateOf(TimeRange.MONTHLY) }
-    var isExpenseView by remember { mutableStateOf(true) }
+    var statType by remember { mutableStateOf(StatType.EXPENSE) }
 
     // Offset for navigating previous/next periods (0 means current) is removed
     // We strictly use selected date to anchor our period
@@ -137,22 +138,42 @@ fun StatisticsScreen(
         Triple(start, end, periodStr)
     }
 
-    val displayTransactions = remember(allTransactions, startTime, endTime, isExpenseView) {
+    val displayTransactions = remember(allTransactions, startTime, endTime, statType) {
         allTransactions.filter { 
             it.date in startTime until endTime &&
-            it.type == if (isExpenseView) TransactionType.EXPENSE else TransactionType.INCOME 
+            (statType == StatType.BALANCE || 
+             it.type == if (statType == StatType.EXPENSE) TransactionType.EXPENSE else TransactionType.INCOME)
         }
     }
 
     // Currency Conversion
-    val totalAmountBase = displayTransactions.sumOf { it.amount }
+    val totalIncomeBase = displayTransactions.filter { it.type == TransactionType.INCOME }.sumOf { it.amount }
+    val totalExpenseBase = displayTransactions.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount }
+    
+    val totalAmountBase = if (statType == StatType.BALANCE) {
+        totalIncomeBase - totalExpenseBase
+    } else {
+        displayTransactions.sumOf { it.amount }
+    }
+    
     val totalAmount = CurrencyUtils.convertToDisplay(totalAmountBase, currency)
+    // For calculating percentages in Pie Chart during BALANCE mode, we use the absolute volume (Income + Expense)
+    val pieTotalBase = if (statType == StatType.BALANCE) totalIncomeBase + totalExpenseBase else totalAmountBase
+    val pieTotalDisplay = CurrencyUtils.convertToDisplay(pieTotalBase, currency)
 
     // Aggregate by category
-    val categoryTotalsBase = displayTransactions.groupBy { it.categoryId }
-        .mapValues { entry -> entry.value.sumOf { it.amount } }
-        .toList()
-        .sortedByDescending { it.second }
+    val categoryTotalsBase = if (statType == StatType.BALANCE) {
+        listOf(
+            Pair(-1L, totalIncomeBase),
+            Pair(-2L, totalExpenseBase)
+        ).filter { it.second > 0 }
+    } else {
+        displayTransactions.groupBy { it.categoryId }
+            .mapValues { entry -> entry.value.sumOf { it.amount } }
+            .toList()
+            .sortedByDescending { it.second }
+    }
+    
     val categoryTotals = categoryTotalsBase.map { it.first to CurrencyUtils.convertToDisplay(it.second, currency) }
 
     if (activePicker != null) {
@@ -281,15 +302,21 @@ fun StatisticsScreen(
 
                 Row {
                     FilterChip(
-                        selected = isExpenseView,
-                        onClick = { isExpenseView = true },
+                        selected = statType == StatType.EXPENSE,
+                        onClick = { statType = StatType.EXPENSE },
                         label = { Text(strings.expense) },
                         modifier = Modifier.padding(end = 4.dp)
                     )
                     FilterChip(
-                        selected = !isExpenseView,
-                        onClick = { isExpenseView = false },
-                        label = { Text(strings.income) }
+                        selected = statType == StatType.INCOME,
+                        onClick = { statType = StatType.INCOME },
+                        label = { Text(strings.income) },
+                        modifier = Modifier.padding(end = 4.dp)
+                    )
+                    FilterChip(
+                        selected = statType == StatType.BALANCE,
+                        onClick = { statType = StatType.BALANCE },
+                        label = { Text("综合") }
                     )
                 }
             }
@@ -301,14 +328,26 @@ fun StatisticsScreen(
                         .fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text(if (isExpenseView) strings.totalExpense else strings.totalIncome, style = MaterialTheme.typography.titleMedium)
-                    Text("$currency${String.format(Locale.US, "%.2f", totalAmount)}", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                    val titleText = when (statType) {
+                        StatType.EXPENSE -> strings.totalExpense
+                        StatType.INCOME -> strings.totalIncome
+                        StatType.BALANCE -> "综合结余"
+                    }
+                    Text(titleText, style = MaterialTheme.typography.titleMedium)
+                    val amountColor = if (statType == StatType.BALANCE && totalAmountBase < 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface 
+                    Text(
+                        "${if (statType == StatType.BALANCE && totalAmountBase > 0) "+" else ""}$currency${String.format(Locale.US, "%.2f", totalAmount)}", 
+                        style = MaterialTheme.typography.headlineMedium, 
+                        fontWeight = FontWeight.Bold,
+                        color = amountColor
+                    )
                 }
             }
 
             // Pie Chart implementation with Labels
-            if (categoryTotals.isNotEmpty() && totalAmount > 0) {
+            if (categoryTotals.isNotEmpty() && pieTotalBase > 0) {
                 val colors = listOf(Color(0xFFE57373), Color(0xFF81C784), Color(0xFF64B5F6), Color(0xFFFFD54F), Color(0xFFBA68C8), Color(0xFF4DB6AC), Color(0xFFFF8A65))
+                val errorColor = MaterialTheme.colorScheme.error
                 
                 Box(modifier = Modifier
                     .fillMaxWidth()
@@ -327,8 +366,12 @@ fun StatisticsScreen(
                         }
 
                         categoryTotals.forEachIndexed { index, pair ->
-                            val sweepAngle = (pair.second / totalAmount).toFloat() * 360f
-                            val color = colors[index % colors.size]
+                            val sweepAngle = (pair.second / pieTotalDisplay).toFloat() * 360f
+                            val color = if (statType == StatType.BALANCE) {
+                                if (pair.first == -1L) androidx.compose.ui.graphics.Color(0xFF4CAF50) else errorColor
+                            } else {
+                                colors[index % colors.size]
+                            }
                             
                             // Draw the arc section
                             drawArc(
@@ -350,7 +393,11 @@ fun StatisticsScreen(
 
                             // Only draw label if it occupies a decent slice (>5%) to prevent clutter
                             if (sweepAngle > 18f) {
-                                val catName = categories.find { it.id == pair.first }?.name ?: strings.other
+                                val catName = if (statType == StatType.BALANCE) {
+                                    if (pair.first == -1L) strings.income else strings.expense
+                                } else {
+                                    categories.find { it.id == pair.first }?.name ?: strings.other
+                                }
                                 drawContext.canvas.nativeCanvas.drawText(
                                     catName,
                                     textX,
@@ -369,18 +416,27 @@ fun StatisticsScreen(
                 Column(modifier = Modifier.fillMaxWidth()) {
                     categoryTotals.forEachIndexed { index, pair ->
                         val (categoryId, amount) = pair
-                        val categoryName = categories.find { it.id == categoryId }?.name ?: strings.other
-                        val percentage = if (totalAmount > 0) (amount / totalAmount) * 100 else 0.0
+                        val categoryName = if (statType == StatType.BALANCE) {
+                            if (categoryId == -1L) strings.income else strings.expense
+                        } else {
+                            categories.find { it.id == categoryId }?.name ?: strings.other
+                        }
+                        val percentage = if (pieTotalDisplay > 0) (amount / pieTotalDisplay) * 100 else 0.0
+                        val barColor = if (statType == StatType.BALANCE) {
+                            if (categoryId == -1L) androidx.compose.ui.graphics.Color(0xFF4CAF50) else MaterialTheme.colorScheme.error
+                        } else {
+                            colors[index % colors.size]
+                        }
                         
                         ListItem(
                             headlineContent = { Text(categoryName) },
                             supportingContent = { 
                                 LinearProgressIndicator(
-                                    progress = { (amount / totalAmount).toFloat() },
+                                    progress = { (amount / pieTotalDisplay).toFloat() },
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(top = 4.dp),
-                                    color = colors[index % colors.size]
+                                    color = barColor
                                 )
                             },
                             trailingContent = { 

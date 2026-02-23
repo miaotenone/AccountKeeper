@@ -3,6 +3,7 @@ package com.example.accountkeeper.ui.screens
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -12,8 +13,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -25,6 +30,7 @@ import com.example.accountkeeper.ui.viewmodel.TransactionViewModel
 import com.example.accountkeeper.ui.theme.LocalAppStrings
 import com.example.accountkeeper.utils.CurrencyUtils
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
@@ -41,24 +47,80 @@ fun HomeScreen(
     val currency = LocalCurrencySymbol.current
     val strings = LocalAppStrings.current
     
-    val totalIncomeBase = transactions.filter { it.type == TransactionType.INCOME }.sumOf { it.amount }
-    val totalExpenseBase = transactions.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount }
+    var isShowingMonthly by remember { mutableStateOf(false) }
+    
+    var transactionToDelete by remember { mutableStateOf<Transaction?>(null) }
+    var showDeleteTransactionDialog by remember { mutableStateOf(false) }
+    
+    val currentMonthStart = remember {
+        val c = Calendar.getInstance()
+        c.set(Calendar.DAY_OF_MONTH, 1)
+        c.set(Calendar.HOUR_OF_DAY, 0)
+        c.set(Calendar.MINUTE, 0)
+        c.set(Calendar.SECOND, 0)
+        c.set(Calendar.MILLISECOND, 0)
+        c.timeInMillis
+    }
+
+    val displayTransactions = remember(transactions, isShowingMonthly) {
+        if (isShowingMonthly) {
+            transactions.filter { it.date >= currentMonthStart }
+        } else {
+            transactions
+        }
+    }
+
+    val totalIncomeBase = displayTransactions.filter { it.type == TransactionType.INCOME }.sumOf { it.amount }
+    val totalExpenseBase = displayTransactions.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount }
     val totalIncome = CurrencyUtils.convertToDisplay(totalIncomeBase, currency)
     val totalExpense = CurrencyUtils.convertToDisplay(totalExpenseBase, currency)
     val totalBalance = totalIncome - totalExpense
 
     // Grouping transactions by Date (yyyy-MM-dd)
-    val groupedTransactions = transactions.groupBy {
+    val groupedTransactions = displayTransactions.groupBy {
         SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(it.date))
     }.toSortedMap(reverseOrder())
 
     Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { 
+                    Text("AccountKeeper", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold) 
+                }
+            )
+        },
         floatingActionButton = {
             FloatingActionButton(onClick = onNavigateToAddTransaction) {
                 Icon(Icons.Default.Add, contentDescription = strings.addTransaction)
             }
         }
     ) { paddingValues ->
+        if (showDeleteTransactionDialog && transactionToDelete != null) {
+            AlertDialog(
+                onDismissRequest = { 
+                    showDeleteTransactionDialog = false
+                    transactionToDelete = null
+                },
+                title = { Text("删除账单") },
+                text = { Text("确定要删除这条账单吗？") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        transactionToDelete?.let {
+                            viewModel.deleteTransaction(it)
+                        }
+                        showDeleteTransactionDialog = false
+                        transactionToDelete = null
+                    }) { Text(strings.ok) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { 
+                        showDeleteTransactionDialog = false
+                        transactionToDelete = null
+                    }) { Text(strings.cancel) }
+                }
+            )
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -75,7 +137,15 @@ fun HomeScreen(
                     modifier = Modifier.padding(16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text(strings.totalAssets, style = MaterialTheme.typography.titleMedium)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .clickable { isShowingMonthly = !isShowingMonthly }
+                            .padding(4.dp)
+                    ) {
+                        Text(if (isShowingMonthly) "本月资产" else strings.totalAssets, style = MaterialTheme.typography.titleMedium)
+                        Text(" 🔁", style = MaterialTheme.typography.titleMedium)
+                    }
                     Text("$currency${String.format(Locale.US, "%.2f", totalBalance)}", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
                     
                     Row(
@@ -129,7 +199,11 @@ fun HomeScreen(
                             transaction = transaction,
                             categoryName = categoryName,
                             currency = currency,
-                            onClick = { onNavigateToEditTransaction(transaction.id) }
+                            onClick = { onNavigateToEditTransaction(transaction.id) },
+                            onLongClick = {
+                                transactionToDelete = transaction
+                                showDeleteTransactionDialog = true
+                            }
                         )
                     }
                 }
@@ -139,7 +213,7 @@ fun HomeScreen(
 }
 
 @Composable
-fun TransactionItem(transaction: Transaction, categoryName: String, currency: String, onClick: () -> Unit) {
+fun TransactionItem(transaction: Transaction, categoryName: String, currency: String, onClick: () -> Unit, onLongClick: () -> Unit = {}) {
     val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
     
     ListItem(
@@ -162,6 +236,11 @@ fun TransactionItem(transaction: Transaction, categoryName: String, currency: St
                 fontWeight = FontWeight.Bold
             )
         },
-        modifier = Modifier.clickable { onClick() }
+        modifier = Modifier.pointerInput(transaction.id) {
+            detectTapGestures(
+                onTap = { onClick() },
+                onLongPress = { onLongClick() }
+            )
+        }
     )
 }
