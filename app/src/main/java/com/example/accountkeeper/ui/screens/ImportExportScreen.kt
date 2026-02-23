@@ -14,6 +14,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.accountkeeper.LocalCurrencySymbol
@@ -294,18 +295,18 @@ fun ImportExportScreen(
             }
 
             // Section 2: Category Management
-            Text("分类配置", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp))
+            Text(strings.categoryManagement, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp))
             Card(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
             ) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("统一管理收入与支出的分类信息", style = MaterialTheme.typography.bodySmall)
+                    Text(strings.categoryManagementDescription, style = MaterialTheme.typography.bodySmall)
                     OutlinedButton(
                         onClick = onNavigateToCategorySettings,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("类别与标签管理")
+                        Text(strings.categoryAndTagManagement)
                     }
                 }
             }
@@ -348,7 +349,7 @@ fun ImportExportScreen(
             }
             
             // Section 4: Local Internal Backup Management
-            Text("本地自动备份安全柜", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp))
+            Text(strings.localBackupVault, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp))
             Card(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
@@ -359,10 +360,11 @@ fun ImportExportScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column {
-                            Text("开启本地自动备份", style = MaterialTheme.typography.bodyLarge)
-                            Text("任何增删改时自动向本地沙盒存入留档", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(strings.enableAutoBackup, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            Text(strings.autoBackupDescription, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         }
+                        Spacer(modifier = Modifier.width(8.dp))
                         Switch(
                             checked = appSettings.isAutoBackupEnabled,
                             onCheckedChange = { settingsViewModel.updateAutoBackup(it) }
@@ -372,15 +374,19 @@ fun ImportExportScreen(
                     HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                     
                     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                        Column {
+                            Text(strings.backupRetentionLimit, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            Text(strings.backupThresholdDescription, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("新备份生成保留上限", style = MaterialTheme.typography.bodyLarge)
-                            Text("${appSettings.backupRetentionLimit} 份", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                            Text("${appSettings.backupRetentionLimit}${strings.backupRetentionUnit}", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
                         }
-                        Text("超过此设定阈值时，自动销毁最远历史备份", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(modifier = Modifier.height(8.dp))
                         Slider(
                             value = appSettings.backupRetentionLimit.toFloat(),
                             onValueChange = { settingsViewModel.updateBackupRetentionLimit(it.toInt()) },
@@ -398,9 +404,9 @@ fun ImportExportScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column {
-                            Text("当前存档状态", style = MaterialTheme.typography.bodyLarge)
+                            Text(strings.currentBackupStatus, style = MaterialTheme.typography.bodyLarge)
                             Text(
-                                text = if (latestBackupTime != null) "最新备份文件: $latestBackupTime" else "尚未发现可用备份文件",
+                                text = if (latestBackupTime != null) strings.latestBackupFile + latestBackupTime else strings.noBackupFound,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = if (latestBackupTime != null) androidx.compose.ui.graphics.Color(0xFF07C160) else MaterialTheme.colorScheme.error
                             )
@@ -426,30 +432,30 @@ fun ImportExportScreen(
                                     }
                                     settingsViewModel.backupManager.writeNewBackup(safeCsvSequence, appSettings.backupRetentionLimit, isAuto = false)
                                     refreshBackupTrigger++
-                                    snackbarHostState.showSnackbar("手动内部备份已成功生成！")
+                                    snackbarHostState.showSnackbar(strings.manualBackupSuccess)
                                 }
                             },
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("立即生成手动备份")
+                            Text(strings.createManualBackup)
                         }
                         
                         OutlinedButton(
                             onClick = { 
                                 settingsViewModel.backupManager.clearAllAutoBackups()
                                 refreshBackupTrigger++
-                                scope.launch { snackbarHostState.showSnackbar("自动备份池已被强制清空") }
+                                scope.launch { snackbarHostState.showSnackbar(strings.backupsCleared) }
                             },
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("清空所有自动存档")
+                            Text(strings.clearAllBackups)
                         }
                     }
                     OutlinedButton(
                         onClick = { showManualBackupsDialog = true },
                         modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
                     ) {
-                        Text("打开私有手工备份管理柜")
+                        Text(strings.openManualBackupVault)
                     }
                 }
             }

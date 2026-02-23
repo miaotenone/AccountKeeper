@@ -156,10 +156,8 @@ fun HomeScreen(
                 .padding(paddingValues)
                 .padding(horizontal = 20.dp)
                 .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(24.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Spacer(modifier = Modifier.height(16.dp))
-
             // Premium Balance Card with Glass Effect
             PremiumBalanceCard(
                 totalBalance = totalBalance,
@@ -172,56 +170,6 @@ fun HomeScreen(
                 onToggleExpand = { isBalanceCardExpanded = !isBalanceCardExpanded },
                 strings = strings
             )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Quick Actions
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                QuickActionCard(
-                    icon = "📊",
-                    label = "Statistics",
-                    onClick = { },
-                    modifier = Modifier.weight(1f)
-                )
-                QuickActionCard(
-                    icon = "💾",
-                    label = "Backup",
-                    onClick = { },
-                    modifier = Modifier.weight(1f)
-                )
-                QuickActionCard(
-                    icon = "⚙️",
-                    label = "Settings",
-                    onClick = { },
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Recent Transactions
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    "Recent Transactions",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    "See all",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
 
             groupedTransactions.forEach { (dateString, txList) ->
                 DateHeader(
@@ -338,7 +286,7 @@ fun PremiumBalanceCard(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(
-                            if (isShowingMonthly) "This Month" else strings.totalAssets,
+                            if (isShowingMonthly) strings.thisMonth else strings.totalAssets,
                             style = MaterialTheme.typography.titleMedium,
                             color = Color.White.copy(alpha = 0.9f)
                         )
@@ -375,7 +323,7 @@ fun PremiumBalanceCard(
                 ) {
                     Column {
                         Text(
-                            "Total Balance",
+                            strings.totalBalance,
                             style = MaterialTheme.typography.bodyMedium,
                             color = Color.White.copy(alpha = 0.7f)
                         )
@@ -425,7 +373,8 @@ fun BalanceStat(
     color: Color
 ) {
     Column(
-        horizontalAlignment = Alignment.CenterHorizontally
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.padding(horizontal = 4.dp)
     ) {
         Text(
             label,
@@ -434,49 +383,11 @@ fun BalanceStat(
         )
         Text(
             "$currency${String.format(Locale.US, "%.2f", value)}",
-            style = MaterialTheme.typography.titleLarge,
+            style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
-            color = color
+            color = color,
+            maxLines = 1
         )
-    }
-}
-
-@Composable
-fun QuickActionCard(
-    icon: String,
-    label: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        onClick = onClick,
-        modifier = modifier.aspectRatio(1f),
-        shape = RoundedCornerShape(24.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Text(
-                icon,
-                style = MaterialTheme.typography.headlineMedium
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                label,
-                style = MaterialTheme.typography.labelSmall,
-                textAlign = TextAlign.Center,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
     }
 }
 
@@ -663,12 +574,12 @@ fun DeleteTransactionDialog(
         },
         title = {
             Text(
-                "Delete Transaction",
+                strings.deleteTransaction,
                 fontWeight = FontWeight.Bold
             )
         },
         text = {
-            Text("Are you sure you want to delete this transaction?")
+            Text(strings.deleteConfirm)
         },
         confirmButton = {
             Button(
