@@ -49,6 +49,15 @@ fun ImportExportScreen(
     val currentCurrency = LocalCurrencySymbol.current
     val strings = LocalAppStrings.current
 
+    var showClearConfirmDialog by remember { mutableStateOf(false) }
+    var refreshBackupTrigger by remember { mutableStateOf(0) }
+    var latestBackupTime by remember { mutableStateOf<String?>(null) }
+    var showManualBackupsDialog by remember { mutableStateOf(false) }
+    
+    LaunchedEffect(refreshBackupTrigger) {
+        latestBackupTime = settingsViewModel.backupManager.getLatestAutoBackupDateStr()
+    }
+
     // Launcher for Export (Create Document)
     val exportCsvLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("text/csv")
@@ -81,44 +90,39 @@ fun ImportExportScreen(
         }
     }
 
-    // Launcher for Import CSV (Get Content)
-    val importCsvLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        if (uri != null) {
-            scope.launch(Dispatchers.IO) {
-                try {
-                    var successCount = 0
-                    val importNewCategoriesMap = mutableMapOf<Pair<String, TransactionType>, Boolean>()
-                    
-                    // Safe CSV line parser without regex catastrophic backtracking
-                    fun parseCsvLine(line: String): List<String> {
-                        val result = mutableListOf<String>()
-                        var current = java.lang.StringBuilder()
-                        var inQuotes = false
-                        for (char in line) {
-                            if (char == '\"') {
-                                inQuotes = !inQuotes
-                            } else if (char == ',' && !inQuotes) {
-                                result.add(current.toString().replace("\"\"", "\"").trim())
-                                current = java.lang.StringBuilder()
-                            } else {
-                                current.append(char)
-                            }
-                        }
+    val performCsvImport: suspend (() -> java.io.InputStream?) -> Unit = { openStream ->
+        try {
+            var successCount = 0
+            val importNewCategoriesMap = mutableMapOf<Pair<String, TransactionType>, Boolean>()
+            
+            // Safe CSV line parser without regex catastrophic backtracking
+            fun parseCsvLine(line: String): List<String> {
+                val result = mutableListOf<String>()
+                var current = java.lang.StringBuilder()
+                var inQuotes = false
+                for (char in line) {
+                    if (char == '\"') {
+                        inQuotes = !inQuotes
+                    } else if (char == ',' && !inQuotes) {
                         result.add(current.toString().replace("\"\"", "\"").trim())
-                        return result
+                        current = java.lang.StringBuilder()
+                    } else {
+                        current.append(char)
                     }
-                    
-                    var idIdx = -1
-                    var dateIdx = 0
-                    var typeIdx = 1
-                    var amountIdx = 2
-                    var catIdx = 3
-                    var noteIdx = 4
+                }
+                result.add(current.toString().replace("\"\"", "\"").trim())
+                return result
+            }
+            
+            var idIdx = -1
+            var dateIdx = 0
+            var typeIdx = 1
+            var amountIdx = 2
+            var catIdx = 3
+            var noteIdx = 4
 
-                    // First pass: Find categories
-                    context.contentResolver.openInputStream(uri)?.bufferedReader()?.useLines { lines ->
+            // First pass: Find categories
+            openStream()?.bufferedReader()?.useLines { lines ->
                         val iterator = lines.iterator()
                         if (!iterator.hasNext()) return@useLines
                         
@@ -166,7 +170,7 @@ fun ImportExportScreen(
                     val latestTransactions = viewModel.transactions.value // Get local data for conflict resolution
                     
                     // Second pass: Insert transactions
-                    context.contentResolver.openInputStream(uri)?.bufferedReader()?.useLines { lines ->
+                    openStream()?.bufferedReader()?.useLines { lines ->
                         val iterator = lines.iterator()
                         if (!iterator.hasNext()) return@useLines
                         iterator.next() // Skip header
@@ -222,11 +226,20 @@ fun ImportExportScreen(
                             }
                         }
                     }
-                    snackbarHostState.showSnackbar(if (successCount > 0) "成功导入 $successCount 笔数据！" else "未能识别并导入任何数据，请检查文件格式。")
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                    snackbarHostState.showSnackbar("导入解析失败: ${e.localizedMessage}")
-                }
+                    snackbarHostState.showSnackbar(if (successCount > 0) "成功融合 $successCount 笔数据！" else "合并完毕：但未识别出任何需要补充的新数据。")
+        } catch (e: Exception) {
+            e.printStackTrace()
+            snackbarHostState.showSnackbar("合并解析失败: ${e.localizedMessage}")
+        }
+    }
+
+    // Launcher for Import CSV (Get Content)
+    val importCsvLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            scope.launch(Dispatchers.IO) {
+                performCsvImport { context.contentResolver.openInputStream(uri) }
             }
         }
     }
@@ -334,7 +347,114 @@ fun ImportExportScreen(
                 }
             }
             
-            // Section 4: App Settings
+            // Section 4: Local Internal Backup Management
+            Text("本地自动备份安全柜", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp))
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text("开启本地自动备份", style = MaterialTheme.typography.bodyLarge)
+                            Text("任何增删改时自动向本地沙盒存入留档", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Switch(
+                            checked = appSettings.isAutoBackupEnabled,
+                            onCheckedChange = { settingsViewModel.updateAutoBackup(it) }
+                        )
+                    }
+
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                    
+                    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("新备份生成保留上限", style = MaterialTheme.typography.bodyLarge)
+                            Text("${appSettings.backupRetentionLimit} 份", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                        }
+                        Text("超过此设定阈值时，自动销毁最远历史备份", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Slider(
+                            value = appSettings.backupRetentionLimit.toFloat(),
+                            onValueChange = { settingsViewModel.updateBackupRetentionLimit(it.toInt()) },
+                            valueRange = 5f..50f,
+                            steps = 44,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text("当前存档状态", style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                text = if (latestBackupTime != null) "最新备份文件: $latestBackupTime" else "尚未发现可用备份文件",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (latestBackupTime != null) androidx.compose.ui.graphics.Color(0xFF07C160) else MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = { 
+                                scope.launch(Dispatchers.IO) {
+                                    val safeCsvSequence = sequence {
+                                        yield("ID,Date,Type,Amount,Category,Note")
+                                        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+                                        for (tx in transactions) {
+                                            val categoryName = categories.find { it.id == tx.categoryId }?.name ?: "Other"
+                                            val typeString = if (tx.type == TransactionType.INCOME) "Income" else "Expense"
+                                            val safeNote = tx.note.replace("\"", "\"\"")
+                                            yield("${tx.id},${dateFormat.format(Date(tx.date))},${typeString},${tx.amount},${categoryName},\"${safeNote}\"")
+                                        }
+                                    }
+                                    settingsViewModel.backupManager.writeNewBackup(safeCsvSequence, appSettings.backupRetentionLimit, isAuto = false)
+                                    refreshBackupTrigger++
+                                    snackbarHostState.showSnackbar("手动内部备份已成功生成！")
+                                }
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("立即生成手动备份")
+                        }
+                        
+                        OutlinedButton(
+                            onClick = { 
+                                settingsViewModel.backupManager.clearAllAutoBackups()
+                                refreshBackupTrigger++
+                                scope.launch { snackbarHostState.showSnackbar("自动备份池已被强制清空") }
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("清空所有自动存档")
+                        }
+                    }
+                    OutlinedButton(
+                        onClick = { showManualBackupsDialog = true },
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                    ) {
+                        Text("打开私有手工备份管理柜")
+                    }
+                }
+            }
+            
+            // Section 5: App Settings
             Text(strings.generalSettings, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp))
             Card(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
@@ -387,6 +507,93 @@ fun ImportExportScreen(
                 }
             }
 
+            // Danger Section: Clear All Data
+            Spacer(modifier = Modifier.height(16.dp))
+            OutlinedButton(
+                onClick = { showClearConfirmDialog = true },
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.error,
+                )
+            ) {
+                Text("⚠️ 清空所有交易记录 ⚠️", fontWeight = FontWeight.Bold)
+            }
+            Spacer(modifier = Modifier.height(32.dp))
+        }
+
+        if (showClearConfirmDialog) {
+            AlertDialog(
+                onDismissRequest = { showClearConfirmDialog = false },
+                title = { Text("危险警告！") },
+                text = { Text("清空操作将永久删除包含在当前数据库内的所有记录信息！如果您未妥善备份这些数据将无法找回。您确定要执行此清空操作吗？") },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            viewModel.deleteAllTransactions()
+                            showClearConfirmDialog = false
+                            scope.launch { snackbarHostState.showSnackbar("已成功清空所有账单记录。") }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Text("执意清空")
+                    }
+                },
+                dismissButton = {
+                    FilledTonalButton(onClick = { showClearConfirmDialog = false }) {
+                        Text("取消")
+                    }
+                }
+            )
+        }
+
+        if (showManualBackupsDialog) {
+            AlertDialog(
+                onDismissRequest = { showManualBackupsDialog = false },
+                title = { Text("管理您的手动备份") },
+                text = {
+                    val backups = settingsViewModel.backupManager.getAllManualBackups()
+                    if (backups.isEmpty()) {
+                        Text("您当前还没有生成任何手动备份。")
+                    } else {
+                        androidx.compose.foundation.lazy.LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp)) {
+                            items(backups.size) { index ->
+                                val file = backups[index]
+                                val displayFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+                                val dateStr = displayFormat.format(Date(file.lastModified()))
+                                Card(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(dateStr, style = MaterialTheme.typography.bodySmall)
+                                        Row {
+                                            TextButton(onClick = {
+                                                scope.launch(Dispatchers.IO) {
+                                                    performCsvImport { java.io.FileInputStream(file) }
+                                                }
+                                                showManualBackupsDialog = false
+                                            }) { Text("恢复") }
+                                            TextButton(onClick = {
+                                                settingsViewModel.backupManager.deleteBackupFile(file)
+                                                refreshBackupTrigger++
+                                                showManualBackupsDialog = false
+                                                scope.launch { snackbarHostState.showSnackbar("已成功删除选定的存档") }
+                                            }) { Text("删除", color = MaterialTheme.colorScheme.error) }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showManualBackupsDialog = false }) { Text("关闭") }
+                }
+            )
         }
     }
 }

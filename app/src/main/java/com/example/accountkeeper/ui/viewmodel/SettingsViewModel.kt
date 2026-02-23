@@ -1,9 +1,12 @@
 package com.example.accountkeeper.ui.viewmodel
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+// No ViewModel import needed anymore
 import com.example.accountkeeper.data.repository.AppSettings
 import com.example.accountkeeper.data.repository.SettingsRepository
+import com.example.accountkeeper.utils.BackupManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -13,8 +16,11 @@ import javax.inject.Inject
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
+    application: Application,
     private val settingsRepository: SettingsRepository
-) : ViewModel() {
+) : AndroidViewModel(application) {
+
+    val backupManager = BackupManager(application)
 
     val appSettings: StateFlow<AppSettings> = settingsRepository.settingsFlow
         .stateIn(
@@ -33,5 +39,13 @@ class SettingsViewModel @Inject constructor(
 
     fun updateCurrency(symbol: String) {
         viewModelScope.launch { settingsRepository.updateCurrencySymbol(symbol) }
+    }
+
+    fun updateAutoBackup(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.updateAutoBackup(enabled) }
+    }
+
+    fun updateBackupRetentionLimit(limit: Int) {
+        viewModelScope.launch { settingsRepository.updateBackupRetentionLimit(limit) }
     }
 }
