@@ -58,12 +58,16 @@ fun ImportExportScreen(
                         val writer = OutputStreamWriter(outputStream)
                         writer.write("ID,Date,Type,Amount,Category,Note\n")
                         val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+                        
+                        // We need the full transactions list for export, 
+                        // relying on the flow state might be partial if it is paged, but currently it's all.
                         transactions.forEach { tx ->
                             val categoryName = categories.find { it.id == tx.categoryId }?.name ?: "Other"
                             val typeString = if (tx.type == TransactionType.INCOME) "Income" else "Expense"
                             val dateString = dateFormat.format(Date(tx.date))
-                            val safeNote = tx.note.replace(",", "，").replace("\n", " ") // Basic CSV escaping
-                            writer.write("${tx.id},${dateString},${typeString},${tx.amount},${categoryName},${safeNote}\n")
+                            // Safely escape CSV note
+                            val safeNote = tx.note.replace("\"", "\"\"")
+                            writer.write("${tx.id},${dateString},${typeString},${tx.amount},${categoryName},\"${safeNote}\"\n")
                         }
                         writer.flush()
                     }
@@ -83,33 +87,71 @@ fun ImportExportScreen(
             scope.launch(Dispatchers.IO) {
                 try {
                     var successCount = 0
+                    val importNewCategoriesMap = mutableMapOf<Pair<String, TransactionType>, Boolean>()
                     context.contentResolver.openInputStream(uri)?.bufferedReader()?.useLines { lines ->
                         // Skip header
                         val dataLines = lines.drop(1)
+                        // Regex to split by comma but ignore commas inside quotes
+                        val csvRegex = ",(?=(?:[^\\\"]*\\\"[^\\\"]*\\\")*[^\\\"]*$)".toRegex()
+                        
                         dataLines.forEach { line ->
-                            val parts = line.split(",")
-                            // Naive parsing: ID,Date,Type,Amount,CategoryName,Note
+                            val parts = line.split(csvRegex).map { it.removeSurrounding("\"").replace("\"\"", "\"") }
                             if (parts.size >= 6) {
                                 val typeString = parts[2]
                                 val amount = parts[3].toDoubleOrNull() ?: 0.0
-                                val categoryName = parts[4]
+                                val categoryName = parts[4].trim()
                                 val note = parts[5]
                                 
                                 val type = if (typeString.equals("Income", ignoreCase = true)) TransactionType.INCOME else TransactionType.EXPENSE
-                                val catMatch = categories.find { it.name.equals(categoryName, ignoreCase = true) && it.type == type }
+                                var catMatch = categories.find { it.name.equals(categoryName, ignoreCase = true) && it.type == type }
                                 
-                                val categoryId = catMatch?.id ?: categories.firstOrNull { it.type == type }?.id
-
-                                if (amount > 0 && categoryId != null) {
-                                    val transaction = Transaction(
-                                        type = type,
-                                        amount = amount,
-                                        note = note,
-                                        date = System.currentTimeMillis(), // In generic import, use current time to avoid complex exact-date parsing for now
-                                        categoryId = categoryId
-                                    )
-                                    viewModel.addTransaction(transaction)
-                                    successCount++
+                                // Auto-create category if missing
+                                if (catMatch == null && categoryName.isNotBlank() && categoryName != "Other") {
+                                    importNewCategoriesMap[categoryName to type] = true
+                                }
+                            }
+                        }
+                        
+                        // Create required missing categories
+                        for ((name, type) in importNewCategoriesMap.keys) {
+                            categoryViewModel.addCategory(com.example.accountkeeper.data.model.Category(name = name, type = type, isDefault = false))
+                        }
+                        
+                        // Wait a bit for Room to process categories
+                        kotlinx.coroutines.delay(500)
+                        
+                        // Now real insertion
+                        val latestCategories = categoryViewModel.categories.value
+                        
+                        // Re-read file or we could have stored data
+                        context.contentResolver.openInputStream(uri)?.bufferedReader()?.useLines { secondLines ->
+                            val secondDataLines = secondLines.drop(1)
+                            secondDataLines.forEach { line ->
+                                val parts = line.split(csvRegex).map { it.removeSurrounding("\"").replace("\"\"", "\"") }
+                                if (parts.size >= 6) {
+                                    val typeString = parts[2]
+                                    val amount = parts[3].toDoubleOrNull() ?: 0.0
+                                    val categoryName = parts[4].trim()
+                                    val note = parts[5]
+                                    val dateStr = parts[1]
+                                    val dateMillis = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).parse(dateStr)?.time ?: System.currentTimeMillis()
+                                    
+                                    val type = if (typeString.equals("Income", ignoreCase = true)) TransactionType.INCOME else TransactionType.EXPENSE
+                                    var catMatch = latestCategories.find { it.name.equals(categoryName, ignoreCase = true) && it.type == type }
+                                    
+                                    val categoryId = catMatch?.id ?: latestCategories.firstOrNull { it.type == type }?.id
+                                    
+                                    if (amount > 0 && categoryId != null) {
+                                        val transaction = Transaction(
+                                            type = type,
+                                            amount = amount,
+                                            note = note,
+                                            date = dateMillis,
+                                            categoryId = categoryId
+                                        )
+                                        viewModel.addTransaction(transaction)
+                                        successCount++
+                                    }
                                 }
                             }
                         }
@@ -133,37 +175,40 @@ fun ImportExportScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Section 1: API Sync (Fast Import)
-            Text("One-Click Account Sync (API)", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp))
+            // Section 1: Platform Bill Import
+            Text("第三方账单导入 (微信/支付宝)", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp))
             Card(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
             ) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Connect your e-wallets to automatically fetch transactions directly via official APIs.", style = MaterialTheme.typography.bodySmall)
+                    Text("请在微信或支付宝的账单页面中通过“导出账单”生成 CSV 文件，传输到手机后在此处导入。", style = MaterialTheme.typography.bodySmall)
                     
                     Button(
                         onClick = {
+                            // Reusing the same generic CSV import launcher for now, 
+                            // a robust real app would parse the specific 17-line header of WeChat and 5-line of Alipay.
+                            // We will prompt the user to use the generic import for now but parse according to standard AccountKeeper CSV format.
                             scope.launch {
-                                snackbarHostState.showSnackbar("Connecting to WeChat Open Platform...")
+                                snackbarHostState.showSnackbar("提示：目前支持标准格式导入，请确保微信/支付宝数据已转换为标准模板，或直接使用下方的导入备份功能。")
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(containerColor = androidx.compose.ui.graphics.Color(0xFF07C160)) // WeChat Green
                     ) {
-                        Text("Sync WeChat Pay")
+                        Text("导入微信账单 (CSV)")
                     }
 
                     Button(
                         onClick = {
                             scope.launch {
-                                snackbarHostState.showSnackbar("Connecting to Alipay SDK...")
+                                snackbarHostState.showSnackbar("提示：目前支持标准格式导入，请确保微信/支付宝数据已转换为标准模板，或直接使用下方的导入备份功能。")
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(containerColor = androidx.compose.ui.graphics.Color(0xFF1677FF)) // Alipay Blue
                     ) {
-                        Text("Sync Alipay")
+                        Text("导入支付宝账单 (CSV)")
                     }
                 }
             }

@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -46,6 +48,9 @@ fun AddEditTransactionScreen(
     var showCustomCategoryDialog by remember { mutableStateOf(false) }
     var customCategoryName by remember { mutableStateOf("") }
     var categoryError by remember { mutableStateOf<String?>(null) }
+    
+    var categoryToDelete by remember { mutableStateOf<Category?>(null) }
+    var showDeleteCategoryDialog by remember { mutableStateOf(false) }
 
     val categories by categoryViewModel.categories.collectAsState()
     // currentType is computed manually since we rely on boolean 'isExpense'
@@ -129,6 +134,36 @@ fun AddEditTransactionScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showCustomCategoryDialog = false }) { Text(strings.cancel) }
+            }
+        )
+    }
+
+    if (showDeleteCategoryDialog && categoryToDelete != null) {
+        AlertDialog(
+            onDismissRequest = { 
+                showDeleteCategoryDialog = false
+                categoryToDelete = null
+            },
+            title = { Text("删除分类") },
+            text = { Text("确定要删除自定义分类 \"${categoryToDelete?.name}\" 吗？此操作无法撤销。该分类下的过往账单将丢失分类信息。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    categoryToDelete?.let {
+                        categoryViewModel.deleteCategory(it)
+                        // If selected category is the one being deleted, reset selection
+                        if (selectedCategoryId == it.id) {
+                            selectedCategoryId = null
+                        }
+                    }
+                    showDeleteCategoryDialog = false
+                    categoryToDelete = null
+                }) { Text(strings.ok) }
+            },
+            dismissButton = {
+                TextButton(onClick = { 
+                    showDeleteCategoryDialog = false
+                    categoryToDelete = null
+                }) { Text(strings.cancel) }
             }
         )
     }
@@ -219,7 +254,17 @@ fun AddEditTransactionScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(60.dp)
-                            .clickable { selectedCategoryId = category.id }
+                            .pointerInput(category.id) {
+                                detectTapGestures(
+                                    onTap = { selectedCategoryId = category.id },
+                                    onLongPress = {
+                                        if (!category.isDefault) {
+                                            categoryToDelete = category
+                                            showDeleteCategoryDialog = true
+                                        }
+                                    }
+                                )
+                            }
                     ) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Text(text = category.name)

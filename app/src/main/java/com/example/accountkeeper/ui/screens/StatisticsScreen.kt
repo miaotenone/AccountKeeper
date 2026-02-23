@@ -5,8 +5,8 @@ import android.graphics.Typeface
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -207,7 +207,8 @@ fun StatisticsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(16.dp),
+                .padding(16.dp)
+                .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // Time Range Selector
@@ -365,9 +366,9 @@ fun StatisticsScreen(
 
                 // Category Breakdowns
                 Text(strings.categoryRanking, style = MaterialTheme.typography.titleMedium)
-                LazyColumn(modifier = Modifier.fillMaxSize()) {
-                    items(categoryTotals.size) { index ->
-                        val (categoryId, amount) = categoryTotals[index]
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    categoryTotals.forEachIndexed { index, pair ->
+                        val (categoryId, amount) = pair
                         val categoryName = categories.find { it.id == categoryId }?.name ?: strings.other
                         val percentage = if (totalAmount > 0) (amount / totalAmount) * 100 else 0.0
                         
