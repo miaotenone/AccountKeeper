@@ -11,6 +11,7 @@ import com.example.accountkeeper.ui.screens.AddEditTransactionScreen
 import com.example.accountkeeper.ui.screens.HomeScreen
 import com.example.accountkeeper.ui.screens.ImportExportScreen
 import com.example.accountkeeper.ui.screens.StatisticsScreen
+import com.example.accountkeeper.ui.screens.CategorySettingsScreen
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -24,6 +25,9 @@ object StatisticsRoute
 
 @Serializable
 object ImportExportRoute
+
+@Serializable
+object CategorySettingsRoute
 
 @Composable
 fun AppNavigation(
@@ -52,7 +56,16 @@ fun AppNavigation(
             StatisticsScreen()
         }
         composable<ImportExportRoute> {
-            ImportExportScreen()
+            ImportExportScreen(
+                onNavigateToCategorySettings = {
+                    navController.navigate(CategorySettingsRoute)
+                }
+            )
+        }
+        composable<CategorySettingsRoute> {
+            CategorySettingsScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
         }
     }
 }

@@ -26,6 +26,7 @@ import com.example.accountkeeper.ui.theme.LocalAppStrings
 import com.example.accountkeeper.ui.viewmodel.CategoryViewModel
 import com.example.accountkeeper.ui.viewmodel.TransactionViewModel
 import com.example.accountkeeper.utils.CurrencyUtils
+import com.example.accountkeeper.utils.IdGenerator
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -45,17 +46,6 @@ fun AddEditTransactionScreen(
     var transactionDate by remember { mutableStateOf(System.currentTimeMillis()) }
 
     var showDatePicker by remember { mutableStateOf(false) }
-    var showCustomCategoryDialog by remember { mutableStateOf(false) }
-    var customCategoryName by remember { mutableStateOf("") }
-    var categoryError by remember { mutableStateOf<String?>(null) }
-    
-    var categoryToManage by remember { mutableStateOf<Category?>(null) }
-    var showManageCategoryDialog by remember { mutableStateOf(false) }
-    var showRenameCategoryDialog by remember { mutableStateOf(false) }
-    var showDeleteCategoryDialog by remember { mutableStateOf(false) }
-    var renameCategoryName by remember { mutableStateOf("") }
-    
-    var initialCategoryId by remember { mutableStateOf<Long?>(null) }
 
     val categories by categoryViewModel.categories.collectAsState()
     // currentType is computed manually since we rely on boolean 'isExpense'
@@ -75,7 +65,6 @@ fun AddEditTransactionScreen(
                 note = tx.note
                 isExpense = tx.type == TransactionType.EXPENSE
                 selectedCategoryId = tx.categoryId
-                initialCategoryId = tx.categoryId
                 transactionDate = tx.date
             }
         }
@@ -99,134 +88,6 @@ fun AddEditTransactionScreen(
         ) {
             DatePicker(state = datePickerState)
         }
-    }
-
-    if (showCustomCategoryDialog) {
-        AlertDialog(
-            onDismissRequest = { 
-                showCustomCategoryDialog = false
-                customCategoryName = ""
-                categoryError = null
-            },
-            title = { Text(strings.newCategory) },
-            text = {
-                Column {
-                    OutlinedTextField(
-                        value = customCategoryName,
-                        onValueChange = { 
-                            customCategoryName = it
-                            categoryError = null
-                        },
-                        label = { Text(strings.name) },
-                        singleLine = true,
-                        isError = categoryError != null,
-                        supportingText = { categoryError?.let { Text(it) } }
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    val name = customCategoryName.trim()
-                    if (name.isEmpty()) {
-                        categoryError = strings.nameEmptyError
-                    } else if (filteredCategories.any { it.name.equals(name, ignoreCase = true) }) {
-                        categoryError = strings.nameExistsError
-                    } else {
-                        categoryViewModel.addCategory(Category(name = name, type = currentType, isDefault = false))
-                        showCustomCategoryDialog = false
-                        customCategoryName = ""
-                    }
-                }) { Text(strings.add) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showCustomCategoryDialog = false }) { Text(strings.cancel) }
-            }
-        )
-    }
-
-    if (showManageCategoryDialog && categoryToManage != null) {
-        AlertDialog(
-            onDismissRequest = { 
-                showManageCategoryDialog = false
-                categoryToManage = null
-            },
-            title = { Text("管理分类") },
-            text = { Text("请选择对自定义分类 \"${categoryToManage?.name}\" 的操作。") },
-            confirmButton = {
-                TextButton(onClick = {
-                    renameCategoryName = categoryToManage?.name ?: ""
-                    showManageCategoryDialog = false
-                    showRenameCategoryDialog = true
-                }) { Text("修改名称") }
-            },
-            dismissButton = {
-                TextButton(onClick = { 
-                    showManageCategoryDialog = false
-                    showDeleteCategoryDialog = true
-                }) { Text("删除", color = MaterialTheme.colorScheme.error) }
-            }
-        )
-    }
-
-    if (showRenameCategoryDialog && categoryToManage != null) {
-        AlertDialog(
-            onDismissRequest = { 
-                showRenameCategoryDialog = false
-            },
-            title = { Text("重命名分类") },
-            text = {
-                OutlinedTextField(
-                    value = renameCategoryName,
-                    onValueChange = { renameCategoryName = it },
-                    label = { Text("分类名称") },
-                    singleLine = true
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    val name = renameCategoryName.trim()
-                    if (name.isNotEmpty() && name != categoryToManage?.name) {
-                        categoryToManage?.let {
-                            categoryViewModel.updateCategory(it.copy(name = name))
-                        }
-                    }
-                    showRenameCategoryDialog = false
-                    categoryToManage = null
-                }) { Text(strings.ok) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showRenameCategoryDialog = false }) { Text(strings.cancel) }
-            }
-        )
-    }
-
-    if (showDeleteCategoryDialog && categoryToManage != null) {
-        AlertDialog(
-            onDismissRequest = { 
-                showDeleteCategoryDialog = false
-                categoryToManage = null
-            },
-            title = { Text("删除分类") },
-            text = { Text("确定要删除自定义分类 \"${categoryToManage?.name}\" 吗？此操作无法撤销。该分类下的过往账单将丢失分类信息。") },
-            confirmButton = {
-                TextButton(onClick = {
-                    categoryToManage?.let {
-                        categoryViewModel.deleteCategory(it)
-                        if (selectedCategoryId == it.id) {
-                            selectedCategoryId = null
-                        }
-                    }
-                    showDeleteCategoryDialog = false
-                    categoryToManage = null
-                }) { Text(strings.ok) }
-            },
-            dismissButton = {
-                TextButton(onClick = { 
-                    showDeleteCategoryDialog = false
-                    categoryToManage = null
-                }) { Text(strings.cancel) }
-            }
-        )
     }
 
     Scaffold(
@@ -307,7 +168,6 @@ fun AddEditTransactionScreen(
             ) {
                 items(filteredCategories, key = { it.id }) { category ->
                     val isSelected = selectedCategoryId == category.id
-                    val isLocked = isEditMode && initialCategoryId != null
                     
                     Card(
                         colors = CardDefaults.cardColors(
@@ -317,59 +177,10 @@ fun AddEditTransactionScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(60.dp)
-                            .pointerInput(category.id, isLocked) {
-                                detectTapGestures(
-                                    onTap = { 
-                                        if (!isLocked || initialCategoryId == category.id) {
-                                            selectedCategoryId = category.id 
-                                        } else if (isLocked && initialCategoryId != category.id) {
-                                            // Edit mode allows switching TO other categories? 
-                                            // Requirements: "编辑时该交易选择的分类不可修改" 
-                                            // We interpret as: The transaction's primary category cannot be detached or altered.
-                                            // Wait, let's just make the transaction unable to select other categories if locked.
-                                            // If the user meant "cannot edit the locked category's name", we do that below.
-                                        }
-                                        // Actually let's restrict clicking to only the original if locked
-                                        if (isLocked) {
-                                            // Force it to remain the initial category
-                                            selectedCategoryId = initialCategoryId
-                                        } else {
-                                            selectedCategoryId = category.id
-                                        }
-                                    },
-                                    onLongPress = {
-                                        if (!category.isDefault) {
-                                            // Prevent modifying the category if it's currently used in this edited transaction
-                                            if (isLocked && category.id == initialCategoryId) {
-                                                scope.launch {
-                                                    // Optional: Show snackbar "Cannot modify the category in use"
-                                                }
-                                            } else {
-                                                categoryToManage = category
-                                                showManageCategoryDialog = true
-                                            }
-                                        }
-                                    }
-                                )
-                            }
+                            .clickable { selectedCategoryId = category.id }
                     ) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Text(text = category.name)
-                        }
-                    }
-                }
-                item {
-                    Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer
-                        ),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(60.dp)
-                            .clickable { showCustomCategoryDialog = true }
-                    ) {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Icon(Icons.Default.Add, contentDescription = "Add Custom")
                         }
                     }
                 }
@@ -390,7 +201,7 @@ fun AddEditTransactionScreen(
                     val amount = CurrencyUtils.convertToBase(displayAmount, currency)
                     if (amount > 0) {
                         val transaction = Transaction(
-                            id = if (isEditMode) transactionId else 0,
+                            id = if (isEditMode) transactionId else IdGenerator.generateId(),
                             type = currentType,
                             amount = amount,
                             note = note,

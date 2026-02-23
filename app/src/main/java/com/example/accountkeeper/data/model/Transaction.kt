@@ -18,8 +18,8 @@ import androidx.room.PrimaryKey
     indices = [Index(value = ["categoryId"])]
 )
 data class Transaction(
-    @PrimaryKey(autoGenerate = true)
-    val id: Long = 0,
+    @PrimaryKey
+    val id: Long,
     val type: TransactionType,
     val amount: Double,
     val date: Long,

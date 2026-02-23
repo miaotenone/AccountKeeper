@@ -23,6 +23,7 @@ import com.example.accountkeeper.ui.theme.LocalAppStrings
 import com.example.accountkeeper.ui.viewmodel.CategoryViewModel
 import com.example.accountkeeper.ui.viewmodel.SettingsViewModel
 import com.example.accountkeeper.ui.viewmodel.TransactionViewModel
+import com.example.accountkeeper.utils.IdGenerator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.io.OutputStreamWriter
@@ -33,6 +34,7 @@ import java.util.Locale
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ImportExportScreen(
+    onNavigateToCategorySettings: () -> Unit = {},
     viewModel: TransactionViewModel = hiltViewModel(),
     categoryViewModel: CategoryViewModel = hiltViewModel(),
     settingsViewModel: SettingsViewModel = hiltViewModel()
@@ -126,9 +128,19 @@ fun ImportExportScreen(
                         // Re-read file or we could have stored data
                         context.contentResolver.openInputStream(uri)?.bufferedReader()?.useLines { secondLines ->
                             val secondDataLines = secondLines.drop(1)
+                            val latestTransactions = viewModel.transactions.value // Get local data for conflict resolution
+                            
                             secondDataLines.forEach { line ->
                                 val parts = line.split(csvRegex).map { it.removeSurrounding("\"").replace("\"\"", "\"") }
                                 if (parts.size >= 6) {
+                                    val idString = parts[0]
+                                    val parsedId = idString.toLongOrNull() ?: IdGenerator.generateId()
+                                    
+                                    // Conflict handling: App data takes precedence. Skip if ID exists in local DB.
+                                    if (latestTransactions.any { it.id == parsedId }) {
+                                        return@forEach
+                                    }
+
                                     val typeString = parts[2]
                                     val amount = parts[3].toDoubleOrNull() ?: 0.0
                                     val categoryName = parts[4].trim()
@@ -143,6 +155,7 @@ fun ImportExportScreen(
                                     
                                     if (amount > 0 && categoryId != null) {
                                         val transaction = Transaction(
+                                            id = parsedId,
                                             type = type,
                                             amount = amount,
                                             note = note,
@@ -213,7 +226,24 @@ fun ImportExportScreen(
                 }
             }
 
-            // Section 2: CSV Data Management
+            // Section 2: Category Management
+            Text("分类配置", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp))
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("统一管理收入与支出的分类信息", style = MaterialTheme.typography.bodySmall)
+                    OutlinedButton(
+                        onClick = onNavigateToCategorySettings,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("类别与标签管理")
+                    }
+                }
+            }
+
+            // Section 3: CSV Data Management
             Text(strings.manualDataManagement, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp))
             Card(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
@@ -250,7 +280,7 @@ fun ImportExportScreen(
                 }
             }
             
-            // Section 3: App Settings
+            // Section 4: App Settings
             Text(strings.generalSettings, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp))
             Card(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
