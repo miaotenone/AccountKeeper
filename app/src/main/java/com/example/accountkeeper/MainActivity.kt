@@ -26,7 +26,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.accountkeeper.ui.navigation.AppNavigation
 import com.example.accountkeeper.ui.navigation.HomeRoute
-import com.example.accountkeeper.ui.navigation.ImportExportRoute
+import com.example.accountkeeper.ui.navigation.SettingsRoute
 import com.example.accountkeeper.ui.navigation.StatisticsRoute
 import com.example.accountkeeper.ui.theme.AccountKeeperTheme
 import com.example.accountkeeper.ui.theme.EnStrings
@@ -72,7 +72,7 @@ enum class AppDestinations(
 ) {
     HOME("Home", Icons.Default.Home, HomeRoute),
     STATISTICS("Statistics", Icons.Default.List, StatisticsRoute),
-    SETTINGS("Settings", Icons.Default.Settings, ImportExportRoute),
+    SETTINGS("Settings", Icons.Default.Settings, SettingsRoute),
 }
 
 @Composable

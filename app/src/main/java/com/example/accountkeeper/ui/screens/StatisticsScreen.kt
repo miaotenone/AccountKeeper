@@ -2,10 +2,13 @@ package com.example.accountkeeper.ui.screens
 
 import android.graphics.Paint
 import android.graphics.Typeface
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.clickable
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
@@ -17,7 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.text.font.FontWeight
@@ -25,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.accountkeeper.LocalCurrencySymbol
 import com.example.accountkeeper.data.model.TransactionType
+import com.example.accountkeeper.ui.theme.*
 import com.example.accountkeeper.ui.theme.LocalAppStrings
 import com.example.accountkeeper.ui.viewmodel.CategoryViewModel
 import com.example.accountkeeper.ui.viewmodel.TransactionViewModel
@@ -51,19 +55,11 @@ fun StatisticsScreen(
 
     var selectedRange by remember { mutableStateOf(TimeRange.MONTHLY) }
     var statType by remember { mutableStateOf(StatType.EXPENSE) }
-
-    // Offset for navigating previous/next periods (0 means current) is removed
-    // We strictly use selected date to anchor our period
     var anchorDate by remember { mutableStateOf(System.currentTimeMillis()) }
-    
-    // Custom date range state
     var customStartDate by remember { mutableStateOf<Long?>(null) }
     var customEndDate by remember { mutableStateOf<Long?>(null) }
-    
-    // Which picker is currently active
     var activePicker by remember { mutableStateOf<PickerType?>(null) }
 
-    // Reset anchor date when changing range to bring us to the present
     LaunchedEffect(selectedRange) {
         if (selectedRange != TimeRange.CUSTOM) {
             anchorDate = System.currentTimeMillis()
@@ -97,7 +93,7 @@ fun StatisticsScreen(
                 start = calendar.timeInMillis
                 calendar.add(Calendar.WEEK_OF_YEAR, 1)
                 end = calendar.timeInMillis
-                val weekNum = calendar.get(Calendar.WEEK_OF_YEAR) - 1 // week before addition
+                val weekNum = calendar.get(Calendar.WEEK_OF_YEAR) - 1
                 val year = calendar.get(Calendar.YEAR)
                 periodStr = "${year} Week $weekNum"
             }
@@ -139,41 +135,35 @@ fun StatisticsScreen(
     }
 
     val displayTransactions = remember(allTransactions, startTime, endTime, statType) {
-        allTransactions.filter { 
+        allTransactions.filter {
             it.date in startTime until endTime &&
-            (statType == StatType.BALANCE || 
+            (statType == StatType.BALANCE ||
              it.type == if (statType == StatType.EXPENSE) TransactionType.EXPENSE else TransactionType.INCOME)
         }
     }
 
-    // Currency Conversion
     val totalIncomeBase = displayTransactions.filter { it.type == TransactionType.INCOME }.sumOf { it.amount }
     val totalExpenseBase = displayTransactions.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount }
-    
+
     val totalAmountBase = if (statType == StatType.BALANCE) {
         totalIncomeBase - totalExpenseBase
     } else {
         displayTransactions.sumOf { it.amount }
     }
-    
+
     val totalAmount = CurrencyUtils.convertToDisplay(totalAmountBase, currency)
-    // For calculating percentages in Pie Chart during BALANCE mode, we use the absolute volume (Income + Expense)
     val pieTotalBase = if (statType == StatType.BALANCE) totalIncomeBase + totalExpenseBase else totalAmountBase
     val pieTotalDisplay = CurrencyUtils.convertToDisplay(pieTotalBase, currency)
 
-    // Aggregate by category
     val categoryTotalsBase = if (statType == StatType.BALANCE) {
-        listOf(
-            Pair(-1L, totalIncomeBase),
-            Pair(-2L, totalExpenseBase)
-        ).filter { it.second > 0 }
+        listOf(Pair(-1L, totalIncomeBase), Pair(-2L, totalExpenseBase)).filter { it.second > 0 }
     } else {
-        displayTransactions.groupBy { it.categoryId }
+        displayTransactions.groupBy { it.categoryId ?: 0L }
             .mapValues { entry -> entry.value.sumOf { it.amount } }
             .toList()
             .sortedByDescending { it.second }
     }
-    
+
     val categoryTotals = categoryTotalsBase.map { it.first to CurrencyUtils.convertToDisplay(it.second, currency) }
 
     if (activePicker != null) {
@@ -222,44 +212,42 @@ fun StatisticsScreen(
     }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text(strings.statistics) }) }
+        topBar = {
+            Surface(
+                color = Color.Transparent,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                TopAppBar(
+                    title = {
+                        Text(
+                            strings.statistics,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent
+                    )
+                )
+            }
+        }
     ) { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(16.dp)
+                .padding(horizontal = 20.dp)
                 .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
-            // Time Range Selector
-            ScrollableTabRow(
-                selectedTabIndex = selectedRange.ordinal,
-                edgePadding = 8.dp
-            ) {
-                TimeRange.entries.forEachIndexed { index, range ->
-                    Tab(
-                        selected = selectedRange == range,
-                        onClick = { 
-                            selectedRange = range
-                            if (range == TimeRange.CUSTOM) {
-                                // Default selection for custom range avoids immediately popping dialog if we don't want to
-                                // Setting to CUSTOM range keeps the distinct UI
-                            }
-                        },
-                        text = { 
-                            val label = when(range) {
-                                TimeRange.DAILY -> strings.daily
-                                TimeRange.WEEKLY -> strings.weekly
-                                TimeRange.MONTHLY -> strings.monthly
-                                TimeRange.YEARLY -> strings.yearly
-                                TimeRange.CUSTOM -> strings.custom
-                            }
-                            Text(label) 
-                        }
-                    )
-                }
-            }
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Premium Time Range Selector
+            PremiumTimeRangeSelector(
+                selectedRange = selectedRange,
+                onRangeSelected = { selectedRange = it },
+                strings = strings
+            )
 
             // Period Navigation & Type Toggle
             Row(
@@ -272,15 +260,16 @@ fun StatisticsScreen(
                         Text(
                             text = displayPeriodStr,
                             style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
                             modifier = Modifier
                                 .padding(horizontal = 8.dp)
-                                .clickable { activePicker = PickerType.ANCHOR }
+                                .clickable { activePicker = PickerType.ANCHOR },
+                            color = MaterialTheme.colorScheme.primary
                         )
                     } else {
                         Column {
-                            val startStr = customStartDate?.let { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(it)) } ?: "Start Date"
-                            val endStr = customEndDate?.let { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(it)) } ?: "End Date"
-                            
+                            val startStr = customStartDate?.let { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(it)) } ?: "Start"
+                            val endStr = customEndDate?.let { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(it)) } ?: "End"
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
                                     text = startStr,
@@ -301,160 +290,348 @@ fun StatisticsScreen(
                 }
 
                 Row {
-                    FilterChip(
+                    PremiumFilterChip(
                         selected = statType == StatType.EXPENSE,
                         onClick = { statType = StatType.EXPENSE },
-                        label = { Text(strings.expense) },
-                        modifier = Modifier.padding(end = 4.dp)
+                        label = strings.expense
                     )
-                    FilterChip(
+                    Spacer(modifier = Modifier.width(4.dp))
+                    PremiumFilterChip(
                         selected = statType == StatType.INCOME,
                         onClick = { statType = StatType.INCOME },
-                        label = { Text(strings.income) },
-                        modifier = Modifier.padding(end = 4.dp)
+                        label = strings.income
                     )
-                    FilterChip(
+                    Spacer(modifier = Modifier.width(4.dp))
+                    PremiumFilterChip(
                         selected = statType == StatType.BALANCE,
                         onClick = { statType = StatType.BALANCE },
-                        label = { Text("综合") }
+                        label = "综合"
                     )
                 }
             }
 
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(
+            // Premium Total Card
+            PremiumTotalCard(
+                statType = statType,
+                totalAmount = totalAmount,
+                currency = currency,
+                strings = strings,
+                isNegative = totalAmountBase < 0
+            )
+
+            // Premium Pie Chart
+            if (categoryTotals.isNotEmpty() && pieTotalBase > 0) {
+                PremiumPieChart(
+                    categoryTotals = categoryTotals,
+                    pieTotalDisplay = pieTotalDisplay,
+                    statType = statType,
+                    categories = categories,
+                    strings = strings
+                )
+
+                // Premium Category Breakdown
+                Text(
+                    strings.categoryRanking,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                categoryTotals.forEachIndexed { index, pair ->
+                    val (categoryId, amount) = pair
+                    val categoryName = if (statType == StatType.BALANCE) {
+                        if (categoryId == -1L) strings.income else strings.expense
+                    } else {
+                        categories.find { it.id == categoryId }?.name ?: strings.other
+                    }
+                    val percentage = if (pieTotalDisplay > 0) (amount / pieTotalDisplay) * 100 else 0.0
+                    val categoryColor = ChartColors[index % ChartColors.size]
+
+                    PremiumCategoryBreakdown(
+                        name = categoryName,
+                        amount = amount,
+                        percentage = percentage,
+                        currency = currency,
+                        color = categoryColor,
+                        isBalanceMode = statType == StatType.BALANCE,
+                        isIncome = categoryId == -1L
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+            } else {
+                Box(
                     modifier = Modifier
-                        .padding(16.dp)
-                        .fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                        .fillMaxWidth()
+                        .height(200.dp),
+                    contentAlignment = Alignment.Center
                 ) {
-                    val titleText = when (statType) {
+                    Text(
+                        strings.noTransactions,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
+        }
+    }
+}
+
+@Composable
+fun PremiumTimeRangeSelector(
+    selectedRange: TimeRange,
+    onRangeSelected: (TimeRange) -> Unit,
+    strings: AppStrings
+) {
+    ScrollableTabRow(
+        selectedTabIndex = selectedRange.ordinal,
+        edgePadding = 0.dp,
+        containerColor = Color.Transparent,
+        divider = {},
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        TimeRange.entries.forEachIndexed { index, range ->
+            Tab(
+                selected = selectedRange == range,
+                onClick = { onRangeSelected(range) },
+                text = {
+                    Text(
+                        when(range) {
+                            TimeRange.DAILY -> strings.daily
+                            TimeRange.WEEKLY -> strings.weekly
+                            TimeRange.MONTHLY -> strings.monthly
+                            TimeRange.YEARLY -> strings.yearly
+                            TimeRange.CUSTOM -> strings.custom
+                        },
+                        fontWeight = if (selectedRange == range) FontWeight.Bold else FontWeight.Normal
+                    )
+                },
+                selectedContentColor = MaterialTheme.colorScheme.primary,
+                unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+fun PremiumFilterChip(
+    selected: Boolean,
+    onClick: () -> Unit,
+    label: String
+) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = { Text(label, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal) },
+        shape = RoundedCornerShape(12.dp),
+        colors = FilterChipDefaults.filterChipColors(
+            selectedContainerColor = MaterialTheme.colorScheme.primary,
+            selectedLabelColor = Color.White
+        )
+    )
+}
+
+@Composable
+fun PremiumTotalCard(
+    statType: StatType,
+    totalAmount: Double,
+    currency: String,
+    strings: AppStrings,
+    isNegative: Boolean
+) {
+    val gradient = when {
+        statType == StatType.EXPENSE -> {
+            if (isSystemInDarkTheme()) DarkGradientExpense else LightGradientExpense
+        }
+        statType == StatType.INCOME -> {
+            if (isSystemInDarkTheme()) DarkGradientIncome else LightGradientIncome
+        }
+        else -> {
+            if (isSystemInDarkTheme()) DarkGradientPrimary else LightGradientPrimary
+        }
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(28.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Brush.linearGradient(gradient))
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    when (statType) {
                         StatType.EXPENSE -> strings.totalExpense
                         StatType.INCOME -> strings.totalIncome
                         StatType.BALANCE -> "综合结余"
+                    },
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color.White.copy(alpha = 0.9f)
+                )
+                Text(
+                    "${if (statType == StatType.BALANCE && totalAmount > 0) "+" else ""}$currency${String.format(Locale.US, "%.2f", totalAmount)}",
+                    style = MaterialTheme.typography.displayMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun PremiumPieChart(
+    categoryTotals: List<Pair<Long, Double>>,
+    pieTotalDisplay: Double,
+    statType: StatType,
+    categories: List<com.example.accountkeeper.data.model.Category>,
+    strings: AppStrings
+) {
+    val isDark = isSystemInDarkTheme()
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(28.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(32.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Canvas(modifier = Modifier.size(240.dp)) {
+                var startAngle = -90f
+                val center = Offset(size.width / 2, size.height / 2)
+                val radius = size.width / 2
+
+                val textPaint = Paint().apply {
+                    color = if (isDark) {
+                        android.graphics.Color.WHITE
+                    } else {
+                        android.graphics.Color.DKGRAY
                     }
-                    Text(titleText, style = MaterialTheme.typography.titleMedium)
-                    val amountColor = if (statType == StatType.BALANCE && totalAmountBase < 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface 
+                    textSize = 32f
+                    textAlign = Paint.Align.CENTER
+                    typeface = Typeface.DEFAULT_BOLD
+                }
+
+                categoryTotals.forEachIndexed { index, pair ->
+                    val sweepAngle = (pair.second / pieTotalDisplay).toFloat() * 360f
+                    val color = if (statType == StatType.BALANCE) {
+                        if (pair.first == -1L) Color(0xFF5BD9CA) else Color(0xFFFF6B6B)
+                    } else {
+                        ChartColors[index % ChartColors.size]
+                    }
+
+                    drawArc(
+                        color = color,
+                        startAngle = startAngle,
+                        sweepAngle = sweepAngle,
+                        useCenter = false,
+                        style = Stroke(width = 70f)
+                    )
+
+                    val midAngle = startAngle + sweepAngle / 2
+                    val midAngleRad = Math.toRadians(midAngle.toDouble())
+                    val textRadius = radius + 80f
+
+                    val textX = (center.x + textRadius * cos(midAngleRad)).toFloat()
+                    val textY = (center.y + textRadius * sin(midAngleRad)).toFloat()
+
+                    if (sweepAngle > 18f) {
+                        val catName = if (statType == StatType.BALANCE) {
+                            if (pair.first == -1L) strings.income else strings.expense
+                        } else {
+                            categories.find { it.id == pair.first }?.name ?: strings.other
+                        }
+                        drawContext.canvas.nativeCanvas.drawText(
+                            catName,
+                            textX,
+                            textY,
+                            textPaint
+                        )
+                    }
+
+                    startAngle += sweepAngle
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun PremiumCategoryBreakdown(
+    name: String,
+    amount: Double,
+    percentage: Double,
+    currency: String,
+    color: Color,
+    isBalanceMode: Boolean,
+    isIncome: Boolean
+) {
+    val finalColor = if (isBalanceMode) {
+        if (isIncome) Color(0xFF5BD9CA) else Color(0xFFFF6B6B)
+    } else {
+        color
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .size(12.dp)
+                            .background(finalColor, CircleShape)
+                    )
                     Text(
-                        "${if (statType == StatType.BALANCE && totalAmountBase > 0) "+" else ""}$currency${String.format(Locale.US, "%.2f", totalAmount)}", 
-                        style = MaterialTheme.typography.headlineMedium, 
+                        name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        "$currency${String.format(Locale.US, "%.2f", amount)}",
                         fontWeight = FontWeight.Bold,
-                        color = amountColor
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    Text(
+                        String.format(Locale.US, "%.1f%%", percentage),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
-
-            // Pie Chart implementation with Labels
-            if (categoryTotals.isNotEmpty() && pieTotalBase > 0) {
-                val colors = listOf(Color(0xFFE57373), Color(0xFF81C784), Color(0xFF64B5F6), Color(0xFFFFD54F), Color(0xFFBA68C8), Color(0xFF4DB6AC), Color(0xFFFF8A65))
-                val errorColor = MaterialTheme.colorScheme.error
-                
-                Box(modifier = Modifier
-                    .fillMaxWidth()
-                    .height(260.dp), contentAlignment = Alignment.Center) {
-                    Canvas(modifier = Modifier.size(180.dp)) {
-                        var startAngle = -90f
-                        val center = Offset(size.width / 2, size.height / 2)
-                        val radius = size.width / 2
-                        
-                        // Use native canvas to draw text
-                        val textPaint = Paint().apply {
-                            color = android.graphics.Color.DKGRAY
-                            textSize = 32f
-                            textAlign = Paint.Align.CENTER
-                            typeface = Typeface.DEFAULT_BOLD
-                        }
-
-                        categoryTotals.forEachIndexed { index, pair ->
-                            val sweepAngle = (pair.second / pieTotalDisplay).toFloat() * 360f
-                            val color = if (statType == StatType.BALANCE) {
-                                if (pair.first == -1L) androidx.compose.ui.graphics.Color(0xFF4CAF50) else errorColor
-                            } else {
-                                colors[index % colors.size]
-                            }
-                            
-                            // Draw the arc section
-                            drawArc(
-                                color = color,
-                                startAngle = startAngle,
-                                sweepAngle = sweepAngle,
-                                useCenter = false,
-                                style = Stroke(width = 50f)
-                            )
-                            
-                            // Calculate position for text (middle of the arc, pushed outwards)
-                            val midAngle = startAngle + sweepAngle / 2
-                            val midAngleRad = Math.toRadians(midAngle.toDouble())
-                            // Extend text positioning outside the stroke
-                            val textRadius = radius + 60f 
-                            
-                            val textX = (center.x + textRadius * cos(midAngleRad)).toFloat()
-                            val textY = (center.y + textRadius * sin(midAngleRad)).toFloat()
-
-                            // Only draw label if it occupies a decent slice (>5%) to prevent clutter
-                            if (sweepAngle > 18f) {
-                                val catName = if (statType == StatType.BALANCE) {
-                                    if (pair.first == -1L) strings.income else strings.expense
-                                } else {
-                                    categories.find { it.id == pair.first }?.name ?: strings.other
-                                }
-                                drawContext.canvas.nativeCanvas.drawText(
-                                    catName,
-                                    textX,
-                                    textY,
-                                    textPaint
-                                )
-                            }
-                            
-                            startAngle += sweepAngle
-                        }
-                    }
-                }
-
-                // Category Breakdowns
-                Text(strings.categoryRanking, style = MaterialTheme.typography.titleMedium)
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    categoryTotals.forEachIndexed { index, pair ->
-                        val (categoryId, amount) = pair
-                        val categoryName = if (statType == StatType.BALANCE) {
-                            if (categoryId == -1L) strings.income else strings.expense
-                        } else {
-                            categories.find { it.id == categoryId }?.name ?: strings.other
-                        }
-                        val percentage = if (pieTotalDisplay > 0) (amount / pieTotalDisplay) * 100 else 0.0
-                        val barColor = if (statType == StatType.BALANCE) {
-                            if (categoryId == -1L) androidx.compose.ui.graphics.Color(0xFF4CAF50) else MaterialTheme.colorScheme.error
-                        } else {
-                            colors[index % colors.size]
-                        }
-                        
-                        ListItem(
-                            headlineContent = { Text(categoryName) },
-                            supportingContent = { 
-                                LinearProgressIndicator(
-                                    progress = { (amount / pieTotalDisplay).toFloat() },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(top = 4.dp),
-                                    color = barColor
-                                )
-                            },
-                            trailingContent = { 
-                                Column(horizontalAlignment = Alignment.End) {
-                                    Text("$currency${String.format(Locale.US, "%.2f", amount)}", fontWeight = FontWeight.Bold)
-                                    Text(String.format(Locale.US, "%.1f%%", percentage), style = MaterialTheme.typography.bodySmall)
-                                }
-                            }
-                        )
-                    }
-                }
-            } else {
-                Box(modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f), contentAlignment = Alignment.Center) {
-                    Text(strings.noTransactions, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
+            Spacer(modifier = Modifier.height(12.dp))
+            LinearProgressIndicator(
+                progress = { (amount / percentage / 100).toFloat() },
+                modifier = Modifier.fillMaxWidth(),
+                color = finalColor,
+                trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
+            )
         }
     }
 }
