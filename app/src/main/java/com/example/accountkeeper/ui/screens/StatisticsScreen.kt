@@ -352,7 +352,11 @@ fun StatisticsScreen(
 
                 // Premium Category Breakdown
                 Text(
-                    strings.categoryRanking,
+                    when (statType) {
+                        StatType.EXPENSE -> strings.expense + " " + strings.categoryRanking
+                        StatType.INCOME -> strings.income + " " + strings.categoryRanking
+                        StatType.BALANCE -> strings.balanceOverall + " " + strings.categoryRanking
+                    },
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
@@ -547,7 +551,11 @@ fun PremiumPieChart(
         ) {
             // 饼图标题
             Text(
-                "开销比例",
+                when (statType) {
+                    StatType.EXPENSE -> strings.expenseRatio
+                    StatType.INCOME -> strings.incomeRatio
+                    StatType.BALANCE -> strings.overallRatio
+                },
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )

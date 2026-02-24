@@ -93,7 +93,10 @@ data class AppStrings(
     val contactAuthor: String,
     val contactAuthorDescription: String,
     val poweredBy: String,
-    val authorName: String
+    val authorName: String,
+    val expenseRatio: String,
+    val incomeRatio: String,
+    val overallRatio: String
 )
 
 val EnStrings = AppStrings(
@@ -189,7 +192,10 @@ val EnStrings = AppStrings(
     contactAuthor = "Contact Author",
     contactAuthorDescription = "Feel free to contact us if you have questions or suggestions",
     poweredBy = "Powered by",
-    authorName = "Ricky Miao"
+    authorName = "Ricky Miao",
+    expenseRatio = "Expense Ratio",
+    incomeRatio = "Income Ratio",
+    overallRatio = "Overall Ratio"
 )
 
 val ZhStrings = AppStrings(
@@ -285,7 +291,10 @@ noBackupFound = "尚未发现可用备份文件",
     contactAuthor = "联系作者",
     contactAuthorDescription = "如有问题或建议，欢迎联系我们",
     poweredBy = "Powered by",
-    authorName = "Ricky Miao"
+    authorName = "Ricky Miao",
+    expenseRatio = "支出比例",
+    incomeRatio = "收入比例",
+    overallRatio = "综合比例"
 )
 
 val LocalAppStrings = androidx.compose.runtime.compositionLocalOf { EnStrings }
