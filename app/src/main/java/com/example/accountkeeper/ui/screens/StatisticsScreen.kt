@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.accountkeeper.LocalCurrencySymbol
@@ -123,8 +124,8 @@ fun StatisticsScreen(
                 start = customStartDate ?: 0L
                 end = customEndDate ?: Long.MAX_VALUE
                 if (customStartDate != null && customEndDate != null) {
-                    val s = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(start))
-                    val e = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(end))
+                    val s = SimpleDateFormat("MM/dd", Locale.getDefault()).format(Date(start))
+                    val e = SimpleDateFormat("MM/dd", Locale.getDefault()).format(Date(end))
                     periodStr = "$s -> $e"
                 } else {
                     periodStr = strings.selectRange
@@ -219,11 +220,19 @@ fun StatisticsScreen(
             ) {
                 TopAppBar(
                     title = {
-                        Text(
-                            strings.statistics,
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Column {
+                            Text(
+                                strings.statistics,
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                strings.categoryStatistics,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = Color.Transparent
@@ -238,9 +247,9 @@ fun StatisticsScreen(
                 .padding(paddingValues)
                 .padding(horizontal = 20.dp)
                 .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(24.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(2.dp))
 
             // Premium Time Range Selector
             PremiumTimeRangeSelector(
@@ -248,6 +257,8 @@ fun StatisticsScreen(
                 onRangeSelected = { selectedRange = it },
                 strings = strings
             )
+
+            Spacer(modifier = Modifier.height(2.dp))
 
             // Period Navigation & Type Toggle
             Row(
@@ -264,25 +275,31 @@ fun StatisticsScreen(
                             modifier = Modifier
                                 .padding(horizontal = 8.dp)
                                 .clickable { activePicker = PickerType.ANCHOR },
-                            color = MaterialTheme.colorScheme.primary
+                            color = MaterialTheme.colorScheme.primary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     } else {
                         Column {
-                            val startStr = customStartDate?.let { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(it)) } ?: "Start"
-                            val endStr = customEndDate?.let { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(it)) } ?: "End"
+                            val startStr = customStartDate?.let { SimpleDateFormat("MM/dd", Locale.getDefault()).format(Date(it)) } ?: strings.startDate
+                            val endStr = customEndDate?.let { SimpleDateFormat("MM/dd", Locale.getDefault()).format(Date(it)) } ?: strings.endDate
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
                                     text = startStr,
                                     modifier = Modifier.clickable { activePicker = PickerType.CUSTOM_START },
                                     color = MaterialTheme.colorScheme.primary,
-                                    fontWeight = FontWeight.Bold
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                                 Text(" -> ", modifier = Modifier.padding(horizontal = 4.dp))
                                 Text(
                                     text = endStr,
                                     modifier = Modifier.clickable { activePicker = PickerType.CUSTOM_END },
                                     color = MaterialTheme.colorScheme.primary,
-                                    fontWeight = FontWeight.Bold
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }
@@ -295,17 +312,17 @@ fun StatisticsScreen(
                         onClick = { statType = StatType.EXPENSE },
                         label = strings.expense
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
+                    Spacer(modifier = Modifier.width(2.dp))
                     PremiumFilterChip(
                         selected = statType == StatType.INCOME,
                         onClick = { statType = StatType.INCOME },
                         label = strings.income
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
+                    Spacer(modifier = Modifier.width(2.dp))
                     PremiumFilterChip(
                         selected = statType == StatType.BALANCE,
                         onClick = { statType = StatType.BALANCE },
-                        label = "综合"
+                        label = strings.balanceOverall
                     )
                 }
             }
@@ -319,6 +336,8 @@ fun StatisticsScreen(
                 isNegative = totalAmountBase < 0
             )
 
+            Spacer(modifier = Modifier.height(8.dp))
+
             // Premium Pie Chart
             if (categoryTotals.isNotEmpty() && pieTotalBase > 0) {
                 PremiumPieChart(
@@ -329,13 +348,15 @@ fun StatisticsScreen(
                     strings = strings
                 )
 
+                Spacer(modifier = Modifier.height(8.dp))
+
                 // Premium Category Breakdown
                 Text(
                     strings.categoryRanking,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(4.dp))
 
                 categoryTotals.forEachIndexed { index, pair ->
                     val (categoryId, amount) = pair
@@ -356,7 +377,6 @@ fun StatisticsScreen(
                         isBalanceMode = statType == StatType.BALANCE,
                         isIncome = categoryId == -1L
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
                 }
             } else {
                 Box(
@@ -373,7 +393,7 @@ fun StatisticsScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }
@@ -465,18 +485,19 @@ fun PremiumTotalCard(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(24.dp),
+                    .padding(20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
                     when (statType) {
                         StatType.EXPENSE -> strings.totalExpense
                         StatType.INCOME -> strings.totalIncome
-                        StatType.BALANCE -> "综合结余"
+                        StatType.BALANCE -> "${strings.balanceOverall}结余"
                     },
                     style = MaterialTheme.typography.titleMedium,
                     color = Color.White.copy(alpha = 0.9f)
                 )
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     "${if (statType == StatType.BALANCE && totalAmount > 0) "+" else ""}$currency${String.format(Locale.US, "%.2f", totalAmount)}",
                     style = MaterialTheme.typography.displayMedium,
@@ -505,10 +526,10 @@ fun PremiumPieChart(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(32.dp),
+                .padding(28.dp),
             contentAlignment = Alignment.Center
         ) {
-            Canvas(modifier = Modifier.size(240.dp)) {
+            Canvas(modifier = Modifier.size(260.dp)) {
                 var startAngle = -90f
                 val center = Offset(size.width / 2, size.height / 2)
                 val radius = size.width / 2
@@ -592,7 +613,7 @@ fun PremiumCategoryBreakdown(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(20.dp)
+                .padding(16.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -624,9 +645,9 @@ fun PremiumCategoryBreakdown(
                     )
                 }
             }
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
             LinearProgressIndicator(
-                progress = { (amount / percentage / 100).toFloat() },
+                progress = { (percentage / 100).toFloat() },
                 modifier = Modifier.fillMaxWidth(),
                 color = finalColor,
                 trackColor = MaterialTheme.colorScheme.surfaceVariant,
