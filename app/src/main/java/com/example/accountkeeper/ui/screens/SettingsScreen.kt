@@ -54,7 +54,7 @@ fun SettingsScreen(
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                "Customize your experience",
+                                strings.customizeExperience,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -83,6 +83,16 @@ fun SettingsScreen(
                 language = appSettings.language,
                 currency = appSettings.currencySymbol,
                 onToggleDarkMode = { settingsViewModel.updateTheme(!appSettings.isDarkMode) },
+                onToggleLanguage = {
+                    val newLang = if (appSettings.language == "zh") "en" else "zh"
+                    settingsViewModel.updateLanguage(newLang)
+                },
+                onToggleCurrency = {
+                    val currencies = listOf("¥", "$", "€", "£", "₩", "₹", "₽", "฿")
+                    val currentIndex = currencies.indexOf(appSettings.currencySymbol)
+                    val nextIndex = (currentIndex + 1) % currencies.size
+                    settingsViewModel.updateCurrency(currencies[nextIndex])
+                },
                 strings = strings
             )
 
@@ -95,7 +105,7 @@ fun SettingsScreen(
                 SettingsItem(
                     icon = Icons.Default.CloudUpload,
                     title = strings.dataManagement,
-                    description = "Import, export and backup your data",
+                    description = strings.dataManagementDescription,
                     onClick = onNavigateToDataManagement
                 )
             }
@@ -108,7 +118,7 @@ fun SettingsScreen(
                 SettingsItem(
                     icon = Icons.Default.Settings,
                     title = strings.generalSettings,
-                    description = "Theme, language and currency preferences",
+                    description = strings.generalSettingsDescription,
                     onClick = onNavigateToAppSettings
                 )
                 SettingsItem(
@@ -127,7 +137,7 @@ fun SettingsScreen(
                 SettingsItem(
                     icon = Icons.Default.Info,
                     title = strings.about,
-                    description = "Version info and help tutorial",
+                    description = strings.aboutDescription,
                     onClick = onNavigateToAbout
                 )
             }
@@ -143,6 +153,8 @@ fun PremiumQuickSettingsCard(
     language: String,
     currency: String,
     onToggleDarkMode: () -> Unit,
+    onToggleLanguage: () -> Unit,
+    onToggleCurrency: () -> Unit,
     strings: AppStrings
 ) {
     val isDark = isSystemInDarkTheme()
@@ -182,7 +194,7 @@ fun PremiumQuickSettingsCard(
                     .padding(20.dp)
             ) {
                 Text(
-                    "Quick Settings",
+                    strings.quickSettings,
                     style = MaterialTheme.typography.titleMedium,
                     color = Color.White.copy(alpha = 0.9f),
                     fontWeight = FontWeight.Bold
@@ -196,23 +208,27 @@ fun PremiumQuickSettingsCard(
                     QuickSettingItem(
                         icon = Icons.Default.DarkMode,
                         label = strings.darkMode,
-                        value = if (isDarkMode) "On" else "Off",
+                        value = if (strings.language == "中文") {
+                            if (isDarkMode) "开" else "关"
+                        } else {
+                            if (isDarkMode) "On" else "Off"
+                        },
                         color = Color.White.copy(alpha = 0.85f),
                         onClick = onToggleDarkMode
                     )
                     QuickSettingItem(
                         icon = Icons.Default.Language,
                         label = strings.language,
-                        value = language.uppercase(),
+                        value = if (language == "zh") "中文" else "English",
                         color = Color.White.copy(alpha = 0.85f),
-                        onClick = {}
+                        onClick = onToggleLanguage
                     )
                     QuickSettingItem(
                         icon = Icons.Default.AttachMoney,
                         label = strings.currencySymbol,
                         value = currency,
                         color = Color.White.copy(alpha = 0.85f),
-                        onClick = {}
+                        onClick = onToggleCurrency
                     )
                 }
             }

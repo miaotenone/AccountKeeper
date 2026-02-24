@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -51,7 +52,7 @@ fun AppSettingsScreen(
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                "Customize your app experience",
+                                if (strings.language == "中文") "自定义您的应用体验" else "Customize your app experience",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -59,7 +60,7 @@ fun AppSettingsScreen(
                     },
                     navigationIcon = {
                         IconButton(onClick = onNavigateBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = if (strings.language == "中文") "返回" else "Back")
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
@@ -81,7 +82,11 @@ fun AppSettingsScreen(
             PremiumSettingCard(
                 icon = Icons.Default.DarkMode,
                 title = strings.darkMode,
-                description = if (appSettings.isDarkMode) "Dark theme is enabled" else "Light theme is enabled",
+                description = if (isDark) {
+                    if (strings.language == "中文") "当前使用深色主题" else "Dark theme is enabled"
+                } else {
+                    if (strings.language == "中文") "当前使用浅色主题" else "Light theme is enabled"
+                },
                 iconColor = if (isDark) DarkGradientPrimary else LightGradientPrimary
             ) {
                 Row(
@@ -92,7 +97,11 @@ fun AppSettingsScreen(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(strings.darkMode, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                         Text(
-                            if (appSettings.isDarkMode) "当前使用深色主题" else "当前使用浅色主题",
+                            if (strings.language == "中文") {
+                                if (appSettings.isDarkMode) "当前使用深色主题" else "当前使用浅色主题"
+                            } else {
+                                if (appSettings.isDarkMode) "Dark theme is enabled" else "Light theme is enabled"
+                            },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -108,7 +117,11 @@ fun AppSettingsScreen(
             PremiumSettingCard(
                 icon = Icons.Default.Language,
                 title = strings.language,
-                description = "当前语言: ${if (appSettings.language == "zh") "中文" else "English"}",
+                description = if (strings.language == "中文") {
+                    "当前语言: ${if (appSettings.language == "zh") "中文" else "English"}"
+                } else {
+                    "Current language: ${if (appSettings.language == "zh") "Chinese" else "English"}"
+                },
                 iconColor = if (isDark) DarkGradientIncome else LightGradientIncome
             ) {
                 Row(
@@ -145,15 +158,15 @@ fun AppSettingsScreen(
                         Column {
                             Text(strings.language, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                             Text(
-                                "当前语言: ${if (appSettings.language == "zh") "中文" else "English"}",
+                                if (strings.language == "中文") "当前语言: ${if (appSettings.language == "zh") "中文" else "English"}" else "Current language: ${if (appSettings.language == "zh") "Chinese" else "English"}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
                     Icon(
-                        imageVector = Icons.Default.KeyboardArrowRight,
-                        contentDescription = "Navigate",
+                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = if (strings.language == "中文") "导航" else "Navigate",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(20.dp)
                     )
@@ -164,7 +177,11 @@ fun AppSettingsScreen(
             PremiumSettingCard(
                 icon = Icons.Default.AttachMoney,
                 title = strings.currencySymbol,
-                description = "当前货币符号: ${appSettings.currencySymbol}",
+                description = if (strings.language == "中文") {
+                    "当前货币符号: ${appSettings.currencySymbol}"
+                } else {
+                    "Current currency: ${appSettings.currencySymbol}"
+                },
                 iconColor = if (isDark) DarkGradientExpense else LightGradientExpense
             ) {
                 Row(
@@ -201,15 +218,15 @@ fun AppSettingsScreen(
                         Column {
                             Text(strings.currencySymbol, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                             Text(
-                                "当前货币符号: ${appSettings.currencySymbol}",
+                                if (strings.language == "中文") "当前货币符号: ${appSettings.currencySymbol}" else "Current currency: ${appSettings.currencySymbol}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
                     Icon(
-                        imageVector = Icons.Default.KeyboardArrowRight,
-                        contentDescription = "Navigate",
+                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = if (strings.language == "中文") "导航" else "Navigate",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(20.dp)
                     )
@@ -219,8 +236,8 @@ fun AppSettingsScreen(
             // Info Card
             InfoCard(
                 icon = Icons.Default.Info,
-                title = "设置说明",
-                description = "更改语言和货币符号后，重启应用即可生效"
+                title = if (strings.language == "中文") "设置说明" else "Settings Info",
+                description = if (strings.language == "中文") "更改语言和货币符号后，重启应用即可生效" else "Restart the app for language and currency changes to take effect"
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -379,7 +396,7 @@ fun LanguageOption(
             if (selected) {
                 Icon(
                     imageVector = Icons.Default.Check,
-                    contentDescription = "Selected",
+                    contentDescription = if (name == "中文") "已选择" else "Selected",
                     tint = MaterialTheme.colorScheme.primary
                 )
             }
@@ -421,7 +438,7 @@ fun CurrencyOption(
             if (selected) {
                 Icon(
                     imageVector = Icons.Default.Check,
-                    contentDescription = "Selected",
+                    contentDescription = if (symbol == "¥") "已选择" else "Selected",
                     tint = MaterialTheme.colorScheme.primary
                 )
             }

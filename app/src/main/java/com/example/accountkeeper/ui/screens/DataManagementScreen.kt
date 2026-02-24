@@ -87,9 +87,9 @@ fun DataManagementScreen(
                         }
                         writer.flush()
                     }
-                    snackbarHostState.showSnackbar("Export successful!")
+                    snackbarHostState.showSnackbar(if (strings.language == "中文") "导出成功！" else "Export successful!")
                 } catch (e: Exception) {
-                    snackbarHostState.showSnackbar("Export failed: ${e.localizedMessage}")
+                    snackbarHostState.showSnackbar(if (strings.language == "中文") "导出失败: ${e.localizedMessage}" else "Export failed: ${e.localizedMessage}")
                 }
             }
         }
@@ -221,11 +221,14 @@ fun DataManagementScreen(
                     }
                 }
             }
-            snackbarHostState.showSnackbar(if (successCount > 0) "成功融合 $successCount 笔数据！" else "合并完毕：但未识别出任何需要补充的新数据")
-        } catch (e: Exception) {
-            e.printStackTrace()
-            snackbarHostState.showSnackbar("合并解析失败: ${e.localizedMessage}")
-        }
+            snackbarHostState.showSnackbar(if (successCount > 0) {
+                                        if (strings.language == "中文") "成功融合 $successCount 笔数据！" else "Successfully merged $successCount records!"
+                                    } else {
+                                        if (strings.language == "中文") "合并完毕：但未识别出任何需要补充的新数据" else "Merge complete: no new data to add"
+                                    })
+                                } catch (e: Exception) {
+                                    e.printStackTrace()
+                                    snackbarHostState.showSnackbar(if (strings.language == "中文") "合并解析失败: ${e.localizedMessage}" else "Merge parsing failed: ${e.localizedMessage}")        }
     }
 
     val importCsvLauncher = rememberLauncherForActivityResult(
@@ -246,7 +249,7 @@ fun DataManagementScreen(
                 try {
                     val lines = FileConverter.readLines(context, uri)
                     if (lines.isNullOrEmpty()) {
-                        snackbarHostState.showSnackbar("无法读取文件内容")
+                        snackbarHostState.showSnackbar(if (strings.language == "中文") "无法读取文件内容" else "Unable to read file content")
                         return@launch
                     }
 
@@ -255,13 +258,13 @@ fun DataManagementScreen(
                         "wechat" -> BillParser.parseWeChatBill(lines)
                         "alipay" -> BillParser.parseAlipayBill(lines)
                         else -> {
-                            snackbarHostState.showSnackbar("无法识别的账单格式")
+                            snackbarHostState.showSnackbar(if (strings.language == "中文") "无法识别的账单格式" else "Unable to recognize bill format")
                             return@launch
                         }
                     }
 
                     if (parsedTransactions.isEmpty()) {
-                        snackbarHostState.showSnackbar("未找到可导入的交易记录")
+                        snackbarHostState.showSnackbar(if (strings.language == "中文") "未找到可导入的交易记录" else "No transaction records found to import")
                         return@launch
                     }
 
@@ -308,11 +311,15 @@ fun DataManagementScreen(
                     val savedFile = settingsViewModel.backupManager.saveBillFile(uri, billType)
                     refreshBackupTrigger++
 
-                    val billTypeName = if (billType == "wechat") "微信" else "支付宝"
-                    snackbarHostState.showSnackbar("${billTypeName}账单导入成功！共导入 $successCount 笔交易")
+                    val billTypeName = if (billType == "wechat") {
+                        if (strings.language == "中文") "微信" else "WeChat"
+                    } else {
+                        if (strings.language == "中文") "支付宝" else "Alipay"
+                    }
+                    snackbarHostState.showSnackbar(if (strings.language == "中文") "${billTypeName}账单导入成功！共导入 $successCount 笔交易" else "$billTypeName bill import successful! Imported $successCount transactions")
                 } catch (e: Exception) {
                     e.printStackTrace()
-                    snackbarHostState.showSnackbar("导入失败: ${e.localizedMessage}")
+                    snackbarHostState.showSnackbar(if (strings.language == "中文") "导入失败: ${e.localizedMessage}" else "Import failed: ${e.localizedMessage}")
                 }
             }
         }
@@ -325,17 +332,16 @@ fun DataManagementScreen(
                     title = {
                         Column {
                             Text(
-                                strings.dataManagement,
-                                style = MaterialTheme.typography.headlineSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                "Import, export and backup your data",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                                                if (strings.language == "中文") "第三方账单导入" else "Third-party Bill Import",
+                                                style = MaterialTheme.typography.headlineSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                            Text(
+                                                if (strings.language == "中文") "微信和支付宝账单支持" else "WeChat and Alipay bill support",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )                        }
                     },
                     navigationIcon = {
                         IconButton(onClick = onNavigateBack) {
@@ -362,7 +368,7 @@ fun DataManagementScreen(
             PremiumDataCard(
                 icon = Icons.Default.Description,
                 title = strings.manualDataManagement,
-                description = "CSV 导入导出功能",
+                description = if (strings.language == "中文") "CSV 导入导出功能" else "CSV Import/Export Features",
                 color = if (isSystemInDarkTheme()) DarkGradientIncome else LightGradientIncome
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -397,25 +403,25 @@ fun DataManagementScreen(
             // Third-party Bill Import Section
             PremiumDataCard(
                 icon = Icons.Default.ReceiptLong,
-                title = "第三方账单导入",
-                description = "微信和支付宝账单支持",
+                title = if (strings.language == "中文") "第三方账单导入" else "Third-party Bill Import",
+                description = if (strings.language == "中文") "微信和支付宝账单支持" else "WeChat and Alipay bill support",
                 color = if (isSystemInDarkTheme()) DarkGradientExpense else LightGradientExpense
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                        "支持微信和支付宝账单CSV文件导入",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    if (strings.language == "中文") "支持微信和支付宝账单CSV文件导入" else "Support WeChat and Alipay bill CSV file import",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
 
                     PremiumButton(
-                        text = "导入微信/支付宝账单",
+                        text = if (strings.language == "中文") "导入微信/支付宝账单" else "Import WeChat/Alipay Bill",
                         icon = Icons.Default.FileUpload,
                         onClick = { importBillLauncher.launch("*/*") }
                     )
 
                     PremiumButton(
-                        text = "管理已导入的账单文件",
+                        text = if (strings.language == "中文") "管理已导入的账单文件" else "Manage Imported Bill Files",
                         icon = Icons.Default.FolderOpen,
                         onClick = { showBillFileDialog = true }
                     )
@@ -426,7 +432,7 @@ fun DataManagementScreen(
             PremiumDataCard(
                 icon = Icons.Default.Backup,
                 title = strings.localBackupVault,
-                description = "本地自动备份安全柜",
+                description = strings.localBackupVault,
                 color = if (isSystemInDarkTheme()) DarkGradientPrimary else LightGradientPrimary
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -561,7 +567,7 @@ fun DataManagementScreen(
                                 refreshBackupTrigger++
                                 snackbarHostState.showSnackbar(strings.manualBackupSuccess)
                             } catch (e: Exception) {
-                                snackbarHostState.showSnackbar("创建备份失败: ${e.localizedMessage}")
+                                snackbarHostState.showSnackbar(if (strings.language == "中文") "创建备份失败: ${e.localizedMessage}" else "Backup creation failed: ${e.localizedMessage}")
                             }
                         }
                         showCustomBackupNameDialog = false
@@ -690,24 +696,23 @@ fun ManualBackupsDialog(
         title = { Text(strings.backupVault) },
         text = {
             if (backups.isEmpty()) {
-                Text(strings.noManualBackups)
-            } else {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    backups.forEach { backup ->
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    scope.launch {
-                                        // TODO: Implement restore functionality
-                                        snackbarHostState.showSnackbar("恢复功能暂未实现")
-                                    }
-                                },
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Row(
+                                    Text(strings.noManualBackups)
+                                } else {
+                                    Column(
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        backups.forEach { backup ->
+                                            Card(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clickable {
+                                                        scope.launch {
+                                                            // TODO: Implement restore functionality
+                                                            snackbarHostState.showSnackbar(if (strings.language == "中文") "恢复功能暂未实现" else "Restore feature not yet implemented")
+                                                        }
+                                                    },
+                                                shape = RoundedCornerShape(12.dp)
+                                            ) {                            Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(12.dp),
@@ -759,12 +764,11 @@ fun BillFileDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("已导入的账单文件") },
-        text = {
-            if (bills.isEmpty()) {
-                Text("尚未导入任何账单文件")
-            } else {
-                Column(
+        title = { Text(if (strings.language == "中文") "已导入的账单文件" else "Imported Bill Files") },
+                        text = {
+                            if (bills.isEmpty()) {
+                                Text(if (strings.language == "中文") "尚未导入任何账单文件" else "No bill files imported yet")
+                            } else {                Column(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     bills.forEach { bill ->
@@ -789,7 +793,13 @@ fun BillFileDialog(
                                     )
                                     val billType = backupManager.detectBillType(bill)
                                     Text(
-                                        "${if (billType == "wechat") "微信" else if (billType == "alipay") "支付宝" else "未知"} - ${backupManager.getBillFileSize(bill)}",
+                                        "${if (billType == "wechat") {
+                                            if (strings.language == "中文") "微信" else "WeChat"
+                                        } else if (billType == "alipay") {
+                                            if (strings.language == "中文") "支付宝" else "Alipay"
+                                        } else {
+                                            if (strings.language == "中文") "未知" else "Unknown"
+                                        }} - ${backupManager.getBillFileSize(bill)}",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
