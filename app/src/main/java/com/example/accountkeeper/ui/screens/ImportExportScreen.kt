@@ -25,6 +25,8 @@ import com.example.accountkeeper.ui.theme.LocalAppStrings
 import com.example.accountkeeper.ui.viewmodel.CategoryViewModel
 import com.example.accountkeeper.ui.viewmodel.SettingsViewModel
 import com.example.accountkeeper.ui.viewmodel.TransactionViewModel
+import com.example.accountkeeper.utils.BillParser
+import com.example.accountkeeper.utils.FileConverter
 import com.example.accountkeeper.utils.IdGenerator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -57,6 +59,7 @@ fun ImportExportScreen(
     var showManualBackupsDialog by remember { mutableStateOf(false) }
     var showCustomBackupNameDialog by remember { mutableStateOf(false) }
     var customBackupName by remember { mutableStateOf("") }
+    var showBillFileDialog by remember { mutableStateOf(false) }
     
     // Launcher for Export (Create Document)
     val exportCsvLauncher = rememberLauncherForActivityResult(
@@ -244,6 +247,90 @@ fun ImportExportScreen(
         }
     }
 
+    // Launcher for Third-party Bill Import
+    val importBillLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            scope.launch(Dispatchers.IO) {
+                try {
+                    val lines = FileConverter.readLines(context, uri)
+                    if (lines.isNullOrEmpty()) {
+                        snackbarHostState.showSnackbar("无法读取文件内容")
+                        return@launch
+                    }
+
+                    val billType = BillParser.detectBillType(lines)
+                    val parsedTransactions = when (billType) {
+                        "wechat" -> BillParser.parseWeChatBill(lines)
+                        "alipay" -> BillParser.parseAlipayBill(lines)
+                        else -> {
+                            snackbarHostState.showSnackbar("无法识别的账单格式")
+                            return@launch
+                        }
+                    }
+
+                    if (parsedTransactions.isEmpty()) {
+                        snackbarHostState.showSnackbar("未找到可导入的交易记录")
+                        return@launch
+                    }
+
+                    // 自动创建缺失的分类
+                    val importNewCategoriesMap = mutableMapOf<Pair<String, TransactionType>, Boolean>()
+                    parsedTransactions.forEach { tx ->
+                        val catMatch = categories.find { it.name.equals(tx.category, ignoreCase = true) && it.type == tx.type }
+                        if (catMatch == null && tx.category.isNotBlank()) {
+                            importNewCategoriesMap[tx.category to tx.type] = true
+                        }
+                    }
+
+                    for ((name, type) in importNewCategoriesMap.keys) {
+                        categoryViewModel.addCategory(com.example.accountkeeper.data.model.Category(name = name, type = type, isDefault = false))
+                    }
+
+                    kotlinx.coroutines.delay(500)
+
+                    val latestCategories = categoryViewModel.categories.value
+                    val latestTransactions = viewModel.transactions.value
+                    var successCount = 0
+
+                    parsedTransactions.forEach { tx ->
+                        // 跳过已存在的记录
+                        if (latestTransactions.any { it.id == tx.id }) {
+                            return@forEach
+                        }
+
+                        val catMatch = latestCategories.find { it.name.equals(tx.category, ignoreCase = true) && it.type == tx.type }
+                        val categoryId = catMatch?.id ?: latestCategories.firstOrNull { it.type == tx.type }?.id
+
+                        if (categoryId != null) {
+                            val transaction = Transaction(
+                                id = tx.id,
+                                type = tx.type,
+                                amount = tx.amount,
+                                note = tx.note,
+                                date = tx.date,
+                                categoryId = categoryId
+                            )
+                            viewModel.addTransaction(transaction)
+                            successCount++
+                        }
+                    }
+
+                    // 保存账单文件到本地
+                    val savedFile = settingsViewModel.backupManager.saveBillFile(uri, billType)
+                    refreshBackupTrigger++
+
+                    val billTypeName = if (billType == "wechat") "微信" else "支付宝"
+                    snackbarHostState.showSnackbar("${billTypeName}账单导入成功！共导入 $successCount 笔交易")
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    snackbarHostState.showSnackbar("导入失败: ${e.localizedMessage}")
+                }
+            }
+        }
+    }
+
     Scaffold(
         topBar = { TopAppBar(title = { Text(strings.settings) }) },
         snackbarHost = { SnackbarHost(snackbarHostState) }
@@ -305,6 +392,35 @@ fun ImportExportScreen(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(strings.exportAll)
+                    }
+
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+                    // Third-party Bill Import
+                    Text(
+                        "第三方账单导入",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        "支持微信和支付宝账单CSV文件导入",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    OutlinedButton(
+                        onClick = { importBillLauncher.launch("*/*") },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("导入微信/支付宝账单")
+                    }
+
+                    OutlinedButton(
+                        onClick = { showBillFileDialog = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("管理已导入的账单文件")
                     }
                 }
             }
@@ -748,6 +864,156 @@ fun ImportExportScreen(
                 },
                 dismissButton = {
                     TextButton(onClick = { showCustomBackupNameDialog = false }) { Text(strings.cancel) }
+                }
+            )
+        }
+
+        // Third-party Bill Files Dialog
+        if (showBillFileDialog) {
+            AlertDialog(
+                onDismissRequest = { showBillFileDialog = false },
+                title = { Text("第三方账单文件管理") },
+                text = {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        val billFiles = settingsViewModel.backupManager.getAllBillFiles()
+                        
+                        if (billFiles.isEmpty()) {
+                            Text(
+                                "暂无已导入的账单文件",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            )
+                        } else {
+                            androidx.compose.foundation.lazy.LazyColumn(
+                                modifier = Modifier.fillMaxWidth().heightIn(max = 400.dp)
+                            ) {
+                                items(billFiles.size) { index ->
+                                    val file = billFiles[index]
+                                    val displayFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+                                    val dateStr = displayFormat.format(Date(file.lastModified()))
+                                    val billType = settingsViewModel.backupManager.detectBillType(file)
+                                    val fileSize = settingsViewModel.backupManager.getBillFileSize(file)
+                                    val typeLabel = when (billType) {
+                                        "wechat" -> "微信账单"
+                                        "alipay" -> "支付宝账单"
+                                        else -> "未知账单"
+                                    }
+                                    val typeColor = when (billType) {
+                                        "wechat" -> androidx.compose.ui.graphics.Color(0xFF07C160)
+                                        "alipay" -> androidx.compose.ui.graphics.Color(0xFF1677FF)
+                                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                    }
+                                    
+                                    Card(
+                                        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                        )
+                                    ) {
+                                        Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
+                                            // First row: File name and type
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Text(
+                                                        text = file.name,
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        fontWeight = FontWeight.Medium,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
+                                                    )
+                                                    Text(
+                                                        text = "$typeLabel · $fileSize",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = typeColor
+                                                    )
+                                                }
+                                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                    TextButton(
+                                                        onClick = {
+                                                            scope.launch(Dispatchers.IO) {
+                                                                // Re-import the bill file
+                                                                val lines = FileConverter.readLines(context, Uri.fromFile(file))
+                                                                if (lines != null) {
+                                                                    val parsed = when (billType) {
+                                                                        "wechat" -> BillParser.parseWeChatBill(lines)
+                                                                        "alipay" -> BillParser.parseAlipayBill(lines)
+                                                                        else -> emptyList()
+                                                                    }
+                                                                    
+                                                                    val latestCategories = categoryViewModel.categories.value
+                                                                    val latestTransactions = viewModel.transactions.value
+                                                                    var reimportCount = 0
+                                                                    
+                                                                    parsed.forEach { tx ->
+                                                                        if (!latestTransactions.any { it.id == tx.id }) {
+                                                                            val catMatch = latestCategories.find { 
+                                                                                it.name.equals(tx.category, ignoreCase = true) && it.type == tx.type 
+                                                                            }
+                                                                            val categoryId = catMatch?.id ?: latestCategories.firstOrNull { it.type == tx.type }?.id
+                                                                            
+                                                                            if (categoryId != null) {
+                                                                                viewModel.addTransaction(
+                                                                                    Transaction(
+                                                                                        id = tx.id,
+                                                                                        type = tx.type,
+                                                                                        amount = tx.amount,
+                                                                                        note = tx.note,
+                                                                                        date = tx.date,
+                                                                                        categoryId = categoryId
+                                                                                    )
+                                                                                )
+                                                                                reimportCount++
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                    
+                                                                    if (reimportCount > 0) {
+                                                                        snackbarHostState.showSnackbar("成功恢复 $reimportCount 笔交易")
+                                                                    } else {
+                                                                        snackbarHostState.showSnackbar("没有需要恢复的新交易")
+                                                                    }
+                                                                }
+                                                            }
+                                                        },
+                                                        modifier = Modifier.height(32.dp)
+                                                    ) { 
+                                                        Text(strings.restore, style = MaterialTheme.typography.labelSmall) 
+                                                    }
+                                                    TextButton(
+                                                        onClick = {
+                                                            settingsViewModel.backupManager.deleteBillFile(file)
+                                                            refreshBackupTrigger++
+                                                            scope.launch { 
+                                                                snackbarHostState.showSnackbar("账单文件已删除") 
+                                                            }
+                                                        },
+                                                        modifier = Modifier.height(32.dp)
+                                                    ) { 
+                                                        Text(strings.delete, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error) 
+                                                    }
+                                                }
+                                            }
+                                            // Second row: Date
+                                            Text(
+                                                text = dateStr,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.padding(top = 4.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showBillFileDialog = false }) { Text(strings.close) }
                 }
             )
         }
