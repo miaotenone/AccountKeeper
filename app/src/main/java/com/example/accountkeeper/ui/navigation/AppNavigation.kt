@@ -29,6 +29,9 @@ import com.example.accountkeeper.ui.screens.ImportExportScreen
 import com.example.accountkeeper.ui.screens.StatisticsScreen
 import com.example.accountkeeper.ui.screens.CategorySettingsScreen
 import com.example.accountkeeper.ui.screens.AboutScreen
+import com.example.accountkeeper.ui.screens.SettingsScreen
+import com.example.accountkeeper.ui.screens.DataManagementScreen
+import com.example.accountkeeper.ui.screens.AppSettingsScreen
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -42,6 +45,12 @@ data class AddEditTransactionRoute(val transactionId: Long = -1L)
 
 @Serializable
 object SettingsRoute
+
+@Serializable
+object DataManagementRoute
+
+@Serializable
+object AppSettingsRoute
 
 @Serializable
 object CategorySettingsRoute
@@ -92,13 +101,29 @@ fun AppNavigation(
             StatisticsScreen()
         }
         composable<SettingsRoute> {
-            ImportExportScreen(
+            SettingsScreen(
+                onNavigateToDataManagement = {
+                    navController.navigate(DataManagementRoute)
+                },
+                onNavigateToAppSettings = {
+                    navController.navigate(AppSettingsRoute)
+                },
                 onNavigateToCategorySettings = {
                     navController.navigate(CategorySettingsRoute)
                 },
                 onNavigateToAbout = {
                     navController.navigate(AboutRoute)
                 }
+            )
+        }
+        composable<DataManagementRoute> {
+            DataManagementScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        composable<AppSettingsRoute> {
+            AppSettingsScreen(
+                onNavigateBack = { navController.popBackStack() }
             )
         }
         composable<AddEditTransactionRoute> { backStackEntry ->
