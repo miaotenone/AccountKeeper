@@ -356,7 +356,7 @@ fun StatisticsScreen(
                         isBalanceMode = statType == StatType.BALANCE,
                         isIncome = categoryId == -1L
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(4.dp))
                 }
             } else {
                 Box(

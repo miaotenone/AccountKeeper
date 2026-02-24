@@ -227,7 +227,7 @@ fun PremiumBalanceCard(
     }
 
     val cardHeight by animateDpAsState(
-        targetValue = if (isExpanded) 220.dp else 140.dp,
+        targetValue = if (isExpanded) Dp.Infinity else Dp.Infinity,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioMediumBouncy,
             stiffness = Spring.StiffnessLow
@@ -238,7 +238,7 @@ fun PremiumBalanceCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .height(cardHeight),
+            .padding(horizontal = 4.dp),
         shape = RoundedCornerShape(28.dp),
         elevation = CardDefaults.cardElevation(
             defaultElevation = 8.dp,
@@ -253,8 +253,8 @@ fun PremiumBalanceCard(
             // Decorative circles
             Box(
                 modifier = Modifier
-                    .size(200.dp)
-                    .offset(x = (-80).dp, y = (-80).dp)
+                    .size(180.dp)
+                    .offset(x = (-70).dp, y = (-70).dp)
                     .background(
                         Color.White.copy(alpha = 0.1f),
                         CircleShape
@@ -262,8 +262,8 @@ fun PremiumBalanceCard(
             )
             Box(
                 modifier = Modifier
-                    .size(150.dp)
-                    .offset(x = 100.dp, y = 80.dp)
+                    .size(120.dp)
+                    .offset(x = 80.dp, y = 60.dp)
                     .background(
                         Color.White.copy(alpha = 0.08f),
                         CircleShape
@@ -272,9 +272,10 @@ fun PremiumBalanceCard(
 
             Column(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(24.dp)
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 12.dp)
             ) {
+                // Header row
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -283,33 +284,57 @@ fun PremiumBalanceCard(
                     Row(
                         modifier = Modifier.clickable { onTogglePeriod() },
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Text(
                             if (isShowingMonthly) strings.thisMonth else strings.totalAssets,
                             style = MaterialTheme.typography.titleMedium,
-                            color = Color.White.copy(alpha = 0.9f)
+                            color = Color.White.copy(alpha = 0.95f)
                         )
                         Icon(
                             if (isShowingMonthly) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowUp,
                             contentDescription = "Toggle period",
-                            tint = Color.White.copy(alpha = 0.9f),
-                            modifier = Modifier.size(20.dp)
+                            tint = Color.White.copy(alpha = 0.95f),
+                            modifier = Modifier.size(18.dp)
                         )
                     }
 
                     IconButton(
-                        onClick = onToggleExpand
+                        onClick = onToggleExpand,
+                        modifier = Modifier.size(32.dp)
                     ) {
                         Icon(
                             if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                             contentDescription = "Toggle expand",
-                            tint = Color.White
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
+
+                // Total Balance - always visible
+                Column(
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        strings.totalBalance,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White.copy(alpha = 0.75f)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        "$currency${String.format(Locale.US, "%.2f", totalBalance)}",
+                        style = MaterialTheme.typography.headlineLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
 
                 AnimatedVisibility(
                     visible = isExpanded,
@@ -321,24 +346,15 @@ fun PremiumBalanceCard(
                     ) + fadeIn(),
                     exit = shrinkVertically() + fadeOut()
                 ) {
-                    Column {
-                        Text(
-                            strings.totalBalance,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color.White.copy(alpha = 0.7f)
-                        )
-                        Text(
-                            "$currency${String.format(Locale.US, "%.2f", totalBalance)}",
-                            style = MaterialTheme.typography.displaySmall,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-
-                        Spacer(modifier = Modifier.height(24.dp))
-
+                    Column(
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        // Income and Expense row
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceEvenly
+                            horizontalArrangement = Arrangement.SpaceEvenly,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             BalanceStat(
                                 label = strings.income,
@@ -347,7 +363,7 @@ fun PremiumBalanceCard(
                                 color = Color(0xFF5BD9CA)
                             )
                             VerticalDivider(
-                                color = Color.White.copy(alpha = 0.2f),
+                                color = Color.White.copy(alpha = 0.25f),
                                 thickness = 1.dp,
                                 modifier = Modifier.height(50.dp)
                             )
@@ -374,19 +390,21 @@ fun BalanceStat(
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.padding(horizontal = 4.dp)
+        modifier = Modifier.padding(horizontal = 2.dp)
     ) {
         Text(
             label,
             style = MaterialTheme.typography.bodySmall,
-            color = Color.White.copy(alpha = 0.7f)
+            color = Color.White.copy(alpha = 0.75f)
         )
+        Spacer(modifier = Modifier.height(2.dp))
         Text(
             "$currency${String.format(Locale.US, "%.2f", value)}",
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Bold,
             color = color,
-            maxLines = 1
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
