@@ -138,9 +138,9 @@ fun AddEditTransactionScreen(
                 .padding(paddingValues)
                 .padding(horizontal = 20.dp)
                 .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(24.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(4.dp))
 
             // Type Selector with Premium Design
             PremiumTypeSelector(
@@ -156,19 +156,19 @@ fun AddEditTransactionScreen(
                 strings = strings
             )
 
+            // Date Selection with Premium Design
+            PremiumDateSelector(
+                date = transactionDate,
+                onClick = { showDatePicker = true },
+                strings = strings,
+                modifier = Modifier.fillMaxWidth()
+            )
+
             // Amount Input with Premium Design
             PremiumAmountInput(
                 amountText = amountText,
                 onAmountChange = { amountText = it },
                 currency = currency,
-                strings = strings,
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            // Date Selection with Premium Design
-            PremiumDateSelector(
-                date = transactionDate,
-                onClick = { showDatePicker = true },
                 strings = strings,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -180,7 +180,7 @@ fun AddEditTransactionScreen(
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(4.dp))
             PremiumCategoryGrid(
                 categories = filteredCategories,
                 selectedCategoryId = selectedCategoryId,
@@ -196,7 +196,7 @@ fun AddEditTransactionScreen(
                 modifier = Modifier.fillMaxWidth()
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             // Save Button with Premium Design
             PremiumSaveButton(
@@ -243,7 +243,7 @@ fun PremiumTypeSelector(
         Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(72.dp)
+                    .height(60.dp)
                     .clip(RoundedCornerShape(24.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant)
             ) {
@@ -331,21 +331,21 @@ fun PremiumAmountInput(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(24.dp)
+                .padding(16.dp)
         ) {
             Text(
                 strings.amount,
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(4.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
                     currency,
-                    style = MaterialTheme.typography.displayMedium,
+                    style = MaterialTheme.typography.headlineLarge,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -355,7 +355,7 @@ fun PremiumAmountInput(
                     onValueChange = onAmountChange,
                     modifier = Modifier.weight(1f),
                     placeholder = { Text("0.00") },
-                    textStyle = MaterialTheme.typography.displayMedium.copy(
+                    textStyle = MaterialTheme.typography.headlineLarge.copy(
                         fontWeight = FontWeight.Bold
                     ),
                     singleLine = true,
@@ -391,7 +391,7 @@ fun PremiumDateSelector(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(24.dp),
+                .padding(16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -401,7 +401,7 @@ fun PremiumDateSelector(
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     dateFormatter.format(Date(date)),
                     style = MaterialTheme.typography.titleLarge,
@@ -411,7 +411,7 @@ fun PremiumDateSelector(
             }
             Box(
                 modifier = Modifier
-                    .size(48.dp)
+                    .size(40.dp)
                     .background(
                         MaterialTheme.colorScheme.primaryContainer,
                         RoundedCornerShape(12.dp)
@@ -438,9 +438,9 @@ fun PremiumCategoryGrid(
 ) {
     LazyVerticalGrid(
         columns = GridCells.Fixed(3),
-        modifier = modifier.height(200.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        modifier = modifier.height(300.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         items(categories, key = { it.id }) { category ->
             val isSelected = selectedCategoryId == category.id
@@ -462,13 +462,9 @@ fun PremiumCategoryGrid(
                     .fillMaxWidth()
                     .aspectRatio(1f)
                     .scale(scale),
-                shape = RoundedCornerShape(20.dp),
+                shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = if (isSelected) {
-                        categoryColor
-                    } else {
-                        MaterialTheme.colorScheme.surfaceVariant
-                    }
+                    containerColor = categoryColor
                 ),
                 elevation = CardDefaults.cardElevation(
                     defaultElevation = if (isSelected) 8.dp else 2.dp
@@ -480,13 +476,9 @@ fun PremiumCategoryGrid(
                 ) {
                     Text(
                         text = category.name,
-                        style = MaterialTheme.typography.titleSmall,
+                        style = MaterialTheme.typography.titleMedium,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                        color = if (isSelected) {
-                            Color.White
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
+                        color = Color.White,
                         textAlign = TextAlign.Center,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
@@ -514,11 +506,11 @@ fun PremiumNoteInput(
             onValueChange = onNoteChange,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(12.dp),
             placeholder = { Text("Add a note...") },
             label = { Text(strings.note) },
-            minLines = 3,
-            maxLines = 5,
+            minLines = 2,
+            maxLines = 4,
             shape = RoundedCornerShape(16.dp),
             colors = TextFieldDefaults.colors(
                 unfocusedContainerColor = Color.Transparent,

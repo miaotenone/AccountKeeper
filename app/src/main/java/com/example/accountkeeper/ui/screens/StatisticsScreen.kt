@@ -517,77 +517,156 @@ fun PremiumPieChart(
     categories: List<com.example.accountkeeper.data.model.Category>,
     strings: AppStrings
 ) {
-    val isDark = isSystemInDarkTheme()
+    // 准备饼图数据
+    val pieData = categoryTotals.mapIndexed { index, pair ->
+        val (categoryId, amount) = pair
+        val categoryName = if (statType == StatType.BALANCE) {
+            if (categoryId == -1L) strings.income else strings.expense
+        } else {
+            categories.find { it.id == categoryId }?.name ?: strings.other
+        }
+        val percentage = if (pieTotalDisplay > 0) (amount / pieTotalDisplay) * 100 else 0.0
+        val categoryColor = if (statType == StatType.BALANCE) {
+            if (categoryId == -1L) Color(0xFF5BD9CA) else Color(0xFFFF6B6B)
+        } else {
+            ChartColors[index % ChartColors.size]
+        }
+        PieSliceData(categoryName, percentage, categoryColor)
+    }.take(8) // 只显示比例最大的前八项
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(28.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
     ) {
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(28.dp),
-            contentAlignment = Alignment.Center
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Canvas(modifier = Modifier.size(260.dp)) {
-                var startAngle = -90f
-                val center = Offset(size.width / 2, size.height / 2)
-                val radius = size.width / 2
+            // 饼图标题
+            Text(
+                "开销比例",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
 
-                val textPaint = Paint().apply {
-                    color = if (isDark) {
-                        android.graphics.Color.WHITE
-                    } else {
-                        android.graphics.Color.DKGRAY
-                    }
-                    textSize = 32f
-                    textAlign = Paint.Align.CENTER
-                    typeface = Typeface.DEFAULT_BOLD
-                }
+            // 饼状图区域
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(320.dp),
+                horizontalArrangement = Arrangement.spacedBy(20.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // 左侧：饼图
+                val isDarkTheme = isSystemInDarkTheme()
+                Box(
+                    modifier = Modifier
+                        .weight(1.6f)
+                        .fillMaxHeight(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Canvas(
+                        modifier = Modifier.size(240.dp)
+                    ) {
+                        val canvasSize = size
+                        val centerX = canvasSize.width / 2
+                        val centerY = canvasSize.height / 2
+                        val radius = minOf(centerX, centerY) - 10.dp.toPx()
 
-                categoryTotals.forEachIndexed { index, pair ->
-                    val sweepAngle = (pair.second / pieTotalDisplay).toFloat() * 360f
-                    val color = if (statType == StatType.BALANCE) {
-                        if (pair.first == -1L) Color(0xFF5BD9CA) else Color(0xFFFF6B6B)
-                    } else {
-                        ChartColors[index % ChartColors.size]
-                    }
+                        var startAngle = -90f
 
-                    drawArc(
-                        color = color,
-                        startAngle = startAngle,
-                        sweepAngle = sweepAngle,
-                        useCenter = false,
-                        style = Stroke(width = 70f)
-                    )
+                        pieData.forEach { slice ->
+                            if (slice.percentage > 0) {
+                                val sweepAngle = (slice.percentage.toFloat() / 100f) * 360f
 
-                    val midAngle = startAngle + sweepAngle / 2
-                    val midAngleRad = Math.toRadians(midAngle.toDouble())
-                    val textRadius = radius + 80f
+                                drawArc(
+                                    color = slice.color,
+                                    startAngle = startAngle,
+                                    sweepAngle = sweepAngle,
+                                    useCenter = true,
+                                    style = androidx.compose.ui.graphics.drawscope.Fill,
+                                    topLeft = Offset(centerX - radius, centerY - radius),
+                                    size = Size(radius * 2, radius * 2)
+                                )
 
-                    val textX = (center.x + textRadius * cos(midAngleRad)).toFloat()
-                    val textY = (center.y + textRadius * sin(midAngleRad)).toFloat()
+                                // 绘制白色边框分隔
+                                drawArc(
+                                    color = Color.White,
+                                    startAngle = startAngle,
+                                    sweepAngle = sweepAngle,
+                                    useCenter = true,
+                                    style = Stroke(width = 2.dp.toPx()),
+                                    topLeft = Offset(centerX - radius, centerY - radius),
+                                    size = Size(radius * 2, radius * 2)
+                                )
 
-                    if (sweepAngle > 18f) {
-                        val catName = if (statType == StatType.BALANCE) {
-                            if (pair.first == -1L) strings.income else strings.expense
-                        } else {
-                            categories.find { it.id == pair.first }?.name ?: strings.other
+                                startAngle += sweepAngle
+                            }
                         }
-                        drawContext.canvas.nativeCanvas.drawText(
-                            catName,
-                            textX,
-                            textY,
-                            textPaint
+
+                        // 绘制中心圆（创建环形效果）
+                        drawCircle(
+                            color = if (isDarkTheme) Color(0xFF1E1E1E) else Color.White,
+                            radius = radius * 0.5f,
+                            center = Offset(centerX, centerY)
                         )
                     }
+                }
 
-                    startAngle += sweepAngle
+                // 右侧：图例（确保所有文字都显示）
+                Box(
+                    modifier = Modifier
+                        .weight(0.8f)
+                        .fillMaxHeight(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxHeight(),
+                        verticalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterVertically),
+                        horizontalAlignment = Alignment.Start
+                    ) {
+                        pieData.forEach { slice ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(12.dp)
+                                        .background(slice.color, CircleShape)
+                                )
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = slice.name,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = String.format(Locale.US, "%.1f%%", slice.percentage),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
     }
 }
+
+data class PieSliceData(
+    val name: String,
+    val percentage: Double,
+    val color: Color
+)
 
 @Composable
 fun PremiumCategoryBreakdown(
