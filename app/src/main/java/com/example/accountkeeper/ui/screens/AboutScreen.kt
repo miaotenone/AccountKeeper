@@ -113,7 +113,7 @@ fun AboutScreen(
             AboutCard(
                 icon = Icons.Default.Info,
                 title = strings.helpTutorial,
-                description = strings.helpTutorialDescription,
+                description = strings.helpTutorialShort,
                 isClickable = true,
                 onClick = { showHelpDialog = true }
             )
@@ -271,6 +271,8 @@ fun HelpTutorialDialog(
     onDismiss: () -> Unit,
     isDark: Boolean
 ) {
+    val strings = LocalAppStrings.current
+    
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(
@@ -294,7 +296,7 @@ fun HelpTutorialDialog(
                     .padding(20.dp)
             ) {
                 Text(
-                    "AccountKeeper 使用教程",
+                    strings.helpTutorial,
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     color = if (isDark) DarkOnBackground else LightOnBackground
@@ -316,7 +318,7 @@ fun HelpTutorialDialog(
                     )
                     
                     Text(
-                        "AccountKeeper 是一款简洁易用的个人财务管理应用，帮助您轻松记录和管理日常收支。",
+                        "AccountKeeper 是一款简洁易用的个人财务管理应用，帮助您轻松记录和管理日常收支。支持滑动删除、批量操作、账单导入等丰富功能。",
                         style = MaterialTheme.typography.bodyMedium,
                         color = if (isDark) DarkOnBackground else LightOnBackground,
                         modifier = Modifier.padding(bottom = 8.dp)
@@ -325,64 +327,155 @@ fun HelpTutorialDialog(
                     Spacer(modifier = Modifier.height(12.dp))
                     
                     Text(
-                        "✨ 主要功能",
+                        "🏠 首页功能",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = if (isDark) DarkPrimary else LightPrimary
                     )
                     
                     HelpItem(
-                        "📊 首页统计",
-                        "查看总资产、本月收支统计和最近交易记录"
+                        "💰 余额卡片",
+                        "显示总余额、总收入、总支出，支持本月/总资产切换"
                     )
                     
                     HelpItem(
-                        "📈 数据统计",
-                        "按日、周、月、年查看收支趋势和分类排行"
+                        "📝 交易列表",
+                        "按日期分组显示，支持点击编辑、滑动删除、长按批量选择"
                     )
                     
                     HelpItem(
-                        "💰 记录交易",
-                        "快速添加收入和支出，支持自定义分类和备注"
-                    )
-                    
-                    HelpItem(
-                        "💾 数据备份",
-                        "支持本地自动备份和手动备份，CSV 导入导出"
-                    )
-                    
-                    HelpItem(
-                        "🏷️ 分类管理",
-                        "自定义收入和支出分类，灵活管理"
+                        "➕ 快速添加",
+                        "点击右下角 + 按钮快速添加交易"
                     )
                     
                     Spacer(modifier = Modifier.height(12.dp))
                     
                     Text(
-                        "🚀 快速上手",
+                        "📊 统计分析",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = if (isDark) DarkPrimary else LightPrimary
                     )
                     
                     HelpItem(
-                        "1. 首次使用",
-                        "点击首页的 + 号按钮开始记录第一笔交易"
+                        "⏰ 时间范围",
+                        "支持日、周、月、年及自定义日期范围"
                     )
                     
                     HelpItem(
-                        "2. 添加分类",
-                        "在设置中管理分类，创建适合您的收支类别"
+                        "📈 趋势图表",
+                        "折线图显示收支趋势，饼图显示分类占比"
                     )
                     
                     HelpItem(
-                        "3. 查看统计",
-                        "切换到统计页面，了解您的消费习惯"
+                        "🏆 分类排行",
+                        "按金额排序显示各分类的支出/收入"
+                    )
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    Text(
+                        "💾 数据管理",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isDark) DarkPrimary else LightPrimary
                     )
                     
                     HelpItem(
-                        "4. 备份数据",
-                        "定期创建手动备份，确保数据安全"
+                        "📤 CSV 导出",
+                        "导出全量账本数据到 CSV 文件"
+                    )
+                    
+                    HelpItem(
+                        "📥 CSV 导入",
+                        "导入标准 CSV 备份文件，自动合并数据"
+                    )
+                    
+                    HelpItem(
+                        "🧾 账单导入",
+                        "支持微信和支付宝账单 CSV 文件导入"
+                    )
+                    
+                    HelpItem(
+                        "🔐 自动备份",
+                        "每次操作自动创建备份，可设置保留数量"
+                    )
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    Text(
+                        "🏷️ 分类管理",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isDark) DarkPrimary else LightPrimary
+                    )
+                    
+                    HelpItem(
+                        "➕ 添加分类",
+                        "创建自定义的收入和支出分类"
+                    )
+                    
+                    HelpItem(
+                        "✏️ 重命名",
+                        "修改分类名称"
+                    )
+                    
+                    HelpItem(
+                        "🗑️ 删除",
+                        "删除自定义分类（预设分类不可删除）"
+                    )
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    Text(
+                        "⚙️ 个性化设置",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isDark) DarkPrimary else LightPrimary
+                    )
+                    
+                    HelpItem(
+                        "🌓 主题切换",
+                        "支持深色/浅色主题，可跟随系统"
+                    )
+                    
+                    HelpItem(
+                        "🌐 语言切换",
+                        "支持中文和英文"
+                    )
+                    
+                    HelpItem(
+                        "💱 货币符号",
+                        "支持多种货币符号（¥、$、€等）"
+                    )
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    Text(
+                        "💡 使用技巧",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isDark) DarkPrimary else LightPrimary
+                    )
+                    
+                    HelpItem(
+                        "1. 滑动删除",
+                        "向左滑动交易卡片显示删除按钮"
+                    )
+                    
+                    HelpItem(
+                        "2. 批量操作",
+                        "长按交易进入选择模式，批量删除或编辑"
+                    )
+                    
+                    HelpItem(
+                        "3. 定期备份",
+                        "每周创建手动备份，确保数据安全"
+                    )
+                    
+                    HelpItem(
+                        "4. 账单导入",
+                        "每月导入微信/支付宝账单，自动记录交易"
                     )
                     
                     Spacer(modifier = Modifier.height(16.dp))
@@ -395,7 +488,7 @@ fun HelpTutorialDialog(
                         ),
                         shape = RoundedCornerShape(12.dp)
                     ) {
-                        Text("知道了", color = Color.White)
+                        Text(strings.close, color = Color.White)
                     }
                 }
             }
