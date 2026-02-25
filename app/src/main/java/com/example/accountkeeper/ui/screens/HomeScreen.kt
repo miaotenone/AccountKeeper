@@ -4,6 +4,8 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -11,10 +13,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.*
@@ -26,6 +30,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
+import androidx.compose.ui.unit.IntOffset
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.accountkeeper.LocalCurrencySymbol
 import com.example.accountkeeper.data.model.Transaction
@@ -55,6 +60,11 @@ fun HomeScreen(
     var isBalanceCardExpanded by remember { mutableStateOf(true) }
     var transactionToDelete by remember { mutableStateOf<Transaction?>(null) }
     var showDeleteDialog by remember { mutableStateOf(false) }
+    
+    var selectionMode by remember { mutableStateOf(false) }
+    val selectedTransactions = remember { mutableStateOf<Long>(0L) }
+    val selectedIds = remember { mutableStateListOf<Long>() }
+    var showBatchDeleteDialog by remember { mutableStateOf(false) }
 
     val currentMonthStart = remember {
         Calendar.getInstance().apply {
@@ -94,47 +104,178 @@ fun HomeScreen(
                 color = Color.Transparent,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                TopAppBar(
-                    title = {
-                        Column {
+                if (selectionMode) {
+                    TopAppBar(
+                        title = {
                             Text(
-                                "AccountKeeper",
-                                style = MaterialTheme.typography.headlineSmall,
+                                "${selectedIds.size} ${strings.selected}",
+                                style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
-                            Text(
-                                "Manage your finances",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = Color.Transparent
+                        },
+                        navigationIcon = {
+                            IconButton(onClick = {
+                                selectionMode = false
+                                selectedIds.clear()
+                            }) {
+                                Icon(
+                                    Icons.Default.KeyboardArrowDown,
+                                    contentDescription = strings.cancel,
+                                    tint = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        },
+                        actions = {
+                            IconButton(
+                                onClick = { showBatchDeleteDialog = true },
+                                enabled = selectedIds.isNotEmpty()
+                            ) {
+                                Icon(
+                                    Icons.Default.Add,
+                                    contentDescription = strings.delete,
+                                    tint = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.rotate(45f)
+                                )
+                            }
+                            IconButton(
+                                onClick = {
+                                    if (selectedIds.size == 1) {
+                                        onNavigateToEditTransaction(selectedIds.first())
+                                        selectionMode = false
+                                        selectedIds.clear()
+                                    }
+                                },
+                                enabled = selectedIds.size == 1
+                            ) {
+                                Icon(
+                                    Icons.Default.Edit,
+                                    contentDescription = strings.editTransaction,
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
+                        )
                     )
-                )
+                } else {
+                    TopAppBar(
+                        title = {
+                            Column {
+                                Text(
+                                    "AccountKeeper",
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    "Manage your finances",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = Color.Transparent
+                        )
+                    )
+                }
             }
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = onNavigateToAddTransaction,
-                containerColor = MaterialTheme.colorScheme.primary,
-                elevation = FloatingActionButtonDefaults.elevation(
-                    defaultElevation = 16.dp,
-                    pressedElevation = 24.dp
-                ),
-                shape = CircleShape,
-                modifier = Modifier.size(64.dp)
-            ) {
-                Icon(
-                    Icons.Default.Add,
-                    contentDescription = strings.addTransaction,
-                    modifier = Modifier.size(32.dp)
-                )
+            if (!selectionMode) {
+                FloatingActionButton(
+                    onClick = onNavigateToAddTransaction,
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    elevation = FloatingActionButtonDefaults.elevation(
+                        defaultElevation = 16.dp,
+                        pressedElevation = 24.dp
+                    ),
+                    shape = CircleShape,
+                    modifier = Modifier.size(64.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Add,
+                        contentDescription = strings.addTransaction,
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
             }
         }
     ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .padding(horizontal = 20.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            if (!selectionMode) {
+                PremiumBalanceCard(
+                    totalBalance = totalBalance,
+                    totalIncome = totalIncome,
+                    totalExpense = totalExpense,
+                    currency = currency,
+                    isShowingMonthly = isShowingMonthly,
+                    isExpanded = isBalanceCardExpanded,
+                    onTogglePeriod = { isShowingMonthly = !isShowingMonthly },
+                    onToggleExpand = { isBalanceCardExpanded = !isBalanceCardExpanded },
+                    strings = strings
+                )
+            }
+
+            groupedTransactions.forEach { (dateString, txList) ->
+                DateHeader(
+                    date = dateString,
+                    txList = txList,
+                    currency = currency,
+                    strings = strings
+                )
+
+                txList.forEach { transaction ->
+                    val categoryName = categories.find { it.id == transaction.categoryId }?.name ?: strings.other
+                    val isSelected = selectedIds.contains(transaction.id)
+                    PremiumTransactionItem(
+                        transaction = transaction,
+                        categoryName = categoryName,
+                        currency = currency,
+                        onClick = {
+                            if (selectionMode) {
+                                if (isSelected) {
+                                    selectedIds.remove(transaction.id)
+                                } else {
+                                    selectedIds.add(transaction.id)
+                                }
+                            } else {
+                                onNavigateToEditTransaction(transaction.id)
+                            }
+                        },
+                        onLongClick = {
+                            if (selectionMode) {
+                                if (isSelected) {
+                                    selectedIds.remove(transaction.id)
+                                } else {
+                                    selectedIds.add(transaction.id)
+                                }
+                            } else {
+                                selectionMode = true
+                                selectedIds.add(transaction.id)
+                            }
+                        },
+                        onDelete = {
+                            viewModel.deleteTransaction(transaction)
+                        },
+                        isSelected = isSelected,
+                        inSelectionMode = selectionMode
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(100.dp))
+        }
+
         if (showDeleteDialog && transactionToDelete != null) {
             DeleteTransactionDialog(
                 onConfirm = {
@@ -150,51 +291,21 @@ fun HomeScreen(
             )
         }
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .padding(horizontal = 20.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            // Premium Balance Card with Glass Effect
-            PremiumBalanceCard(
-                totalBalance = totalBalance,
-                totalIncome = totalIncome,
-                totalExpense = totalExpense,
-                currency = currency,
-                isShowingMonthly = isShowingMonthly,
-                isExpanded = isBalanceCardExpanded,
-                onTogglePeriod = { isShowingMonthly = !isShowingMonthly },
-                onToggleExpand = { isBalanceCardExpanded = !isBalanceCardExpanded },
+        if (showBatchDeleteDialog && selectedIds.isNotEmpty()) {
+            BatchDeleteTransactionDialog(
+                count = selectedIds.size,
+                onConfirm = {
+                    val transactionsToDelete = transactions.filter { it.id in selectedIds }
+                    viewModel.deleteTransactions(transactionsToDelete)
+                    selectionMode = false
+                    selectedIds.clear()
+                    showBatchDeleteDialog = false
+                },
+                onDismiss = {
+                    showBatchDeleteDialog = false
+                },
                 strings = strings
             )
-
-            groupedTransactions.forEach { (dateString, txList) ->
-                DateHeader(
-                    date = dateString,
-                    txList = txList,
-                    currency = currency,
-                    strings = strings
-                )
-
-                txList.forEach { transaction ->
-                    val categoryName = categories.find { it.id == transaction.categoryId }?.name ?: strings.other
-                    PremiumTransactionItem(
-                        transaction = transaction,
-                        categoryName = categoryName,
-                        currency = currency,
-                        onClick = { onNavigateToEditTransaction(transaction.id) },
-                        onLongClick = {
-                            transactionToDelete = transaction
-                            showDeleteDialog = true
-                        }
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(100.dp))
         }
     }
 }
@@ -464,13 +575,17 @@ fun DateHeader(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun PremiumTransactionItem(
     transaction: Transaction,
     categoryName: String,
     currency: String,
     onClick: () -> Unit,
-    onLongClick: () -> Unit
+    onLongClick: () -> Unit,
+    onDelete: () -> Unit,
+    isSelected: Boolean = false,
+    inSelectionMode: Boolean = false
 ) {
     val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
     val isIncome = transaction.type == TransactionType.INCOME
@@ -485,91 +600,261 @@ fun PremiumTransactionItem(
         label = "scale"
     )
 
-    Card(
-        onClick = { onClick() },
-        modifier = Modifier
-            .fillMaxWidth()
-            .scale(scale)
-            .pointerInput(Unit) {
-                detectTapGestures(
-                    onLongPress = { onLongClick() }
-                )
-            },
-        shape = RoundedCornerShape(20.dp),
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = 2.dp,
-            hoveredElevation = 4.dp
-        )
-    ) {
-        Row(
+    val borderColor by animateColorAsState(
+        targetValue = if (isSelected) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            Color.Transparent
+        },
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "borderColor"
+    )
+
+    val backgroundColor by animateColorAsState(
+        targetValue = if (isSelected) {
+            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+        } else {
+            MaterialTheme.colorScheme.surface
+        },
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "backgroundColor"
+    )
+
+    if (inSelectionMode) {
+        Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .scale(scale)
+                .combinedClickable(
+                    onClick = { onClick() },
+                    onLongClick = { onLongClick() }
+                ),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = backgroundColor
+            ),
+            border = if (isSelected) {
+                BorderStroke(2.dp, borderColor)
+            } else {
+                null
+            },
+            elevation = CardDefaults.cardElevation(
+                defaultElevation = 2.dp,
+                hoveredElevation = 4.dp
+            )
         ) {
-            // Icon with gradient
-            Box(
+            Row(
                 modifier = Modifier
-                    .size(52.dp)
-                    .background(
-                        if (isIncome) {
-                            if (isSystemInDarkTheme()) {
-                                Brush.verticalGradient(DarkGradientIncome)
-                            } else {
-                                Brush.verticalGradient(LightGradientIncome)
-                            }
-                        } else {
-                            if (isSystemInDarkTheme()) {
-                                Brush.verticalGradient(DarkGradientExpense)
-                            } else {
-                                Brush.verticalGradient(LightGradientExpense)
-                            }
-                        },
-                        CircleShape
-                    ),
-                contentAlignment = Alignment.Center
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    categoryName.take(1).uppercase(),
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
-            }
-
-            Column(
-                modifier = Modifier.weight(1f)
-            ) {
-                Text(
-                    categoryName,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                if (transaction.note.isNotBlank()) {
-                    Text(
-                        transaction.note,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                if (inSelectionMode) {
+                    Checkbox(
+                        checked = isSelected,
+                        onCheckedChange = { onClick() },
+                        colors = CheckboxDefaults.colors(
+                            checkedColor = MaterialTheme.colorScheme.primary,
+                            uncheckedColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     )
                 }
+
+                Box(
+                    modifier = Modifier
+                        .size(52.dp)
+                        .background(
+                            if (isIncome) {
+                                if (isSystemInDarkTheme()) {
+                                    Brush.verticalGradient(DarkGradientIncome)
+                                } else {
+                                    Brush.verticalGradient(LightGradientIncome)
+                                }
+                            } else {
+                                if (isSystemInDarkTheme()) {
+                                    Brush.verticalGradient(DarkGradientExpense)
+                                } else {
+                                    Brush.verticalGradient(LightGradientExpense)
+                                }
+                            },
+                            CircleShape
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        categoryName.take(1).uppercase(),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
+
+                Column(
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        categoryName,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    if (transaction.note.isNotBlank()) {
+                        Text(
+                            transaction.note,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Text(
+                        timeFormat.format(Date(transaction.date)),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                val displayAmount = CurrencyUtils.convertToDisplay(transaction.amount, currency)
                 Text(
-                    timeFormat.format(Date(transaction.date)),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    text = "${if (isIncome) "+" else "-"}$currency${String.format(Locale.US, "%.2f", displayAmount)}",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isIncome) Color(0xFF00B5A4) else Color(0xFFE63946)
                 )
             }
-
-            val displayAmount = CurrencyUtils.convertToDisplay(transaction.amount, currency)
-            Text(
-                text = "${if (isIncome) "+" else "-"}$currency${String.format(Locale.US, "%.2f", displayAmount)}",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = if (isIncome) Color(0xFF00B5A4) else Color(0xFFE63946)
-            )
+        }
+    } else {
+        var offsetX by remember { mutableStateOf(0f) }
+        val maxOffset = 300f
+        
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(IntrinsicSize.Min)
+                .draggable(
+                    orientation = androidx.compose.foundation.gestures.Orientation.Horizontal,
+                    state = rememberDraggableState { delta ->
+                        val newOffset = offsetX + delta
+                        offsetX = newOffset.coerceIn(-maxOffset, 0f)
+                    }
+                )
+        ) {
+            // Red delete background
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(
+                        MaterialTheme.colorScheme.error,
+                        RoundedCornerShape(20.dp)
+                    )
+                    .clickable { onDelete() }
+                    .padding(end = 20.dp),
+                contentAlignment = Alignment.CenterEnd
+            ) {
+                Icon(
+                    Icons.Default.Add,
+                    contentDescription = "Delete",
+                    tint = Color.White,
+                    modifier = Modifier.rotate(45f)
+                )
+            }
+            
+            // Transaction card
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .offset { IntOffset(offsetX.toInt(), 0) }
+                    .scale(scale)
+                    .combinedClickable(
+                        onClick = { onClick() },
+                        onLongClick = { onLongClick() }
+                    ),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = backgroundColor
+                ),
+                elevation = CardDefaults.cardElevation(
+                    defaultElevation = 2.dp,
+                    hoveredElevation = 4.dp
+                )
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(52.dp)
+                            .background(
+                                if (isIncome) {
+                                    if (isSystemInDarkTheme()) {
+                                        Brush.verticalGradient(DarkGradientIncome)
+                                    } else {
+                                        Brush.verticalGradient(LightGradientIncome)
+                                    }
+                                } else {
+                                    if (isSystemInDarkTheme()) {
+                                        Brush.verticalGradient(DarkGradientExpense)
+                                    } else {
+                                        Brush.verticalGradient(LightGradientExpense)
+                                    }
+                                },
+                                CircleShape
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            categoryName.take(1).uppercase(),
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+    
+                    Column(
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(
+                            categoryName,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        if (transaction.note.isNotBlank()) {
+                            Text(
+                                transaction.note,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        Text(
+                            timeFormat.format(Date(transaction.date)),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+    
+                    val displayAmount = CurrencyUtils.convertToDisplay(transaction.amount, currency)
+                    Text(
+                        text = "${if (isIncome) "+" else "-"}$currency${String.format(Locale.US, "%.2f", displayAmount)}",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isIncome) Color(0xFF00B5A4) else Color(0xFFE63946)
+                    )
+                }
+            }
         }
     }
 }
@@ -598,6 +883,51 @@ fun DeleteTransactionDialog(
         },
         text = {
             Text(strings.deleteConfirm)
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.error
+                )
+            ) {
+                Text(strings.ok)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(strings.cancel)
+            }
+        },
+        shape = RoundedCornerShape(24.dp)
+    )
+}
+
+@Composable
+fun BatchDeleteTransactionDialog(
+    count: Int,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+    strings: AppStrings
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                imageVector = Icons.Default.Add,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.error,
+                modifier = Modifier.rotate(45f)
+            )
+        },
+        title = {
+            Text(
+                strings.deleteTransaction,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Text("$count ${strings.deleteConfirm}")
         },
         confirmButton = {
             Button(

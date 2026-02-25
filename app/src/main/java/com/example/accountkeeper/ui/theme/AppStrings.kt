@@ -102,7 +102,8 @@ data class AppStrings(
     val authorName: String,
     val expenseRatio: String,
     val incomeRatio: String,
-    val overallRatio: String
+    val overallRatio: String,
+    val selected: String
 )
 
 val EnStrings = AppStrings(
@@ -207,7 +208,8 @@ val EnStrings = AppStrings(
     authorName = "Ricky Miao",
     expenseRatio = "Expense Ratio",
     incomeRatio = "Income Ratio",
-    overallRatio = "Overall Ratio"
+    overallRatio = "Overall Ratio",
+    selected = "selected"
 )
 
 val ZhStrings = AppStrings(
@@ -312,7 +314,8 @@ val ZhStrings = AppStrings(
     authorName = "Ricky Miao",
     expenseRatio = "支出比例",
     incomeRatio = "收入比例",
-    overallRatio = "综合比例"
+    overallRatio = "综合比例",
+    selected = "已选择"
 )
 
 val LocalAppStrings = androidx.compose.runtime.compositionLocalOf { EnStrings }

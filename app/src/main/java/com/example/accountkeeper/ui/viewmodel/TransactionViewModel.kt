@@ -64,6 +64,13 @@ class TransactionViewModel @Inject constructor(
         }
     }
 
+    fun deleteTransactions(transactions: List<Transaction>) {
+        viewModelScope.launch {
+            transactionRepository.deleteTransactions(transactions)
+            triggerAutoBackup()
+        }
+    }
+
     fun deleteAllTransactions() {
         viewModelScope.launch {
             transactionRepository.deleteAllTransactions()

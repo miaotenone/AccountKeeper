@@ -33,4 +33,7 @@ interface TransactionDao {
 
     @Delete
     suspend fun deleteTransaction(transaction: Transaction)
+
+    @Delete
+    suspend fun deleteTransactions(transactions: List<Transaction>)
 }
