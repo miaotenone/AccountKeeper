@@ -4,6 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -43,10 +44,10 @@ fun CategorySettingsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("分类管理") },
+                title = { Text(strings.categoryManagement) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = strings.back)
                     }
                 }
             )
@@ -56,7 +57,7 @@ fun CategorySettingsScreen(
                 categoryNameInput = ""
                 showAddDialog = true 
             }) {
-                Icon(Icons.Default.Add, contentDescription = "Add")
+                Icon(Icons.Default.Add, contentDescription = strings.add)
             }
         }
     ) { paddingValues ->
@@ -70,16 +71,16 @@ fun CategorySettingsScreen(
                 items(displayCategories, key = { it.id }) { category ->
                     ListItem(
                         headlineContent = { Text(category.name) },
-                        supportingContent = { if (category.isDefault) Text("默认分类") else null },
+                        supportingContent = { if (category.isDefault) Text(strings.defaultCategory) else null },
                         trailingContent = {
                             Row {
                                 IconButton(onClick = { 
                                     categoryNameInput = category.name
                                     nameError = null
                                     showRenameDialog = category
-                                }) { Icon(Icons.Default.Edit, contentDescription = "Edit") }
+                                }) { Icon(Icons.Default.Edit, contentDescription = strings.editTransaction) }
                                 IconButton(onClick = { showDeleteDialog = category }) { 
-                                    Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error) 
+                                    Icon(Icons.Default.Delete, contentDescription = strings.delete, tint = MaterialTheme.colorScheme.error) 
                                 }
                             }
                         }
@@ -92,7 +93,7 @@ fun CategorySettingsScreen(
         if (showAddDialog) {
             AlertDialog(
                 onDismissRequest = { showAddDialog = false },
-                title = { Text("新增分类") },
+                title = { Text(strings.addCategory) },
                 text = {
                     OutlinedTextField(
                         value = categoryNameInput,
@@ -100,10 +101,10 @@ fun CategorySettingsScreen(
                             categoryNameInput = it 
                             nameError = null
                         },
-                        label = { Text("分类名称") },
+                        label = { Text(strings.categoryName) },
                         singleLine = true,
                         isError = nameError != null,
-                        shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(12.dp),
                         supportingText = { nameError?.let { Text(it) } }
                     )
                 },
@@ -111,9 +112,9 @@ fun CategorySettingsScreen(
                     TextButton(onClick = {
                         val name = categoryNameInput.trim()
                         if (name.isEmpty()) {
-                            nameError = "名称不能为空"
+                            nameError = strings.nameEmptyError
                         } else if (categories.any { it.name.equals(name, ignoreCase = true) }) {
-                            nameError = "此分类名称已存在"
+                            nameError = strings.nameExistsError
                         } else {
                             categoryViewModel.addCategory(Category(name = name, type = currentType, isDefault = false))
                             showAddDialog = false
@@ -129,7 +130,7 @@ fun CategorySettingsScreen(
         showRenameDialog?.let { category ->
             AlertDialog(
                 onDismissRequest = { showRenameDialog = null },
-                title = { Text("重命名分类") },
+                title = { Text(strings.renameCategory) },
                 text = {
                     OutlinedTextField(
                         value = categoryNameInput,
@@ -137,10 +138,10 @@ fun CategorySettingsScreen(
                             categoryNameInput = it 
                             nameError = null
                         },
-                        label = { Text("新名称") },
+                        label = { Text(strings.newName) },
                         singleLine = true,
                         isError = nameError != null,
-                        shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(12.dp),
                         supportingText = { nameError?.let { Text(it) } }
                     )
                 },
@@ -148,9 +149,9 @@ fun CategorySettingsScreen(
                     TextButton(onClick = {
                         val name = categoryNameInput.trim()
                         if (name.isEmpty()) {
-                            nameError = "名称不能为空"
+                            nameError = strings.nameEmptyError
                         } else if (name != category.name && categories.any { it.name.equals(name, ignoreCase = true) }) {
-                            nameError = "此分类名称已存在"
+                            nameError = strings.nameExistsError
                         } else if (name != category.name) {
                             categoryViewModel.updateCategory(category.copy(name = name))
                             showRenameDialog = null
@@ -168,8 +169,8 @@ fun CategorySettingsScreen(
         showDeleteDialog?.let { category ->
             AlertDialog(
                 onDismissRequest = { showDeleteDialog = null },
-                title = { Text("删除分类") },
-                text = { Text("确定要删除自定义分类 \"${category.name}\" 吗？此操作无法撤销。") },
+                title = { Text(strings.deleteCategory) },
+                text = { Text(strings.deleteCategoryConfirm.replace("{name}", category.name)) },
                 confirmButton = {
                     TextButton(onClick = {
                         categoryViewModel.deleteCategory(category)

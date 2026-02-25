@@ -398,13 +398,13 @@ fun ImportExportScreen(
 
                     // Third-party Bill Import
                     Text(
-                        "第三方账单导入",
+                        strings.thirdPartyBillImport,
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
                     )
                     Text(
-                        "支持微信和支付宝账单CSV文件导入",
+                        strings.thirdPartyBillImportDescription,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -413,14 +413,14 @@ fun ImportExportScreen(
                         onClick = { importBillLauncher.launch("*/*") },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("导入微信/支付宝账单")
+                        Text(strings.importWeChatAlipayBill)
                     }
 
                     OutlinedButton(
                         onClick = { showBillFileDialog = true },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("管理已导入的账单文件")
+                        Text(strings.manageImportedBills)
                     }
                 }
             }

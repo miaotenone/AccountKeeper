@@ -332,13 +332,13 @@ fun DataManagementScreen(
                     title = {
                         Column {
                             Text(
-                                                if (strings.language == "中文") "第三方账单导入" else "Third-party Bill Import",
+                                                strings.dataManagement,
                                                 style = MaterialTheme.typography.headlineSmall,
                                                 fontWeight = FontWeight.Bold,
                                                 color = MaterialTheme.colorScheme.onSurface
                                             )
                                             Text(
-                                                if (strings.language == "中文") "微信和支付宝账单支持" else "WeChat and Alipay bill support",
+                                                strings.dataManagementDescription,
                                                 style = MaterialTheme.typography.bodySmall,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )                        }
@@ -403,25 +403,25 @@ fun DataManagementScreen(
             // Third-party Bill Import Section
             PremiumDataCard(
                 icon = Icons.Default.ReceiptLong,
-                title = if (strings.language == "中文") "第三方账单导入" else "Third-party Bill Import",
-                description = if (strings.language == "中文") "微信和支付宝账单支持" else "WeChat and Alipay bill support",
+                title = strings.thirdPartyBillImport,
+                description = strings.thirdPartyBillImportDescription,
                 color = if (isSystemInDarkTheme()) DarkGradientExpense else LightGradientExpense
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                    if (strings.language == "中文") "支持微信和支付宝账单CSV文件导入" else "Support WeChat and Alipay bill CSV file import",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                        strings.thirdPartyBillImportDescription,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
 
                     PremiumButton(
-                        text = if (strings.language == "中文") "导入微信/支付宝账单" else "Import WeChat/Alipay Bill",
+                        text = strings.importWeChatAlipayBill,
                         icon = Icons.Default.FileUpload,
                         onClick = { importBillLauncher.launch("*/*") }
                     )
 
                     PremiumButton(
-                        text = if (strings.language == "中文") "管理已导入的账单文件" else "Manage Imported Bill Files",
+                        text = strings.manageImportedBills,
                         icon = Icons.Default.FolderOpen,
                         onClick = { showBillFileDialog = true }
                     )

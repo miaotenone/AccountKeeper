@@ -52,7 +52,7 @@ fun AppSettingsScreen(
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                if (strings.language == "中文") "自定义您的应用体验" else "Customize your app experience",
+                                strings.customizeAppExperience,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -60,7 +60,7 @@ fun AppSettingsScreen(
                     },
                     navigationIcon = {
                         IconButton(onClick = onNavigateBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = if (strings.language == "中文") "返回" else "Back")
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = strings.back)
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
@@ -82,11 +82,7 @@ fun AppSettingsScreen(
             PremiumSettingCard(
                 icon = Icons.Default.DarkMode,
                 title = strings.darkMode,
-                description = if (isDark) {
-                    if (strings.language == "中文") "当前使用深色主题" else "Dark theme is enabled"
-                } else {
-                    if (strings.language == "中文") "当前使用浅色主题" else "Light theme is enabled"
-                },
+                description = if (isDark) strings.darkThemeEnabled else strings.lightThemeEnabled,
                 iconColor = if (isDark) DarkGradientPrimary else LightGradientPrimary
             ) {
                 Row(
@@ -97,11 +93,7 @@ fun AppSettingsScreen(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(strings.darkMode, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                         Text(
-                            if (strings.language == "中文") {
-                                if (appSettings.isDarkMode) "当前使用深色主题" else "当前使用浅色主题"
-                            } else {
-                                if (appSettings.isDarkMode) "Dark theme is enabled" else "Light theme is enabled"
-                            },
+                            if (appSettings.isDarkMode) strings.darkThemeEnabled else strings.lightThemeEnabled,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -117,11 +109,7 @@ fun AppSettingsScreen(
             PremiumSettingCard(
                 icon = Icons.Default.Language,
                 title = strings.language,
-                description = if (strings.language == "中文") {
-                    "当前语言: ${if (appSettings.language == "zh") "中文" else "English"}"
-                } else {
-                    "Current language: ${if (appSettings.language == "zh") "Chinese" else "English"}"
-                },
+                description = "${strings.currentLanguage}: ${if (appSettings.language == "zh") strings.chinese else strings.english}",
                 iconColor = if (isDark) DarkGradientIncome else LightGradientIncome
             ) {
                 Row(
@@ -158,7 +146,7 @@ fun AppSettingsScreen(
                         Column {
                             Text(strings.language, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                             Text(
-                                if (strings.language == "中文") "当前语言: ${if (appSettings.language == "zh") "中文" else "English"}" else "Current language: ${if (appSettings.language == "zh") "Chinese" else "English"}",
+                                "${strings.currentLanguage}: ${if (appSettings.language == "zh") strings.chinese else strings.english}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -166,7 +154,7 @@ fun AppSettingsScreen(
                     }
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        contentDescription = if (strings.language == "中文") "导航" else "Navigate",
+                        contentDescription = strings.navigate,
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(20.dp)
                     )
@@ -177,11 +165,7 @@ fun AppSettingsScreen(
             PremiumSettingCard(
                 icon = Icons.Default.AttachMoney,
                 title = strings.currencySymbol,
-                description = if (strings.language == "中文") {
-                    "当前货币符号: ${appSettings.currencySymbol}"
-                } else {
-                    "Current currency: ${appSettings.currencySymbol}"
-                },
+                description = "${strings.currentCurrency}: ${appSettings.currencySymbol}",
                 iconColor = if (isDark) DarkGradientExpense else LightGradientExpense
             ) {
                 Row(
@@ -218,7 +202,7 @@ fun AppSettingsScreen(
                         Column {
                             Text(strings.currencySymbol, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                             Text(
-                                if (strings.language == "中文") "当前货币符号: ${appSettings.currencySymbol}" else "Current currency: ${appSettings.currencySymbol}",
+                                "${strings.currentCurrency}: ${appSettings.currencySymbol}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -226,7 +210,7 @@ fun AppSettingsScreen(
                     }
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        contentDescription = if (strings.language == "中文") "导航" else "Navigate",
+                        contentDescription = strings.navigate,
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(20.dp)
                     )
@@ -236,8 +220,8 @@ fun AppSettingsScreen(
             // Info Card
             InfoCard(
                 icon = Icons.Default.Info,
-                title = if (strings.language == "中文") "设置说明" else "Settings Info",
-                description = if (strings.language == "中文") "更改语言和货币符号后，重启应用即可生效" else "Restart the app for language and currency changes to take effect"
+                title = strings.settingsInfo,
+                description = strings.settingsInfoDescription
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -252,7 +236,7 @@ fun AppSettingsScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     LanguageOption(
-                        name = "中文",
+                        name = strings.chinese,
                         selected = appSettings.language == "zh",
                         onClick = {
                             settingsViewModel.updateLanguage("zh")
@@ -260,7 +244,7 @@ fun AppSettingsScreen(
                         }
                     )
                     LanguageOption(
-                        name = "English",
+                        name = strings.english,
                         selected = appSettings.language == "en",
                         onClick = {
                             settingsViewModel.updateLanguage("en")
@@ -368,6 +352,7 @@ fun LanguageOption(
     selected: Boolean,
     onClick: () -> Unit
 ) {
+    val strings = LocalAppStrings.current
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -396,7 +381,7 @@ fun LanguageOption(
             if (selected) {
                 Icon(
                     imageVector = Icons.Default.Check,
-                    contentDescription = if (name == "中文") "已选择" else "Selected",
+                    contentDescription = strings.selected,
                     tint = MaterialTheme.colorScheme.primary
                 )
             }
@@ -410,6 +395,7 @@ fun CurrencyOption(
     selected: Boolean,
     onClick: () -> Unit
 ) {
+    val strings = LocalAppStrings.current
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -438,7 +424,7 @@ fun CurrencyOption(
             if (selected) {
                 Icon(
                     imageVector = Icons.Default.Check,
-                    contentDescription = if (symbol == "¥") "已选择" else "Selected",
+                    contentDescription = strings.selected,
                     tint = MaterialTheme.colorScheme.primary
                 )
             }
