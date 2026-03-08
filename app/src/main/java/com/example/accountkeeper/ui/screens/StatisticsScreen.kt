@@ -564,7 +564,7 @@ fun PremiumPieChart(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(320.dp),
+                    .height(IntrinsicSize.Min),
                 horizontalArrangement = Arrangement.spacedBy(20.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
