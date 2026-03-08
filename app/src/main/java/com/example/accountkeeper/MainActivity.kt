@@ -107,12 +107,14 @@ fun AccountKeeperMainApp() {
                     label = { Text(localizedLabel) },
                     selected = destination == currentSelected,
                     onClick = {
+                        // Always pop back to the start destination to clear all sub-pages
                         navController.navigate(destination.route) {
                             popUpTo(navController.graph.findStartDestination().id) {
+                                inclusive = false
                                 saveState = true
                             }
                             launchSingleTop = true
-                            restoreState = true
+                            restoreState = false
                         }
                     }
                 )

@@ -46,6 +46,7 @@ enum class StatType { EXPENSE, INCOME, BALANCE }
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StatisticsScreen(
+    onNavigateToCategoryTransactions: (categoryId: Long, categoryName: String, startTime: Long, endTime: Long) -> Unit = { _, _, _, _ -> },
     viewModel: TransactionViewModel = hiltViewModel(),
     categoryViewModel: CategoryViewModel = hiltViewModel()
 ) {
@@ -379,7 +380,12 @@ fun StatisticsScreen(
                         currency = currency,
                         color = categoryColor,
                         isBalanceMode = statType == StatType.BALANCE,
-                        isIncome = categoryId == -1L
+                        isIncome = categoryId == -1L,
+                        onClick = {
+                            if (statType != StatType.BALANCE) {
+                                onNavigateToCategoryTransactions(categoryId, categoryName, startTime, endTime)
+                            }
+                        }
                     )
                 }
             } else {
@@ -684,7 +690,8 @@ fun PremiumCategoryBreakdown(
     currency: String,
     color: Color,
     isBalanceMode: Boolean,
-    isIncome: Boolean
+    isIncome: Boolean,
+    onClick: () -> Unit = {}
 ) {
     val finalColor = if (isBalanceMode) {
         if (isIncome) Color(0xFF5BD9CA) else Color(0xFFFF6B6B)
@@ -693,7 +700,15 @@ fun PremiumCategoryBreakdown(
     }
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(
+                if (!isBalanceMode) {
+                    Modifier.clickable { onClick() }
+                } else {
+                    Modifier
+                }
+            ),
         shape = RoundedCornerShape(20.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {

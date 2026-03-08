@@ -12,6 +12,7 @@ import com.example.accountkeeper.data.repository.TransactionRepository
 import com.example.accountkeeper.utils.BackupManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
@@ -41,6 +42,10 @@ class TransactionViewModel @Inject constructor(
 
     suspend fun getTransactionById(id: Long): Transaction? {
         return transactionRepository.getTransactionById(id)
+    }
+
+    fun searchTransactions(query: String): Flow<List<Transaction>> {
+        return transactionRepository.searchTransactions(query)
     }
 
     fun addTransaction(transaction: Transaction) {

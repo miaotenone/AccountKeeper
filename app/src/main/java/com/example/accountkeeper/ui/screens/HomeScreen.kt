@@ -16,16 +16,22 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.*
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusEvent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -48,6 +54,7 @@ import java.util.*
 fun HomeScreen(
     onNavigateToAddTransaction: () -> Unit,
     onNavigateToEditTransaction: (Long) -> Unit,
+    onNavigateToSearchResult: (String) -> Unit,
     viewModel: TransactionViewModel = hiltViewModel(),
     categoryViewModel: CategoryViewModel = hiltViewModel()
 ) {
@@ -65,6 +72,14 @@ fun HomeScreen(
     val selectedTransactions = remember { mutableStateOf<Long>(0L) }
     val selectedIds = remember { mutableStateListOf<Long>() }
     var showBatchDeleteDialog by remember { mutableStateOf(false) }
+
+    // Search state
+    var isSearchExpanded by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+    var hasHadFocus by remember { mutableStateOf(false) }
+    val focusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
 
     val currentMonthStart = remember {
         Calendar.getInstance().apply {
@@ -162,24 +177,106 @@ fun HomeScreen(
                 } else {
                     TopAppBar(
                         title = {
-                            Column {
-                                Text(
-                                    "AccountKeeper",
-                                    style = MaterialTheme.typography.headlineSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
+                            if (isSearchExpanded) {
+                                OutlinedTextField(
+                                    value = searchQuery,
+                                    onValueChange = { searchQuery = it },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .focusRequester(focusRequester)
+                                        .onFocusEvent { focusState ->
+                                            if (focusState.isFocused) {
+                                                hasHadFocus = true
+                                            } else if (hasHadFocus && searchQuery.isBlank()) {
+                                                // Only close if we had focus before and query is blank
+                                                isSearchExpanded = false
+                                                hasHadFocus = false
+                                            }
+                                        },
+                                    placeholder = {
+                                        Text(
+                                            strings.searchHint,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    },
+                                    singleLine = true,
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = Color.Transparent,
+                                        unfocusedBorderColor = Color.Transparent,
+                                        cursorColor = MaterialTheme.colorScheme.primary
+                                    ),
+                                    textStyle = MaterialTheme.typography.bodyLarge,
+                                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                                        imeAction = androidx.compose.ui.text.input.ImeAction.Search
+                                    ),
+                                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                                        onSearch = {
+                                            if (searchQuery.isNotBlank()) {
+                                                onNavigateToSearchResult(searchQuery.trim())
+                                                isSearchExpanded = false
+                                                searchQuery = ""
+                                                hasHadFocus = false
+                                                keyboardController?.hide()
+                                            }
+                                        }
+                                    )
                                 )
-                                Text(
-                                    "Manage your finances",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                            } else {
+                                Column {
+                                    Text(
+                                        "AccountKeeper",
+                                        style = MaterialTheme.typography.headlineSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        "Manage your finances",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        },
+                        actions = {
+                            if (isSearchExpanded) {
+                                TextButton(
+                                    onClick = {
+                                        if (searchQuery.isNotBlank()) {
+                                            onNavigateToSearchResult(searchQuery.trim())
+                                            isSearchExpanded = false
+                                            searchQuery = ""
+                                            hasHadFocus = false
+                                        }
+                                    },
+                                    enabled = searchQuery.isNotBlank()
+                                ) {
+                                    Text(
+                                        strings.search,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            } else {
+                                IconButton(onClick = {
+                                    isSearchExpanded = true
+                                    hasHadFocus = false
+                                }) {
+                                    Icon(
+                                        Icons.Default.Search,
+                                        contentDescription = strings.search,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                         },
                         colors = TopAppBarDefaults.topAppBarColors(
                             containerColor = Color.Transparent
                         )
                     )
+                    LaunchedEffect(isSearchExpanded) {
+                        if (isSearchExpanded) {
+                            focusRequester.requestFocus()
+                        }
+                    }
                 }
             }
         },
@@ -209,7 +306,15 @@ fun HomeScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
                 .padding(horizontal = 20.dp)
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(rememberScrollState())
+                .pointerInput(Unit) {
+                    detectTapGestures(onTap = {
+                        focusManager.clearFocus()
+                        if (searchQuery.isBlank()) {
+                            isSearchExpanded = false
+                        }
+                    })
+                },
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             if (!selectionMode) {

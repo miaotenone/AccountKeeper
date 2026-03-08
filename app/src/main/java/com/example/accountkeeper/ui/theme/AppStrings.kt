@@ -128,7 +128,20 @@ data class AppStrings(
     val deleteCategoryConfirm: String,
     val navigate: String,
     val back: String,
-    val billFiles: String
+    val billFiles: String,
+    val transactions: String,
+    val search: String,
+    val searchResults: String,
+    val searchHint: String,
+    val noSearchResults: String,
+    val filter: String,
+    val all: String,
+    val sortByTime: String,
+    val sortByAmount: String,
+    val sortSettings: String,
+    val ascending: String,
+    val descending: String,
+    val timeRange: String
 )
 
 val EnStrings = AppStrings(
@@ -769,7 +782,20 @@ Thank you for using AccountKeeper! Wish you smooth financial management!""",
     deleteCategoryConfirm = "Are you sure you want to delete custom category \"{name}\"? This action cannot be undone.",
     navigate = "Navigate",
     back = "Back",
-    billFiles = "Bill Files"
+    billFiles = "Bill Files",
+    transactions = "transactions",
+    search = "Search",
+    searchResults = "Search Results",
+    searchHint = "Search by note or category",
+    noSearchResults = "No results found for",
+    filter = "Filter",
+    all = "All",
+    sortByTime = "Sort by Time",
+    sortByAmount = "Sort by Amount",
+    sortSettings = "Sort Settings",
+    ascending = "Ascending",
+    descending = "Descending",
+    timeRange = "Time Range"
 )
 
 val ZhStrings = AppStrings(
@@ -1410,7 +1436,20 @@ A: 取决于数据量，可以在设置中查看备份大小。
     deleteCategoryConfirm = "确定要删除自定义分类 \"{name}\" 吗？此操作无法撤销。",
     navigate = "导航",
     back = "返回",
-    billFiles = "账单文件"
+    billFiles = "账单文件",
+    transactions = "条记录",
+    search = "搜索",
+    searchResults = "搜索结果",
+    searchHint = "搜索备注或分类",
+    noSearchResults = "未找到相关记录",
+    filter = "筛选",
+    all = "全部",
+    sortByTime = "按时间排序",
+    sortByAmount = "按金额排序",
+    sortSettings = "排序设置",
+    ascending = "升序",
+    descending = "降序",
+    timeRange = "时间范围"
 )
 
 val LocalAppStrings = androidx.compose.runtime.compositionLocalOf { EnStrings }

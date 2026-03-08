@@ -32,6 +32,8 @@ import com.example.accountkeeper.ui.screens.AboutScreen
 import com.example.accountkeeper.ui.screens.SettingsScreen
 import com.example.accountkeeper.ui.screens.DataManagementScreen
 import com.example.accountkeeper.ui.screens.AppSettingsScreen
+import com.example.accountkeeper.ui.screens.CategoryTransactionsScreen
+import com.example.accountkeeper.ui.screens.SearchResultScreen
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -57,6 +59,17 @@ object CategorySettingsRoute
 
 @Serializable
 object AboutRoute
+
+@Serializable
+data class CategoryTransactionsRoute(
+    val categoryId: Long,
+    val categoryName: String,
+    val startTime: Long,
+    val endTime: Long
+)
+
+@Serializable
+data class SearchResultRoute(val query: String)
 
 sealed class BottomNavItem(
     val route: String,
@@ -94,11 +107,20 @@ fun AppNavigation(
                 },
                 onNavigateToEditTransaction = { transactionId ->
                     navController.navigate(AddEditTransactionRoute(transactionId))
+                },
+                onNavigateToSearchResult = { query ->
+                    navController.navigate(SearchResultRoute(query))
                 }
             )
         }
         composable<StatisticsRoute> {
-            StatisticsScreen()
+            StatisticsScreen(
+                onNavigateToCategoryTransactions = { categoryId, categoryName, startTime, endTime ->
+                    navController.navigate(
+                        CategoryTransactionsRoute(categoryId, categoryName, startTime, endTime)
+                    )
+                }
+            )
         }
         composable<SettingsRoute> {
             SettingsScreen(
@@ -141,6 +163,26 @@ fun AppNavigation(
         composable<AboutRoute> {
             AboutScreen(
                 onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        composable<CategoryTransactionsRoute> { backStackEntry ->
+            val args = backStackEntry.toRoute<CategoryTransactionsRoute>()
+            CategoryTransactionsScreen(
+                categoryId = args.categoryId,
+                categoryName = args.categoryName,
+                startTime = args.startTime,
+                endTime = args.endTime,
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        composable<SearchResultRoute> { backStackEntry ->
+            val args = backStackEntry.toRoute<SearchResultRoute>()
+            SearchResultScreen(
+                query = args.query,
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToEditTransaction = { transactionId ->
+                    navController.navigate(AddEditTransactionRoute(transactionId))
+                }
             )
         }
     }

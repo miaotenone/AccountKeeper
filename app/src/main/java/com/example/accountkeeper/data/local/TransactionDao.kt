@@ -36,4 +36,12 @@ interface TransactionDao {
 
     @Delete
     suspend fun deleteTransactions(transactions: List<Transaction>)
+
+    @Query("""
+        SELECT t.* FROM transactions t 
+        LEFT JOIN categories c ON t.categoryId = c.id 
+        WHERE t.note LIKE '%' || :query || '%' OR c.name LIKE '%' || :query || '%'
+        ORDER BY t.date DESC
+    """)
+    fun searchTransactions(query: String): Flow<List<Transaction>>
 }
