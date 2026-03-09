@@ -6,10 +6,11 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -213,6 +214,8 @@ fun StatisticsScreen(
         }
     }
 
+    val lazyListState = rememberLazyListState()
+
     Scaffold(
         topBar = {
             Surface(
@@ -242,128 +245,131 @@ fun StatisticsScreen(
             }
         }
     ) { paddingValues ->
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
-                .padding(horizontal = 20.dp)
-                .verticalScroll(rememberScrollState()),
+                .padding(paddingValues),
+            state = lazyListState,
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Spacer(modifier = Modifier.height(2.dp))
-
             // Premium Time Range Selector
-            PremiumTimeRangeSelector(
-                selectedRange = selectedRange,
-                onRangeSelected = { selectedRange = it },
-                strings = strings
-            )
-
-            Spacer(modifier = Modifier.height(2.dp))
+            item {
+                PremiumTimeRangeSelector(
+                    selectedRange = selectedRange,
+                    onRangeSelected = { selectedRange = it },
+                    strings = strings
+                )
+            }
 
             // Period Navigation & Type Toggle
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (selectedRange != TimeRange.CUSTOM) {
-                        Text(
-                            text = displayPeriodStr,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier
-                                .padding(horizontal = 8.dp)
-                                .clickable { activePicker = PickerType.ANCHOR },
-                            color = MaterialTheme.colorScheme.primary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    } else {
-                        Column {
-                            val startStr = customStartDate?.let { SimpleDateFormat("MM/dd", Locale.getDefault()).format(Date(it)) } ?: strings.startDate
-                            val endStr = customEndDate?.let { SimpleDateFormat("MM/dd", Locale.getDefault()).format(Date(it)) } ?: strings.endDate
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = startStr,
-                                    modifier = Modifier.clickable { activePicker = PickerType.CUSTOM_START },
-                                    color = MaterialTheme.colorScheme.primary,
-                                    fontWeight = FontWeight.Bold,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Text(" -> ", modifier = Modifier.padding(horizontal = 4.dp))
-                                Text(
-                                    text = endStr,
-                                    modifier = Modifier.clickable { activePicker = PickerType.CUSTOM_END },
-                                    color = MaterialTheme.colorScheme.primary,
-                                    fontWeight = FontWeight.Bold,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (selectedRange != TimeRange.CUSTOM) {
+                            Text(
+                                text = displayPeriodStr,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier
+                                    .padding(horizontal = 8.dp)
+                                    .clickable { activePicker = PickerType.ANCHOR },
+                                color = MaterialTheme.colorScheme.primary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        } else {
+                            Column {
+                                val startStr = customStartDate?.let { SimpleDateFormat("MM/dd", Locale.getDefault()).format(Date(it)) } ?: strings.startDate
+                                val endStr = customEndDate?.let { SimpleDateFormat("MM/dd", Locale.getDefault()).format(Date(it)) } ?: strings.endDate
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = startStr,
+                                        modifier = Modifier.clickable { activePicker = PickerType.CUSTOM_START },
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(" -> ", modifier = Modifier.padding(horizontal = 4.dp))
+                                    Text(
+                                        text = endStr,
+                                        modifier = Modifier.clickable { activePicker = PickerType.CUSTOM_END },
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
                             }
                         }
                     }
-                }
 
-                Row {
-                    PremiumFilterChip(
-                        selected = statType == StatType.EXPENSE,
-                        onClick = { statType = StatType.EXPENSE },
-                        label = strings.expense
-                    )
-                    Spacer(modifier = Modifier.width(2.dp))
-                    PremiumFilterChip(
-                        selected = statType == StatType.INCOME,
-                        onClick = { statType = StatType.INCOME },
-                        label = strings.income
-                    )
-                    Spacer(modifier = Modifier.width(2.dp))
-                    PremiumFilterChip(
-                        selected = statType == StatType.BALANCE,
-                        onClick = { statType = StatType.BALANCE },
-                        label = strings.balanceOverall
-                    )
+                    Row {
+                        PremiumFilterChip(
+                            selected = statType == StatType.EXPENSE,
+                            onClick = { statType = StatType.EXPENSE },
+                            label = strings.expense
+                        )
+                        Spacer(modifier = Modifier.width(2.dp))
+                        PremiumFilterChip(
+                            selected = statType == StatType.INCOME,
+                            onClick = { statType = StatType.INCOME },
+                            label = strings.income
+                        )
+                        Spacer(modifier = Modifier.width(2.dp))
+                        PremiumFilterChip(
+                            selected = statType == StatType.BALANCE,
+                            onClick = { statType = StatType.BALANCE },
+                            label = strings.balanceOverall
+                        )
+                    }
                 }
             }
 
             // Premium Total Card
-            PremiumTotalCard(
-                statType = statType,
-                totalAmount = totalAmount,
-                currency = currency,
-                strings = strings,
-                isNegative = totalAmountBase < 0
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
+            item {
+                PremiumTotalCard(
+                    statType = statType,
+                    totalAmount = totalAmount,
+                    currency = currency,
+                    strings = strings,
+                    isNegative = totalAmountBase < 0
+                )
+            }
 
             // Premium Pie Chart
             if (categoryTotals.isNotEmpty() && pieTotalBase > 0) {
-                PremiumPieChart(
-                    categoryTotals = categoryTotals,
-                    pieTotalDisplay = pieTotalDisplay,
-                    statType = statType,
-                    categories = categories,
-                    strings = strings
-                )
+                item {
+                    PremiumPieChart(
+                        categoryTotals = categoryTotals,
+                        pieTotalDisplay = pieTotalDisplay,
+                        statType = statType,
+                        categories = categories,
+                        strings = strings
+                    )
+                }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                // Category Ranking Title
+                item {
+                    Text(
+                        when (statType) {
+                            StatType.EXPENSE -> strings.expense + " " + strings.categoryRanking
+                            StatType.INCOME -> strings.income + " " + strings.categoryRanking
+                            StatType.BALANCE -> strings.balanceOverall + " " + strings.categoryRanking
+                        },
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
 
-                // Premium Category Breakdown
-                Text(
-                    when (statType) {
-                        StatType.EXPENSE -> strings.expense + " " + strings.categoryRanking
-                        StatType.INCOME -> strings.income + " " + strings.categoryRanking
-                        StatType.BALANCE -> strings.balanceOverall + " " + strings.categoryRanking
-                    },
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-
-                categoryTotals.forEachIndexed { index, pair ->
+                // Category Items
+                items(categoryTotals.size) { index ->
+                    val pair = categoryTotals[index]
                     val (categoryId, amount) = pair
                     val categoryName = if (statType == StatType.BALANCE) {
                         if (categoryId == -1L) strings.income else strings.expense
@@ -389,21 +395,26 @@ fun StatisticsScreen(
                     )
                 }
             } else {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(200.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        strings.noTransactions,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(200.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            strings.noTransactions,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            // Bottom spacer
+            item {
+                Spacer(modifier = Modifier.height(16.dp))
+            }
         }
     }
 }

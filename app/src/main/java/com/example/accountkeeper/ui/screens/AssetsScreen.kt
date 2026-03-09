@@ -146,8 +146,8 @@ fun AssetsScreen(
             filtered = filtered.filter { it.date >= filterStartDate!! }
         }
         if (filterEndDate != null) {
-            val endOfDay = filterEndDate!! + 24 * 60 * 60 * 1000 - 1
-            filtered = filtered.filter { it.date <= endOfDay }
+            // filterEndDate 已经在 DatePicker 中设置为当天 23:59:59.999
+            filtered = filtered.filter { it.date <= filterEndDate!! }
         }
         
         // Apply category filter
@@ -789,8 +789,15 @@ fun AssetsScreen(
                     onDismissRequest = { showStartDatePicker = false },
                     confirmButton = {
                         TextButton(onClick = {
-                            datePickerState.selectedDateMillis?.let {
-                                filterStartDate = it
+                            datePickerState.selectedDateMillis?.let { dateVal ->
+                                // 转换为本地时区时间，设置为当天 00:00:00
+                                val c = java.util.Calendar.getInstance()
+                                c.timeInMillis = dateVal
+                                c.set(java.util.Calendar.HOUR_OF_DAY, 0)
+                                c.set(java.util.Calendar.MINUTE, 0)
+                                c.set(java.util.Calendar.SECOND, 0)
+                                c.set(java.util.Calendar.MILLISECOND, 0)
+                                filterStartDate = c.timeInMillis
                             }
                             showStartDatePicker = false
                         }) {
@@ -815,8 +822,15 @@ fun AssetsScreen(
                     onDismissRequest = { showEndDatePicker = false },
                     confirmButton = {
                         TextButton(onClick = {
-                            datePickerState.selectedDateMillis?.let {
-                                filterEndDate = it
+                            datePickerState.selectedDateMillis?.let { dateVal ->
+                                // 转换为本地时区时间，设置为当天 23:59:59
+                                val c = java.util.Calendar.getInstance()
+                                c.timeInMillis = dateVal
+                                c.set(java.util.Calendar.HOUR_OF_DAY, 23)
+                                c.set(java.util.Calendar.MINUTE, 59)
+                                c.set(java.util.Calendar.SECOND, 59)
+                                c.set(java.util.Calendar.MILLISECOND, 999)
+                                filterEndDate = c.timeInMillis
                             }
                             showEndDatePicker = false
                         }) {

@@ -2,13 +2,15 @@ package com.example.accountkeeper.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
+import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,16 +43,19 @@ fun CategoryTransactionsScreen(
     viewModel: TransactionViewModel = hiltViewModel(),
     categoryViewModel: CategoryViewModel = hiltViewModel()
 ) {
-    val allTransactions by viewModel.transactions.collectAsState()
     val categories by categoryViewModel.categories.collectAsState()
     val currency = LocalCurrencySymbol.current
     val strings = LocalAppStrings.current
 
-    // Filter transactions for this category within the time range
-    val categoryTransactions = remember(allTransactions, categoryId, startTime, endTime) {
-        allTransactions
-            .filter { it.date in startTime until endTime && it.categoryId == categoryId }
-            .sortedByDescending { it.date }
+    // 分页数据
+    val pagedTransactions = viewModel.getByCategoryAndTimePaged(categoryId, startTime, endTime)
+        .collectAsLazyPagingItems()
+    
+    // 将分页数据转换为列表（使用 derivedStateOf 确保响应式更新）
+    val categoryTransactions by remember {
+        derivedStateOf {
+            (0 until pagedTransactions.itemCount).mapNotNull { pagedTransactions[it] }
+        }
     }
 
     // Group transactions by date
@@ -68,6 +73,8 @@ fun CategoryTransactionsScreen(
         currency
     )
     val transactionCount = categoryTransactions.size
+
+    val lazyListState = rememberLazyListState()
 
     Scaffold(
         topBar = {
@@ -102,88 +109,95 @@ fun CategoryTransactionsScreen(
             )
         }
     ) { paddingValues ->
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
-                .padding(horizontal = 20.dp)
-                .verticalScroll(rememberScrollState()),
+                .padding(paddingValues),
+            state = lazyListState,
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             // Summary Card
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-            ) {
-                val gradient = if (isSystemInDarkTheme()) {
-                    Brush.linearGradient(DarkGradientPrimary)
-                } else {
-                    Brush.linearGradient(LightGradientPrimary)
-                }
-                
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(gradient)
-                        .padding(20.dp)
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceEvenly
+                    val gradient = if (isSystemInDarkTheme()) {
+                        Brush.linearGradient(DarkGradientPrimary)
+                    } else {
+                        Brush.linearGradient(LightGradientPrimary)
+                    }
+                    
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(gradient)
+                            .padding(20.dp)
                     ) {
-                        if (totalIncome > 0) {
-                            SummaryItem(
-                                label = strings.income,
-                                value = "$currency${String.format(Locale.US, "%.2f", totalIncome)}",
-                                color = Color(0xFF5BD9CA)
-                            )
-                        }
-                        if (totalExpense > 0) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceEvenly
+                        ) {
                             if (totalIncome > 0) {
-                                VerticalDivider(
-                                    color = Color.White.copy(alpha = 0.25f),
-                                    thickness = 1.dp,
-                                    modifier = Modifier.height(50.dp)
+                                SummaryItem(
+                                    label = strings.income,
+                                    value = "$currency${String.format(Locale.US, "%.2f", totalIncome)}",
+                                    color = Color(0xFF5BD9CA)
                                 )
                             }
-                            SummaryItem(
-                                label = strings.expense,
-                                value = "-$currency${String.format(Locale.US, "%.2f", totalExpense)}",
-                                color = Color(0xFFFF6B6B)
-                            )
+                            if (totalExpense > 0) {
+                                if (totalIncome > 0) {
+                                    VerticalDivider(
+                                        color = Color.White.copy(alpha = 0.25f),
+                                        thickness = 1.dp,
+                                        modifier = Modifier.height(50.dp)
+                                    )
+                                }
+                                SummaryItem(
+                                    label = strings.expense,
+                                    value = "-$currency${String.format(Locale.US, "%.2f", totalExpense)}",
+                                    color = Color(0xFFFF6B6B)
+                                )
+                            }
                         }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(4.dp))
-
             // Transaction List
             if (groupedTransactions.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(200.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        strings.noTransactions,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(200.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            strings.noTransactions,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             } else {
                 groupedTransactions.forEach { (dateString, txList) ->
                     // Date Header
-                    DateHeaderCompact(
-                        date = dateString,
-                        txList = txList,
-                        currency = currency
-                    )
+                    item(key = "header_$dateString") {
+                        DateHeaderCompact(
+                            date = dateString,
+                            txList = txList,
+                            currency = currency
+                        )
+                    }
 
                     // Transaction Items
-                    txList.forEach { transaction ->
+                    items(
+                        items = txList,
+                        key = { it.id }
+                    ) { transaction ->
                         CategoryTransactionItem(
                             transaction = transaction,
                             currency = currency
@@ -192,7 +206,10 @@ fun CategoryTransactionsScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            // Bottom spacer
+            item {
+                Spacer(modifier = Modifier.height(16.dp))
+            }
         }
     }
 }

@@ -9,6 +9,7 @@ import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -18,6 +19,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
+import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.compose.runtime.*
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
@@ -61,6 +63,15 @@ fun HomeScreen(
     settingsViewModel: SettingsViewModel = hiltViewModel()
 ) {
     val transactions by viewModel.transactions.collectAsState()
+    // 用于列表显示（分页数据）
+    val pagedTransactions = viewModel.pagedTransactions.collectAsLazyPagingItems()
+    // 用于统计显示（ViewModel 缓存）
+    val totalIncome by viewModel.totalIncome.collectAsState()
+    val totalExpense by viewModel.totalExpense.collectAsState()
+    val totalBalanceValue by viewModel.totalBalance.collectAsState()
+    val monthlyIncome by viewModel.monthlyIncome.collectAsState()
+    val monthlyExpense by viewModel.monthlyExpense.collectAsState()
+    val monthlyBalanceValue by viewModel.monthlyBalance.collectAsState()
     val categories by categoryViewModel.categories.collectAsState()
     val appSettings by settingsViewModel.appSettings.collectAsState()
     val currency = LocalCurrencySymbol.current
@@ -87,37 +98,18 @@ fun HomeScreen(
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
 
-    val currentMonthStart = remember {
-        Calendar.getInstance().apply {
-            set(Calendar.DAY_OF_MONTH, 1)
-            set(Calendar.HOUR_OF_DAY, 0)
-            set(Calendar.MINUTE, 0)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
-        }.timeInMillis
-    }
+    val lazyListState = rememberLazyListState()
 
-    val displayTransactions = remember(transactions, isShowingMonthly) {
-        if (isShowingMonthly) {
-            transactions.filter { it.date >= currentMonthStart }
-        } else {
-            transactions
-        }
-    }
-
-    val totalIncome = CurrencyUtils.convertToDisplay(
-        displayTransactions.filter { it.type == TransactionType.INCOME }.sumOf { it.amount },
+    // 使用 ViewModel 缓存的统计数据，根据显示模式选择
+    val displayIncome = CurrencyUtils.convertToDisplay(
+        if (isShowingMonthly) monthlyIncome else totalIncome,
         currency
     )
-    val totalExpense = CurrencyUtils.convertToDisplay(
-        displayTransactions.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount },
+    val displayExpense = CurrencyUtils.convertToDisplay(
+        if (isShowingMonthly) monthlyExpense else totalExpense,
         currency
     )
-    val totalBalance = totalIncome - totalExpense
-
-    val groupedTransactions = displayTransactions.groupBy {
-        SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(it.date))
-    }.toSortedMap(reverseOrder())
+    val displayBalance = displayIncome - displayExpense
 
     Scaffold(
         topBar = {
@@ -307,12 +299,20 @@ fun HomeScreen(
             }
         }
     ) { paddingValues ->
-        Column(
+        // 将分页数据转换为列表用于分组显示
+        val pagedList = remember(pagedTransactions.itemCount) {
+            (0 until pagedTransactions.itemCount).mapNotNull { pagedTransactions[it] }
+        }
+
+        // 按日期分组
+        val groupedPagedTransactions = pagedList.groupBy {
+            SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(it.date))
+        }
+
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(horizontal = 20.dp)
-                .verticalScroll(rememberScrollState())
                 .pointerInput(Unit) {
                     detectTapGestures(onTap = {
                         // Reset swiped open card
@@ -325,31 +325,44 @@ fun HomeScreen(
                         }
                     })
                 },
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            state = lazyListState,
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            // 余额卡片
             if (!selectionMode) {
-                PremiumBalanceCard(
-                    totalBalance = totalBalance,
-                    totalIncome = totalIncome,
-                    totalExpense = totalExpense,
-                    currency = currency,
-                    isShowingMonthly = isShowingMonthly,
-                    isExpanded = isBalanceCardExpanded,
-                    onTogglePeriod = { isShowingMonthly = !isShowingMonthly },
-                    onToggleExpand = { isBalanceCardExpanded = !isBalanceCardExpanded },
-                    strings = strings
-                )
+                item {
+                    PremiumBalanceCard(
+                        totalBalance = displayBalance,
+                        totalIncome = displayIncome,
+                        totalExpense = displayExpense,
+                        currency = currency,
+                        isShowingMonthly = isShowingMonthly,
+                        isExpanded = isBalanceCardExpanded,
+                        onTogglePeriod = { isShowingMonthly = !isShowingMonthly },
+                        onToggleExpand = { isBalanceCardExpanded = !isBalanceCardExpanded },
+                        strings = strings
+                    )
+                }
             }
 
-            groupedTransactions.forEach { (dateString, txList) ->
-                DateHeader(
-                    date = dateString,
-                    txList = txList,
-                    currency = currency,
-                    strings = strings
-                )
+            // 分页数据显示 - 按日期分组
+            groupedPagedTransactions.forEach { (dateString, txList) ->
+                // 日期头部
+                item(key = "header_$dateString") {
+                    DateHeader(
+                        date = dateString,
+                        txList = txList,
+                        currency = currency,
+                        strings = strings
+                    )
+                }
 
-                txList.forEach { transaction ->
+                // 交易列表
+                items(
+                    items = txList,
+                    key = { it.id }
+                ) { transaction ->
                     val categoryName = categories.find { it.id == transaction.categoryId }?.name ?: strings.other
                     val isSelected = selectedIds.contains(transaction.id)
                     PremiumTransactionItem(
@@ -399,7 +412,10 @@ fun HomeScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(100.dp))
+            // 底部间距
+            item {
+                Spacer(modifier = Modifier.height(100.dp))
+            }
         }
 
         if (showDeleteDialog && transactionToDelete != null) {

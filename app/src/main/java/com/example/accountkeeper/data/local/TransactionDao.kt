@@ -1,5 +1,6 @@
 package com.example.accountkeeper.data.local
 
+import androidx.paging.PagingSource
 import androidx.room.Dao
 import androidx.room.Delete
 import androidx.room.Insert
@@ -12,6 +13,9 @@ import kotlinx.coroutines.flow.Flow
 interface TransactionDao {
     @Query("SELECT * FROM transactions ORDER BY date DESC")
     fun getAllTransactions(): Flow<List<Transaction>>
+
+    @Query("SELECT * FROM transactions ORDER BY date DESC")
+    fun getAllTransactionsPaged(): PagingSource<Int, Transaction>
 
     @Query("SELECT * FROM transactions WHERE date >= :startDate AND date <= :endDate ORDER BY date DESC")
     fun getTransactionsBetween(startDate: Long, endDate: Long): Flow<List<Transaction>>
@@ -44,4 +48,21 @@ interface TransactionDao {
         ORDER BY t.date DESC
     """)
     fun searchTransactions(query: String): Flow<List<Transaction>>
+
+    @Query("""
+        SELECT t.* FROM transactions t 
+        LEFT JOIN categories c ON t.categoryId = c.id 
+        WHERE t.note LIKE '%' || :query || '%' OR c.name LIKE '%' || :query || '%'
+        ORDER BY t.date DESC
+    """)
+    fun searchTransactionsPaged(query: String): PagingSource<Int, Transaction>
+
+    @Query("""
+        SELECT * FROM transactions 
+        WHERE categoryId = :categoryId 
+        AND date >= :startTime 
+        AND date < :endTime
+        ORDER BY date DESC
+    """)
+    fun getByCategoryAndTimePaged(categoryId: Long, startTime: Long, endTime: Long): PagingSource<Int, Transaction>
 }

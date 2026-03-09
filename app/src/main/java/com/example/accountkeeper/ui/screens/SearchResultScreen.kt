@@ -7,10 +7,11 @@ import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -20,6 +21,7 @@ import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material3.*
+import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.compose.runtime.*
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
@@ -64,9 +66,15 @@ fun SearchResultScreen(
     val currency = LocalCurrencySymbol.current
     val strings = LocalAppStrings.current
 
-    // Search results
-    val rawTransactions by viewModel.searchTransactions(query)
-        .collectAsStateWithLifecycle(initialValue = emptyList())
+    // 分页搜索结果
+    val pagedTransactions = viewModel.searchTransactionsPaged(query).collectAsLazyPagingItems()
+    
+    // 将分页数据转换为列表用于客户端筛选和排序（使用 derivedStateOf 确保响应式更新）
+    val rawTransactions by remember {
+        derivedStateOf {
+            (0 until pagedTransactions.itemCount).mapNotNull { pagedTransactions[it] }
+        }
+    }
 
     // Filter and sort state
     var filterType by remember { mutableStateOf(FilterType.ALL) }
@@ -85,7 +93,9 @@ fun SearchResultScreen(
     val selectedIds = remember { mutableStateListOf<Long>() }
     var showBatchDeleteDialog by remember { mutableStateOf(false) }
 
-    // Apply filters and sort
+    val lazyListState = rememberLazyListState()
+
+    // Apply filters and sort on loaded data
     val transactions = remember(rawTransactions, filterType, sortType, startDate, endDate) {
         var filtered = rawTransactions
 
@@ -240,99 +250,101 @@ fun SearchResultScreen(
             }
         }
     ) { paddingValues ->
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
-                .padding(horizontal = 20.dp)
-                .verticalScroll(rememberScrollState()),
+                .padding(paddingValues),
+            state = lazyListState,
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             // Active filters display
             if (filterType != FilterType.ALL || startDate != null || endDate != null) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Default.FilterList,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(18.dp)
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
                         )
-                        
-                        // Type filter chip
-                        if (filterType != FilterType.ALL) {
-                            FilterChip(
-                                selected = true,
-                                onClick = { filterType = FilterType.ALL },
-                                label = { 
-                                    Text(
-                                        when (filterType) {
-                                            FilterType.INCOME -> strings.income
-                                            FilterType.EXPENSE -> strings.expense
-                                            else -> strings.all
-                                        }
-                                    ) 
-                                },
-                                trailingIcon = {
-                                    Icon(
-                                        Icons.Default.Add,
-                                        contentDescription = "Clear",
-                                        modifier = Modifier
-                                            .size(14.dp)
-                                            .rotate(45f)
-                                    )
-                                }
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.FilterList,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
                             )
-                        }
-                        
-                        // Time range filter chip
-                        if (startDate != null || endDate != null) {
-                            FilterChip(
-                                selected = true,
-                                onClick = { 
-                                    startDate = null
-                                    endDate = null
-                                },
-                                label = { 
-                                    Text(
-                                        buildString {
-                                            val dateFormat = SimpleDateFormat("MM/dd", Locale.getDefault())
-                                            if (startDate != null && endDate != null) {
-                                                append(dateFormat.format(Date(startDate!!)))
-                                                append(" - ")
-                                                append(dateFormat.format(Date(endDate!!)))
-                                            } else if (startDate != null) {
-                                                append("From ")
-                                                append(dateFormat.format(Date(startDate!!)))
-                                            } else {
-                                                append("Until ")
-                                                append(dateFormat.format(Date(endDate!!)))
+                            
+                            // Type filter chip
+                            if (filterType != FilterType.ALL) {
+                                FilterChip(
+                                    selected = true,
+                                    onClick = { filterType = FilterType.ALL },
+                                    label = { 
+                                        Text(
+                                            when (filterType) {
+                                                FilterType.INCOME -> strings.income
+                                                FilterType.EXPENSE -> strings.expense
+                                                else -> strings.all
                                             }
-                                        }
-                                    ) 
-                                },
-                                trailingIcon = {
-                                    Icon(
-                                        Icons.Default.Add,
-                                        contentDescription = "Clear",
-                                        modifier = Modifier
-                                            .size(14.dp)
-                                            .rotate(45f)
-                                    )
-                                }
-                            )
+                                        ) 
+                                    },
+                                    trailingIcon = {
+                                        Icon(
+                                            Icons.Default.Add,
+                                            contentDescription = "Clear",
+                                            modifier = Modifier
+                                                .size(14.dp)
+                                                .rotate(45f)
+                                        )
+                                    }
+                                )
+                            }
+                            
+                            // Time range filter chip
+                            if (startDate != null || endDate != null) {
+                                FilterChip(
+                                    selected = true,
+                                    onClick = { 
+                                        startDate = null
+                                        endDate = null
+                                    },
+                                    label = { 
+                                        Text(
+                                            buildString {
+                                                val dateFormat = SimpleDateFormat("MM/dd", Locale.getDefault())
+                                                if (startDate != null && endDate != null) {
+                                                    append(dateFormat.format(Date(startDate!!)))
+                                                    append(" - ")
+                                                    append(dateFormat.format(Date(endDate!!)))
+                                                } else if (startDate != null) {
+                                                    append("From ")
+                                                    append(dateFormat.format(Date(startDate!!)))
+                                                } else {
+                                                    append("Until ")
+                                                    append(dateFormat.format(Date(endDate!!)))
+                                                }
+                                            }
+                                        ) 
+                                    },
+                                    trailingIcon = {
+                                        Icon(
+                                            Icons.Default.Add,
+                                            contentDescription = "Clear",
+                                            modifier = Modifier
+                                                .size(14.dp)
+                                                .rotate(45f)
+                                        )
+                                    }
+                                )
+                            }
                         }
                     }
                 }
@@ -340,90 +352,97 @@ fun SearchResultScreen(
 
             if (transactions.isEmpty()) {
                 // Empty state
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(300.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(300.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            strings.noSearchResults,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            "\"$query\"",
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                strings.noSearchResults,
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                "\"$query\"",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
                     }
                 }
             } else {
                 // Summary Card
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-                ) {
-                    val gradient = if (isSystemInDarkTheme()) {
-                        Brush.linearGradient(DarkGradientPrimary)
-                    } else {
-                        Brush.linearGradient(LightGradientPrimary)
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(gradient)
-                            .padding(20.dp)
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(20.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceEvenly
+                        val gradient = if (isSystemInDarkTheme()) {
+                            Brush.linearGradient(DarkGradientPrimary)
+                        } else {
+                            Brush.linearGradient(LightGradientPrimary)
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(gradient)
+                                .padding(20.dp)
                         ) {
-                            if (totalIncome > 0) {
-                                SummaryItemSearch(
-                                    label = strings.income,
-                                    value = "$currency${String.format(Locale.US, "%.2f", totalIncome)}",
-                                    color = Color(0xFF5BD9CA)
-                                )
-                            }
-                            if (totalExpense > 0) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceEvenly
+                            ) {
                                 if (totalIncome > 0) {
-                                    VerticalDivider(
-                                        color = Color.White.copy(alpha = 0.25f),
-                                        thickness = 1.dp,
-                                        modifier = Modifier.height(50.dp)
+                                    SummaryItemSearch(
+                                        label = strings.income,
+                                        value = "$currency${String.format(Locale.US, "%.2f", totalIncome)}",
+                                        color = Color(0xFF5BD9CA)
                                     )
                                 }
-                                SummaryItemSearch(
-                                    label = strings.expense,
-                                    value = "-$currency${String.format(Locale.US, "%.2f", totalExpense)}",
-                                    color = Color(0xFFFF6B6B)
-                                )
+                                if (totalExpense > 0) {
+                                    if (totalIncome > 0) {
+                                        VerticalDivider(
+                                            color = Color.White.copy(alpha = 0.25f),
+                                            thickness = 1.dp,
+                                            modifier = Modifier.height(50.dp)
+                                        )
+                                    }
+                                    SummaryItemSearch(
+                                        label = strings.expense,
+                                        value = "-$currency${String.format(Locale.US, "%.2f", totalExpense)}",
+                                        color = Color(0xFFFF6B6B)
+                                    )
+                                }
                             }
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(4.dp))
-
-                // Transaction List
+                // Transaction List - grouped by date
                 groupedTransactions.forEach { (dateString, txList) ->
                     // Date Header
-                    DateHeaderCompactSearch(
-                        date = dateString,
-                        txList = txList,
-                        currency = currency
-                    )
+                    item(key = "header_$dateString") {
+                        DateHeaderCompactSearch(
+                            date = dateString,
+                            txList = txList,
+                            currency = currency
+                        )
+                    }
 
                     // Transaction Items
-                    txList.forEach { transaction ->
+                    items(
+                        items = txList,
+                        key = { it.id }
+                    ) { transaction ->
                         val categoryName = categories.find { it.id == transaction.categoryId }?.name ?: strings.other
                         val isSelected = selectedIds.contains(transaction.id)
                         SearchTransactionItem(
@@ -464,7 +483,10 @@ fun SearchResultScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            // Bottom spacer
+            item {
+                Spacer(modifier = Modifier.height(16.dp))
+            }
         }
 
         // Filter dialog
