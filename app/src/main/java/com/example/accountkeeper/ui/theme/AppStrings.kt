@@ -219,7 +219,18 @@ data class AppStrings(
     val removeAttachment: String,
     val noAttachments: String,
     val selectFile: String,
-    val fileSizeTooLarge: String
+    val fileSizeTooLarge: String,
+    // Update related
+    val checkUpdate: String,
+    val currentVersion: String,
+    val downloadNow: String,
+    val cancelDownload: String,
+    val installNow: String,
+    val downloadComplete: String,
+    val alreadyLatest: String,
+    val checkUpdateFailed: String,
+    val downloading: String,
+    val downloadHint: String
 )
 
 val EnStrings = AppStrings(
@@ -948,7 +959,18 @@ Thank you for using AccountKeeper! Wish you smooth financial management!""",
     removeAttachment = "Remove",
     noAttachments = "No attachments",
     selectFile = "Select File",
-    fileSizeTooLarge = "File size exceeds limit"
+    fileSizeTooLarge = "File size exceeds limit",
+    // Update related
+    checkUpdate = "Check Update",
+    currentVersion = "Current Version",
+    downloadNow = "Download",
+    cancelDownload = "Cancel Download",
+    installNow = "Install",
+    downloadComplete = "Download Complete",
+    alreadyLatest = "Already Latest Version",
+    checkUpdateFailed = "Check Update Failed",
+    downloading = "Downloading...",
+    downloadHint = "Please wait while downloading"
 )
 
 val ZhStrings = AppStrings(
@@ -1677,7 +1699,18 @@ A: 取决于数据量，可以在设置中查看备份大小。
     removeAttachment = "移除",
     noAttachments = "暂无附件",
     selectFile = "选择文件",
-    fileSizeTooLarge = "文件大小超出限制"
+    fileSizeTooLarge = "文件大小超出限制",
+    // Update related
+    checkUpdate = "检查更新",
+    currentVersion = "当前版本",
+    downloadNow = "立即下载",
+    cancelDownload = "取消下载",
+    installNow = "立即安装",
+    downloadComplete = "下载完成",
+    alreadyLatest = "已是最新版本",
+    checkUpdateFailed = "检查更新失败",
+    downloading = "正在下载...",
+    downloadHint = "请等待下载完成"
 )
 
 val LocalAppStrings = androidx.compose.runtime.compositionLocalOf { EnStrings }
