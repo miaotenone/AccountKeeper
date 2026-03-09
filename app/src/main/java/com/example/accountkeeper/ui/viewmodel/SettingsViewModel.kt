@@ -48,4 +48,8 @@ class SettingsViewModel @Inject constructor(
     fun updateBackupRetentionLimit(limit: Int) {
         viewModelScope.launch { settingsRepository.updateBackupRetentionLimit(limit) }
     }
+
+    fun updateSwipeDeleteConfirm(requiresConfirm: Boolean) {
+        viewModelScope.launch { settingsRepository.updateSwipeDeleteConfirm(requiresConfirm) }
+    }
 }

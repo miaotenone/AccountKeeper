@@ -9,5 +9,7 @@ data class Category(
     val id: Long = 0,
     val name: String,
     val type: TransactionType,
-    val isDefault: Boolean = false
+    val isDefault: Boolean = false,
+    // 仅对 ASSET 类型的分类有效：true=正资产（如借出），false=负资产（如负债）
+    val isPositiveAsset: Boolean = true
 )

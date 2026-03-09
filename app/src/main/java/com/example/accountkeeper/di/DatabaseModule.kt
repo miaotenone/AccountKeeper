@@ -3,6 +3,7 @@ package com.example.accountkeeper.di
 import android.content.Context
 import androidx.room.Room
 import com.example.accountkeeper.data.local.AppDatabase
+import com.example.accountkeeper.data.local.AssetDao
 import com.example.accountkeeper.data.local.CategoryDao
 import com.example.accountkeeper.data.local.TransactionDao
 import dagger.Module
@@ -24,7 +25,7 @@ object DatabaseModule {
             AppDatabase::class.java,
             "account_keeper_db"
         )
-            .addMigrations(AppDatabase.MIGRATION_1_2)
+            .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3, AppDatabase.MIGRATION_3_4, AppDatabase.MIGRATION_4_5)
             .build()
     }
 
@@ -33,4 +34,7 @@ object DatabaseModule {
 
     @Provides
     fun provideTransactionDao(database: AppDatabase): TransactionDao = database.transactionDao()
+
+    @Provides
+    fun provideAssetDao(database: AppDatabase): AssetDao = database.assetDao()
 }

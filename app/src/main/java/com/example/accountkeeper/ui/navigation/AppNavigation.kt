@@ -24,6 +24,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import com.example.accountkeeper.ui.screens.AddEditTransactionScreen
+import com.example.accountkeeper.ui.screens.AddEditAssetScreen
+import com.example.accountkeeper.ui.screens.AssetsScreen
 import com.example.accountkeeper.ui.screens.HomeScreen
 import com.example.accountkeeper.ui.screens.ImportExportScreen
 import com.example.accountkeeper.ui.screens.StatisticsScreen
@@ -43,7 +45,13 @@ object HomeRoute
 object StatisticsRoute
 
 @Serializable
+object AssetsRoute
+
+@Serializable
 data class AddEditTransactionRoute(val transactionId: Long = -1L)
+
+@Serializable
+data class AddEditAssetRoute(val assetId: Long = -1L)
 
 @Serializable
 object SettingsRoute
@@ -122,6 +130,16 @@ fun AppNavigation(
                 }
             )
         }
+        composable<AssetsRoute> {
+            AssetsScreen(
+                onNavigateToAddAsset = {
+                    navController.navigate(AddEditAssetRoute())
+                },
+                onNavigateToEditAsset = { assetId ->
+                    navController.navigate(AddEditAssetRoute(assetId))
+                }
+            )
+        }
         composable<SettingsRoute> {
             SettingsScreen(
                 onNavigateToDataManagement = {
@@ -152,6 +170,13 @@ fun AppNavigation(
             val args = backStackEntry.toRoute<AddEditTransactionRoute>()
             AddEditTransactionScreen(
                 transactionId = args.transactionId,
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        composable<AddEditAssetRoute> { backStackEntry ->
+            val args = backStackEntry.toRoute<AddEditAssetRoute>()
+            AddEditAssetScreen(
+                assetId = args.assetId,
                 onNavigateBack = { navController.popBackStack() }
             )
         }

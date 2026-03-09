@@ -21,7 +21,8 @@ data class AppSettings(
     val language: String = "zh", // "zh" default for Chinese
     val currencySymbol: String = "¥",
     val isAutoBackupEnabled: Boolean = false,
-    val backupRetentionLimit: Int = 15
+    val backupRetentionLimit: Int = 15,
+    val swipeDeleteRequiresConfirm: Boolean = true  // 左滑是否直接弹出确认对话框
 )
 
 @Singleton
@@ -34,6 +35,7 @@ class SettingsRepository @Inject constructor(
         val CURRENCY_SYMBOL = stringPreferencesKey("currency_symbol")
         val AUTO_BACKUP = booleanPreferencesKey("auto_backup")
         val BACKUP_LIMIT = intPreferencesKey("backup_limit")
+        val SWIPE_DELETE_CONFIRM = booleanPreferencesKey("swipe_delete_confirm")
     }
 
     val settingsFlow: Flow<AppSettings> = context.dataStore.data.map { preferences ->
@@ -42,7 +44,8 @@ class SettingsRepository @Inject constructor(
             language = preferences[PreferencesKeys.LANGUAGE] ?: "zh",
             currencySymbol = preferences[PreferencesKeys.CURRENCY_SYMBOL] ?: "¥",
             isAutoBackupEnabled = preferences[PreferencesKeys.AUTO_BACKUP] ?: false,
-            backupRetentionLimit = preferences[PreferencesKeys.BACKUP_LIMIT] ?: 15
+            backupRetentionLimit = preferences[PreferencesKeys.BACKUP_LIMIT] ?: 15,
+            swipeDeleteRequiresConfirm = preferences[PreferencesKeys.SWIPE_DELETE_CONFIRM] ?: true
         )
     }
 
@@ -73,6 +76,12 @@ class SettingsRepository @Inject constructor(
     suspend fun updateBackupRetentionLimit(limit: Int) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.BACKUP_LIMIT] = limit
+        }
+    }
+
+    suspend fun updateSwipeDeleteConfirm(requiresConfirm: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.SWIPE_DELETE_CONFIRM] = requiresConfirm
         }
     }
 }

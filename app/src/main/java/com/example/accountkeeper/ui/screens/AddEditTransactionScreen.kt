@@ -112,7 +112,7 @@ fun AddEditTransactionScreen(
                 TopAppBar(
                     title = {
                         Text(
-                            if (isEditMode) "Edit Transaction" else strings.addTransaction,
+                            if (isEditMode) strings.editTransaction else strings.addTransaction,
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold
                         )

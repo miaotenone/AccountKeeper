@@ -217,6 +217,33 @@ fun AppSettingsScreen(
                 }
             }
 
+            // Swipe Delete Confirm Setting
+            PremiumSettingCard(
+                icon = Icons.Default.Delete,
+                title = strings.swipeDeleteConfirm,
+                description = if (appSettings.swipeDeleteRequiresConfirm) strings.swipeDeleteConfirmEnabled else strings.swipeDeleteConfirmDisabled,
+                iconColor = if (isDark) DarkGradientExpense else LightGradientExpense
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(strings.swipeDeleteConfirm, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text(
+                            if (appSettings.swipeDeleteRequiresConfirm) strings.swipeDeleteConfirmEnabled else strings.swipeDeleteConfirmDisabled,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = appSettings.swipeDeleteRequiresConfirm,
+                        onCheckedChange = { settingsViewModel.updateSwipeDeleteConfirm(it) }
+                    )
+                }
+            }
+
             // Info Card
             InfoCard(
                 icon = Icons.Default.Info,

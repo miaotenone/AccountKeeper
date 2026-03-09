@@ -1,6 +1,7 @@
 package com.example.accountkeeper.data.local
 
 import androidx.room.TypeConverter
+import com.example.accountkeeper.data.model.AssetStatus
 import com.example.accountkeeper.data.model.TransactionSource
 import com.example.accountkeeper.data.model.TransactionType
 
@@ -23,5 +24,15 @@ class Converters {
     @TypeConverter
     fun toTransactionSource(value: String): TransactionSource {
         return TransactionSource.valueOf(value)
+    }
+
+    @TypeConverter
+    fun fromAssetStatus(value: AssetStatus): String {
+        return value.name
+    }
+
+    @TypeConverter
+    fun toAssetStatus(value: String): AssetStatus {
+        return AssetStatus.valueOf(value)
     }
 }

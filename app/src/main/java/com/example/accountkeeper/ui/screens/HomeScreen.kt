@@ -44,6 +44,7 @@ import com.example.accountkeeper.data.model.TransactionType
 import com.example.accountkeeper.ui.theme.*
 import com.example.accountkeeper.ui.viewmodel.CategoryViewModel
 import com.example.accountkeeper.ui.viewmodel.TransactionViewModel
+import com.example.accountkeeper.ui.viewmodel.SettingsViewModel
 import com.example.accountkeeper.ui.theme.LocalAppStrings
 import com.example.accountkeeper.utils.CurrencyUtils
 import java.text.SimpleDateFormat
@@ -56,10 +57,12 @@ fun HomeScreen(
     onNavigateToEditTransaction: (Long) -> Unit,
     onNavigateToSearchResult: (String) -> Unit,
     viewModel: TransactionViewModel = hiltViewModel(),
-    categoryViewModel: CategoryViewModel = hiltViewModel()
+    categoryViewModel: CategoryViewModel = hiltViewModel(),
+    settingsViewModel: SettingsViewModel = hiltViewModel()
 ) {
     val transactions by viewModel.transactions.collectAsState()
     val categories by categoryViewModel.categories.collectAsState()
+    val appSettings by settingsViewModel.appSettings.collectAsState()
     val currency = LocalCurrencySymbol.current
     val strings = LocalAppStrings.current
 
@@ -72,6 +75,9 @@ fun HomeScreen(
     val selectedTransactions = remember { mutableStateOf<Long>(0L) }
     val selectedIds = remember { mutableStateListOf<Long>() }
     var showBatchDeleteDialog by remember { mutableStateOf(false) }
+    
+    // Track which card is swiped open (for closing when clicking elsewhere)
+    var swipedOpenTransactionId by remember { mutableStateOf<Long?>(null) }
 
     // Search state
     var isSearchExpanded by remember { mutableStateOf(false) }
@@ -309,6 +315,10 @@ fun HomeScreen(
                 .verticalScroll(rememberScrollState())
                 .pointerInput(Unit) {
                     detectTapGestures(onTap = {
+                        // Reset swiped open card
+                        if (swipedOpenTransactionId != null) {
+                            swipedOpenTransactionId = null
+                        }
                         focusManager.clearFocus()
                         if (searchQuery.isBlank()) {
                             isSearchExpanded = false
@@ -346,7 +356,13 @@ fun HomeScreen(
                         transaction = transaction,
                         categoryName = categoryName,
                         currency = currency,
+                        swipedOpenId = swipedOpenTransactionId,
+                        onSwipeOpen = { swipedOpenTransactionId = transaction.id },
                         onClick = {
+                            // Close any swiped open card first
+                            if (swipedOpenTransactionId != null && swipedOpenTransactionId != transaction.id) {
+                                swipedOpenTransactionId = null
+                            }
                             if (selectionMode) {
                                 if (isSelected) {
                                     selectedIds.remove(transaction.id)
@@ -358,6 +374,10 @@ fun HomeScreen(
                             }
                         },
                         onLongClick = {
+                            // Close any swiped open card first
+                            if (swipedOpenTransactionId != null) {
+                                swipedOpenTransactionId = null
+                            }
                             if (selectionMode) {
                                 if (isSelected) {
                                     selectedIds.remove(transaction.id)
@@ -373,7 +393,8 @@ fun HomeScreen(
                             viewModel.deleteTransaction(transaction)
                         },
                         isSelected = isSelected,
-                        inSelectionMode = selectionMode
+                        inSelectionMode = selectionMode,
+                        swipeDeleteRequiresConfirm = appSettings.swipeDeleteRequiresConfirm
                     )
                 }
             }
@@ -686,11 +707,14 @@ fun PremiumTransactionItem(
     transaction: Transaction,
     categoryName: String,
     currency: String,
+    swipedOpenId: Long?,
+    onSwipeOpen: () -> Unit,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     onDelete: () -> Unit,
     isSelected: Boolean = false,
-    inSelectionMode: Boolean = false
+    inSelectionMode: Boolean = false,
+    swipeDeleteRequiresConfirm: Boolean = true
 ) {
     val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
     val isIncome = transaction.type == TransactionType.INCOME
@@ -839,6 +863,31 @@ fun PremiumTransactionItem(
         var offsetX by remember { mutableStateOf(0f) }
         val maxOffset = 300f
         
+        // Track if user is dragging
+        var isDragging by remember { mutableStateOf(false) }
+        var hasTriggeredAction by remember { mutableStateOf(false) }
+        
+        // Delete confirmation dialog state
+        var showDeleteDialog by remember { mutableStateOf(false) }
+        
+        // Track if card is swiped open (showing delete button)
+        var isSwipedOpen by remember { mutableStateOf(false) }
+        
+        // Reset when another card is swiped open or when clicking elsewhere (swipedOpenId becomes null)
+        LaunchedEffect(swipedOpenId) {
+            if (isSwipedOpen && swipedOpenId != transaction.id) {
+                // Either another card was swiped open, or swipedOpenId was set to null (click elsewhere)
+                isSwipedOpen = false
+                animate(
+                    initialValue = offsetX,
+                    targetValue = 0f,
+                    animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy)
+                ) { value, _ ->
+                    offsetX = value
+                }
+            }
+        }
+        
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -848,6 +897,10 @@ fun PremiumTransactionItem(
                     state = rememberDraggableState { delta ->
                         val newOffset = offsetX + delta
                         offsetX = newOffset.coerceIn(-maxOffset, 0f)
+                        isDragging = true
+                    },
+                    onDragStopped = {
+                        isDragging = false
                     }
                 )
         ) {
@@ -859,7 +912,13 @@ fun PremiumTransactionItem(
                         MaterialTheme.colorScheme.error,
                         RoundedCornerShape(20.dp)
                     )
-                    .clickable { onDelete() }
+                    .clickable {
+                        // Reset card position first
+                        isSwipedOpen = false
+                        offsetX = 0f
+                        // Show confirmation dialog
+                        showDeleteDialog = true
+                    }
                     .padding(end = 20.dp),
                 contentAlignment = Alignment.CenterEnd
             ) {
@@ -871,6 +930,89 @@ fun PremiumTransactionItem(
                 )
             }
             
+            // Animate offset back to 0 when not dragging
+            LaunchedEffect(isDragging) {
+                if (!isDragging && offsetX != 0f) {
+                    // Check if we should trigger action based on settings
+                    if (offsetX <= -maxOffset * 0.3f && !hasTriggeredAction) {
+                        // Left swipe triggered delete
+                        if (swipeDeleteRequiresConfirm) {
+                            // If setting is ON, show confirmation dialog directly and reset
+                            showDeleteDialog = true
+                            hasTriggeredAction = true
+                            // Animate back to 0
+                            animate(
+                                initialValue = offsetX,
+                                targetValue = 0f,
+                                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy)
+                            ) { value, _ ->
+                                offsetX = value
+                            }
+                        } else {
+                            // If setting is OFF, keep card swiped open showing delete button
+                            isSwipedOpen = true
+                            onSwipeOpen() // Notify parent that this card is swiped open
+                            hasTriggeredAction = true
+                            // Snap to threshold position to show delete button (70%)
+                            animate(
+                                initialValue = offsetX,
+                                targetValue = -maxOffset * 0.7f,
+                                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy)
+                            ) { value, _ ->
+                                offsetX = value
+                            }
+                        }
+                    } else if (!isSwipedOpen) {
+                        // Not triggered action and not swiped open, animate back to 0
+                        animate(
+                            initialValue = offsetX,
+                            targetValue = 0f,
+                            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy)
+                        ) { value, _ ->
+                            offsetX = value
+                        }
+                    }
+                }
+            }
+            
+            // Reset swiped state when dialog is shown
+            LaunchedEffect(showDeleteDialog) {
+                if (showDeleteDialog && isSwipedOpen) {
+                    isSwipedOpen = false
+                    animate(
+                        initialValue = offsetX,
+                        targetValue = 0f,
+                        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy)
+                    ) { value, _ ->
+                        offsetX = value
+                    }
+                }
+            }
+            
+            // Delete confirmation dialog
+            if (showDeleteDialog) {
+                AlertDialog(
+                    onDismissRequest = { showDeleteDialog = false },
+                    title = { Text("确认删除") },
+                    text = { Text("确定要删除这条交易记录吗？") },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                showDeleteDialog = false
+                                onDelete()
+                            }
+                        ) {
+                            Text("删除", color = MaterialTheme.colorScheme.error)
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showDeleteDialog = false }) {
+                            Text("取消")
+                        }
+                    }
+                )
+            }
+            
             // Transaction card
             Card(
                 modifier = Modifier
@@ -878,7 +1020,15 @@ fun PremiumTransactionItem(
                     .offset { IntOffset(offsetX.toInt(), 0) }
                     .scale(scale)
                     .combinedClickable(
-                        onClick = { onClick() },
+                        onClick = {
+                            if (isSwipedOpen) {
+                                // If card is swiped open, close it instead of triggering onClick
+                                isSwipedOpen = false
+                                offsetX = 0f
+                            } else {
+                                onClick()
+                            }
+                        },
                         onLongClick = { onLongClick() }
                     ),
                 shape = RoundedCornerShape(20.dp),
