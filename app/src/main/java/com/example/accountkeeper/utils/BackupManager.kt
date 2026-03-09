@@ -232,16 +232,43 @@ class BackupManager(private val context: Context) {
      * 保存第三方账单文件
      * @param sourceUri 源文件URI
      * @param billType 账单类型（wechat/alipay）
-     * @return 保存后的文件
+     * @return 保存后的文件，如果文件已存在则返回null
      */
     fun saveBillFile(sourceUri: Uri, billType: String): File? {
         return try {
             val inputStream = context.contentResolver.openInputStream(sourceUri) ?: return null
+            val sourceBytes = inputStream.readBytes()
+            inputStream.close()
+            
+            // 计算文件内容的MD5哈希用于查重
+            val sourceHash = java.security.MessageDigest.getInstance("MD5")
+                .digest(sourceBytes)
+                .joinToString("") { "%02x".format(it) }
+            
+            // 检查是否已存在相同内容的文件
+            val existingFiles = getBillFilesByType(billType)
+            for (existingFile in existingFiles) {
+                try {
+                    val existingBytes = existingFile.readBytes()
+                    val existingHash = java.security.MessageDigest.getInstance("MD5")
+                        .digest(existingBytes)
+                        .joinToString("") { "%02x".format(it) }
+                    
+                    if (sourceHash == existingHash) {
+                        // 文件内容相同，不重复保存
+                        return null
+                    }
+                } catch (e: Exception) {
+                    // 忽略读取错误，继续检查下一个文件
+                }
+            }
+            
+            // 文件内容不同，保存新文件
             val fileName = getBillFileName(sourceUri, billType)
             val destFile = File(billDir, fileName)
             
             destFile.outputStream().use { output ->
-                inputStream.copyTo(output)
+                output.write(sourceBytes)
             }
             
             destFile

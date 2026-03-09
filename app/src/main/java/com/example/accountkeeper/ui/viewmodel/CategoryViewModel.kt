@@ -40,36 +40,61 @@ class CategoryViewModel @Inject constructor(
                 }
             }
             
-            // 2. Populate rich default categories if database is empty
+            // 2. Populate default categories
             val updatedList = categoryRepository.getAllCategoriesList()
-            if (updatedList.isEmpty()) {
-                val defaultCategories = listOf(
-                    Category(name = "餐饮美食", type = TransactionType.EXPENSE, isDefault = true),
-                    Category(name = "交通出行", type = TransactionType.EXPENSE, isDefault = true),
-                    Category(name = "服饰装扮", type = TransactionType.EXPENSE, isDefault = true),
-                    Category(name = "日用百货", type = TransactionType.EXPENSE, isDefault = true),
-                    Category(name = "休闲娱乐", type = TransactionType.EXPENSE, isDefault = true),
-                    Category(name = "文化教育", type = TransactionType.EXPENSE, isDefault = true),
-                    Category(name = "运动健康", type = TransactionType.EXPENSE, isDefault = true),
-                    Category(name = "美容美发", type = TransactionType.EXPENSE, isDefault = true),
-                    Category(name = "住房物业", type = TransactionType.EXPENSE, isDefault = true),
-                    Category(name = "水电煤气", type = TransactionType.EXPENSE, isDefault = true),
-                    Category(name = "数码电器", type = TransactionType.EXPENSE, isDefault = true),
-                    Category(name = "宠物花草", type = TransactionType.EXPENSE, isDefault = true),
-                    Category(name = "汽车飞机", type = TransactionType.EXPENSE, isDefault = true),
-                    Category(name = "家庭开支", type = TransactionType.EXPENSE, isDefault = true),
-                    Category(name = "转出", type = TransactionType.EXPENSE, isDefault = true),
+            
+            // 定义所有默认分类
+            val defaultCategories = listOf(
+                // 支出分类
+                Category(name = "餐饮美食", type = TransactionType.EXPENSE, isDefault = true),
+                Category(name = "交通出行", type = TransactionType.EXPENSE, isDefault = true),
+                Category(name = "服饰装扮", type = TransactionType.EXPENSE, isDefault = true),
+                Category(name = "日用百货", type = TransactionType.EXPENSE, isDefault = true),
+                Category(name = "休闲娱乐", type = TransactionType.EXPENSE, isDefault = true),
+                Category(name = "文化教育", type = TransactionType.EXPENSE, isDefault = true),
+                Category(name = "运动健康", type = TransactionType.EXPENSE, isDefault = true),
+                Category(name = "美容美发", type = TransactionType.EXPENSE, isDefault = true),
+                Category(name = "住房物业", type = TransactionType.EXPENSE, isDefault = true),
+                Category(name = "水电煤气", type = TransactionType.EXPENSE, isDefault = true),
+                Category(name = "数码电器", type = TransactionType.EXPENSE, isDefault = true),
+                Category(name = "宠物花草", type = TransactionType.EXPENSE, isDefault = true),
+                Category(name = "汽车飞机", type = TransactionType.EXPENSE, isDefault = true),
+                Category(name = "家庭开支", type = TransactionType.EXPENSE, isDefault = true),
+                Category(name = "转出", type = TransactionType.EXPENSE, isDefault = true),
 
-                    Category(name = "职业薪金", type = TransactionType.INCOME, isDefault = true),
-                    Category(name = "投资理财", type = TransactionType.INCOME, isDefault = true),
-                    Category(name = "兼职外快", type = TransactionType.INCOME, isDefault = true),
-                    Category(name = "红包礼金", type = TransactionType.INCOME, isDefault = true),
-                    Category(name = "二手闲置", type = TransactionType.INCOME, isDefault = true),
-                    Category(name = "退款报销", type = TransactionType.INCOME, isDefault = true),
-                    Category(name = "转入", type = TransactionType.INCOME, isDefault = true)
-                )
-                defaultCategories.forEach { newCat -> 
-                    categoryRepository.insertCategory(newCat)
+                // 收入分类
+                Category(name = "职业薪金", type = TransactionType.INCOME, isDefault = true),
+                Category(name = "投资理财", type = TransactionType.INCOME, isDefault = true),
+                Category(name = "兼职外快", type = TransactionType.INCOME, isDefault = true),
+                Category(name = "红包礼金", type = TransactionType.INCOME, isDefault = true),
+                Category(name = "二手闲置", type = TransactionType.INCOME, isDefault = true),
+                Category(name = "退款报销", type = TransactionType.INCOME, isDefault = true),
+                Category(name = "转入", type = TransactionType.INCOME, isDefault = true),
+
+                // 正资产分类（别人欠我的）
+                Category(name = "借出", type = TransactionType.ASSET, isDefault = true, isPositiveAsset = true),
+                Category(name = "应收款", type = TransactionType.ASSET, isDefault = true, isPositiveAsset = true),
+                Category(name = "预付款", type = TransactionType.ASSET, isDefault = true, isPositiveAsset = true),
+                Category(name = "押金", type = TransactionType.ASSET, isDefault = true, isPositiveAsset = true),
+                Category(name = "代付款", type = TransactionType.ASSET, isDefault = true, isPositiveAsset = true),
+                Category(name = "投资债权", type = TransactionType.ASSET, isDefault = true, isPositiveAsset = true),
+
+                // 负资产分类（我欠别人的）
+                Category(name = "借入", type = TransactionType.ASSET, isDefault = true, isPositiveAsset = false),
+                Category(name = "应付款", type = TransactionType.ASSET, isDefault = true, isPositiveAsset = false),
+                Category(name = "欠款", type = TransactionType.ASSET, isDefault = true, isPositiveAsset = false),
+                Category(name = "信用卡", type = TransactionType.ASSET, isDefault = true, isPositiveAsset = false),
+                Category(name = "贷款", type = TransactionType.ASSET, isDefault = true, isPositiveAsset = false),
+                Category(name = "分期付款", type = TransactionType.ASSET, isDefault = true, isPositiveAsset = false)
+            )
+            
+            // 只添加不存在的默认分类
+            for (defaultCat in defaultCategories) {
+                val exists = updatedList.any { 
+                    it.name == defaultCat.name && it.type == defaultCat.type 
+                }
+                if (!exists) {
+                    categoryRepository.insertCategory(defaultCat)
                 }
             }
         }

@@ -208,7 +208,7 @@ fun PremiumQuickSettingsCard(
                     QuickSettingItem(
                         icon = Icons.Default.DarkMode,
                         label = strings.darkMode,
-                        value = if (strings.language == "中文") {
+                        value = if (strings.language == "界面语言") {
                             if (isDarkMode) "开" else "关"
                         } else {
                             if (isDarkMode) "On" else "Off"

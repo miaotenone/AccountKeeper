@@ -142,6 +142,13 @@ class TransactionViewModel @Inject constructor(
         }
     }
 
+    /**
+     * 挂起版本的插入方法，用于批量导入时同步等待完成
+     */
+    suspend fun insertTransactionSuspend(transaction: Transaction) {
+        transactionRepository.insertTransaction(transaction)
+    }
+
     fun updateTransaction(transaction: Transaction) {
         viewModelScope.launch {
             transactionRepository.updateTransaction(transaction)

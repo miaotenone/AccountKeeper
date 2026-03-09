@@ -29,7 +29,9 @@ import com.example.accountkeeper.utils.BillParser
 import com.example.accountkeeper.utils.FileConverter
 import com.example.accountkeeper.utils.IdGenerator
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.OutputStreamWriter
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -261,7 +263,7 @@ fun ImportExportScreen(
                     }
 
                     val billType = BillParser.detectBillType(lines)
-                    val parsedTransactions = when (billType) {
+                    val parseResult = when (billType) {
                         "wechat" -> BillParser.parseWeChatBill(lines)
                         "alipay" -> BillParser.parseAlipayBill(lines)
                         else -> {
@@ -269,6 +271,7 @@ fun ImportExportScreen(
                             return@launch
                         }
                     }
+                    val parsedTransactions = parseResult.transactions
 
                     if (parsedTransactions.isEmpty()) {
                         snackbarHostState.showSnackbar("未找到可导入的交易记录")
@@ -310,7 +313,8 @@ fun ImportExportScreen(
                                 amount = tx.amount,
                                 note = tx.note,
                                 date = tx.date,
-                                categoryId = categoryId
+                                categoryId = categoryId,
+                                source = tx.source
                             )
                             viewModel.addTransaction(transaction)
                             successCount++
@@ -322,7 +326,8 @@ fun ImportExportScreen(
                     refreshBackupTrigger++
 
                     val billTypeName = if (billType == "wechat") "微信" else "支付宝"
-                    snackbarHostState.showSnackbar("${billTypeName}账单导入成功！共导入 $successCount 笔交易")
+                    val excludedInfo = if (parseResult.excludedCount > 0) "（已排除 ${parseResult.excludedCount} 笔退款交易）" else ""
+                    snackbarHostState.showSnackbar("${billTypeName}账单导入成功！共导入 $successCount 笔交易$excludedInfo")
                 } catch (e: Exception) {
                     e.printStackTrace()
                     snackbarHostState.showSnackbar("导入失败: ${e.localizedMessage}")
@@ -939,43 +944,52 @@ fun ImportExportScreen(
                                                                 // Re-import the bill file
                                                                 val lines = FileConverter.readLines(context, Uri.fromFile(file))
                                                                 if (lines != null) {
-                                                                    val parsed = when (billType) {
+                                                                    val parseResult = when (billType) {
                                                                         "wechat" -> BillParser.parseWeChatBill(lines)
                                                                         "alipay" -> BillParser.parseAlipayBill(lines)
-                                                                        else -> emptyList()
+                                                                        else -> BillParser.ParseResult(emptyList(), 0)
                                                                     }
+                                                                    val parsed = parseResult.transactions
                                                                     
                                                                     val latestCategories = categoryViewModel.categories.value
-                                                                    val latestTransactions = viewModel.transactions.value
+                                                                    // 从数据库实时获取交易列表，避免 StateFlow 未更新的问题
+                                                                    val existingTransactionIds = viewModel.transactions.first().map { it.id }.toMutableSet()
                                                                     var reimportCount = 0
                                                                     
                                                                     parsed.forEach { tx ->
-                                                                        if (!latestTransactions.any { it.id == tx.id }) {
+                                                                        // 检查交易是否已存在
+                                                                        if (!existingTransactionIds.contains(tx.id)) {
                                                                             val catMatch = latestCategories.find { 
                                                                                 it.name.equals(tx.category, ignoreCase = true) && it.type == tx.type 
                                                                             }
                                                                             val categoryId = catMatch?.id ?: latestCategories.firstOrNull { it.type == tx.type }?.id
                                                                             
                                                                             if (categoryId != null) {
-                                                                                viewModel.addTransaction(
+                                                                                // 使用挂起函数同步插入，等待完成
+                                                                                viewModel.insertTransactionSuspend(
                                                                                     Transaction(
                                                                                         id = tx.id,
                                                                                         type = tx.type,
                                                                                         amount = tx.amount,
                                                                                         note = tx.note,
                                                                                         date = tx.date,
-                                                                                        categoryId = categoryId
+                                                                                        categoryId = categoryId,
+                                                                                        source = tx.source
                                                                                     )
                                                                                 )
+                                                                                existingTransactionIds.add(tx.id)
                                                                                 reimportCount++
                                                                             }
                                                                         }
                                                                     }
                                                                     
-                                                                    if (reimportCount > 0) {
-                                                                        snackbarHostState.showSnackbar("成功恢复 $reimportCount 笔交易")
-                                                                    } else {
-                                                                        snackbarHostState.showSnackbar("没有需要恢复的新交易")
+                                                                    withContext(Dispatchers.Main) {
+                                                                        if (reimportCount > 0) {
+                                                                            val excludedInfo = if (parseResult.excludedCount > 0) "（已排除 ${parseResult.excludedCount} 笔退款）" else ""
+                                                                            snackbarHostState.showSnackbar("成功恢复 $reimportCount 笔交易$excludedInfo")
+                                                                        } else {
+                                                                            snackbarHostState.showSnackbar("没有需要恢复的新交易")
+                                                                        }
                                                                     }
                                                                 }
                                                             }

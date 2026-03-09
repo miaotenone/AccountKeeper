@@ -34,6 +34,8 @@ AccountKeeper 是一款简洁易用的个人财务管理 Android 应用，使用
 #### 其他工具
 - **KSP**: Kotlin Symbol Processing（注解处理器）
 - **Kotlin Parcelize**: 数据序列化
+- **Paging 3**: 分页加载库
+- **Apache POI**: Excel 文件解析
 
 ## 项目结构
 
@@ -48,14 +50,18 @@ app/
 │   │   │   │   ├── AppDatabase.kt       # Room 数据库配置
 │   │   │   │   ├── TransactionDao.kt    # 交易数据访问对象
 │   │   │   │   ├── CategoryDao.kt       # 分类数据访问对象
+│   │   │   │   ├── AssetDao.kt          # 资产数据访问对象
 │   │   │   │   └── Converters.kt        # Room 类型转换器
 │   │   │   ├── model/
 │   │   │   │   ├── Transaction.kt       # 交易数据模型
 │   │   │   │   ├── Category.kt          # 分类数据模型
+│   │   │   │   ├── Asset.kt             # 资产数据模型
+│   │   │   │   ├── Attachment.kt        # 附件数据模型
 │   │   │   │   └── Enums.kt             # 枚举定义
 │   │   │   └── repository/
 │   │   │       ├── TransactionRepository.kt  # 交易数据仓库
 │   │   │       ├── CategoryRepository.kt     # 分类数据仓库
+│   │   │       ├── AssetRepository.kt        # 资产数据仓库
 │   │   │       └── SettingsRepository.kt     # 设置数据仓库
 │   │   ├── di/
 │   │   │   └── DatabaseModule.kt        # Hilt 依赖注入模块
@@ -69,8 +75,12 @@ app/
 │   │   │   │   ├── SettingsScreen.kt    # 设置主页
 │   │   │   │   ├── AppSettingsScreen.kt # 个性化设置
 │   │   │   │   ├── CategorySettingsScreen.kt  # 分类管理
+│   │   │   │   ├── CategoryTransactionsScreen.kt  # 分类交易筛选
 │   │   │   │   ├── DataManagementScreen.kt    # 数据管理
 │   │   │   │   ├── ImportExportScreen.kt      # 导入导出
+│   │   │   │   ├── AssetsScreen.kt            # 资产管理
+│   │   │   │   ├── AddEditAssetScreen.kt      # 添加/编辑资产
+│   │   │   │   ├── SearchResultScreen.kt      # 搜索结果
 │   │   │   │   └── AboutScreen.kt      # 关于页面
 │   │   │   ├── theme/
 │   │   │   │   ├── Color.kt            # 颜色定义
@@ -80,6 +90,7 @@ app/
 │   │   │   └── viewmodel/
 │   │   │       ├── TransactionViewModel.kt    # 交易视图模型
 │   │   │       ├── CategoryViewModel.kt       # 分类视图模型
+│   │   │       ├── AssetViewModel.kt          # 资产视图模型
 │   │   │       └── SettingsViewModel.kt       # 设置视图模型
 │   │   └── utils/
 │   │       ├── BackupManager.kt        # 备份管理器
@@ -102,11 +113,13 @@ app/
 **功能特性**:
 - 余额卡片显示总资产、总收入、总支出
 - 支持本月/总资产视图切换
+- **搜索功能** - 支持关键词搜索交易记录
 - 交易列表按日期分组显示
 - 支持点击编辑交易
 - 支持向左滑动删除交易
 - 支持长按进入批量选择模式
 - 批量删除和批量编辑功能
+- **分页加载** - 大数据量性能优化
 
 **交互细节**:
 - 卡片向左滑动约 30% 显示红色删除背景
@@ -114,6 +127,7 @@ app/
 - 长按交易卡片进入选择模式
 - 选择模式支持多选/取消选择
 - 顶部显示已选数量和操作按钮
+- 点击搜索图标展开搜索栏
 
 ### 2. 添加/编辑交易 (AddEditTransactionScreen)
 
@@ -146,6 +160,23 @@ app/
 - 时间趋势折线图
 - 分类占比饼图
 - 分类排行榜
+- **分类筛选** - 点击分类排行可查看该分类所有交易
+
+### 4. 资产管理 (AssetsScreen) 【新增】
+
+**功能特性**:
+- 净资产、总资产、总负债统计
+- 资产/负债列表显示
+- 支持多种资产状态（进行中、已完成、已取消）
+- 借贷记录追踪
+- 附件上传支持
+- 滑动删除和批量操作
+
+**交互细节**:
+- 点击资产卡片编辑详情
+- 向左滑动显示删除选项
+- 长按进入批量选择模式
+- 状态筛选和排序功能
 
 ### 4. 设置功能
 
@@ -164,19 +195,21 @@ app/
 
 ### 5. 数据管理 (DataManagementScreen)
 
-#### CSV 导入导出
-- 导出全量账本至 CSV 文件
-- 导入标准 CSV 备份文件
+#### ZIP 备份导入导出
+- 导出全量数据至 ZIP 文件（含交易和资产）
+- 导入标准 ZIP 备份文件
 - 数据合并规则：ID 重复跳过
 - 自动创建缺失分类
+- 支持附件导入导出
 
 #### 第三方账单导入
-- 支持微信支付账单 CSV 导入
-- 支持支付宝账单 CSV 导入
+- 支持微信支付账单导入（Excel/CSV）
+- 支持支付宝账单导入（Excel/CSV）
 - 自动识别账单类型
 - 智能解析交易数据
 - 自动匹配或创建分类
-- 退款交易自动识别为收入
+- 退款交易智能处理（已退款的原交易不导入）
+- 退款配对功能
 
 #### 本地备份系统
 - **自动备份**: 每次增删改操作自动创建备份
@@ -190,10 +223,18 @@ app/
 **功能特性**:
 - 应用图标和名称
 - 版本信息
-- 帮助教程弹窗
+- 帮助教程弹窗（含完整功能说明）
 - GitHub 链接
 - 作者联系方式
 - 技术支持信息
+
+### 7. 搜索结果页面 (SearchResultScreen) 【新增】
+
+**功能特性**:
+- 关键词搜索交易记录
+- 按备注和分类匹配
+- 搜索结果按日期分组显示
+- 支持编辑和删除操作
 
 ## 数据模型
 
@@ -211,21 +252,53 @@ data class Transaction(
 )
 ```
 
+### Asset（资产）【新增】
+```kotlin
+@Entity(tableName = "assets")
+data class Asset(
+    @PrimaryKey val id: Long,
+    val date: Long,                 // 日期
+    val amount: Double,             // 金额
+    val status: AssetStatus,        // 状态（进行中/已完成/已取消）
+    val categoryId: Long?,          // 分类ID
+    val targetPerson: String,       // 目标人物
+    val targetAccount: String,      // 目标账户
+    val note: String,               // 备注
+    val isCompleted: Boolean,       // 是否完成
+    val attachments: List<Attachment>, // 附件列表
+    val createdAt: Long,            // 创建时间
+    val updatedAt: Long             // 更新时间
+)
+```
+
+### Attachment（附件）【新增】
+```kotlin
+@Parcelize
+data class Attachment(
+    val id: String,                 // 附件ID
+    val fileName: String,           // 文件名
+    val mimeType: String,           // MIME类型
+    val size: Long,                 // 文件大小
+    val uri: String                 // 文件URI
+) : Parcelable
+```
+
 ### Category（分类）
 ```kotlin
 @Entity(tableName = "categories")
 data class Category(
     @PrimaryKey(autoGenerate = true) val id: Long,
     val name: String,               // 分类名称
-    val type: TransactionType,      // 收入/支出类型
+    val type: TransactionType,      // 收入/支出/资产类型
     val isDefault: Boolean          // 是否预设分类
 )
 ```
 
 ### 枚举类型
 ```kotlin
-enum class TransactionType { INCOME, EXPENSE }
+enum class TransactionType { INCOME, EXPENSE, ASSET }
 enum class TransactionSource { MANUAL, ALIPAY, WECHAT }
+enum class AssetStatus { IN_PROGRESS, COMPLETED, CANCELLED }
 ```
 
 ## 数据库设计
@@ -243,6 +316,22 @@ enum class TransactionSource { MANUAL, ALIPAY, WECHAT }
 | note | String | 备注 |
 | source | String | 数据来源 |
 
+#### assets 表 【新增】
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | Long (PK) | 资产ID |
+| date | Long | 日期 |
+| amount | Double | 金额 |
+| status | String | 状态 |
+| categoryId | Long (FK) | 分类ID |
+| targetPerson | String | 目标人物 |
+| targetAccount | String | 目标账户 |
+| note | String | 备注 |
+| isCompleted | Boolean | 是否完成 |
+| attachments | String | 附件列表(JSON) |
+| createdAt | Long | 创建时间 |
+| updatedAt | Long | 更新时间 |
+
 #### categories 表
 | 字段 | 类型 | 说明 |
 |------|------|------|
@@ -253,7 +342,8 @@ enum class TransactionSource { MANUAL, ALIPAY, WECHAT }
 
 ### 外键关系
 - transactions.categoryId → categories.id
-- 删除策略：SET_NULL（删除分类时交易不删除）
+- assets.categoryId → categories.id
+- 删除策略：SET_NULL（删除分类时交易/资产不删除）
 
 ## 工具类
 
@@ -263,13 +353,17 @@ enum class TransactionSource { MANUAL, ALIPAY, WECHAT }
 - 获取最新备份文件
 - 列出所有备份
 - 删除指定备份
+- ZIP 格式备份（含交易、资产、附件）
+- 附件文件管理
 
 ### BillParser（账单解析器）
-- 解析微信账单 CSV
-- 解析支付宝账单 CSV
+- 解析微信账单（Excel/CSV）
+- 解析支付宝账单（Excel/CSV）
 - 自动识别交易类型
 - 智能分类映射
 - 处理退款交易
+- 退款配对功能
+- 排除已退款的原交易
 
 ### CurrencyUtils（货币工具）
 - 显示格式转换
@@ -314,6 +408,7 @@ enum class TransactionSource { MANUAL, ALIPAY, WECHAT }
 ┌─────────────┐
 │   首页     │ ← 底部导航
 │   统计     │ ← 底部导航
+│   资产     │ ← 底部导航 【新增】
 │   设置     │ ← 底部导航
 └─────────────┘
        ↓
@@ -332,6 +427,9 @@ enum class TransactionSource { MANUAL, ALIPAY, WECHAT }
 │  第三方账单导入  │
 │  本地自动备份    │
 └──────────────────────────────┘
+       ↓
+   [首页搜索] → 搜索结果页面 【新增】
+   [统计排行] → 分类交易筛选页面 【新增】
 ```
 
 ## 安全特性
@@ -374,15 +472,17 @@ enum class TransactionSource { MANUAL, ALIPAY, WECHAT }
 1. 不支持云同步
 2. 备份文件未加密
 3. 无生物识别锁
-4. 仅支持 CSV 格式导入
-5. 统计图表功能有限
+4. 仅支持微信/支付宝账单格式
+5. 附件仅支持本地存储
 
 ### 待优化项
-1. 添加数据搜索功能
+1. 支持更多第三方账单格式（银行流水等）
 2. 支持预算管理
 3. 添加周期性记账
 4. 支持多账户
 5. 添加数据图表导出
+6. 云端同步功能
+6. 云端同步功能
 
 ## 开发指南
 
@@ -413,7 +513,15 @@ git clone https://github.com/miaotenone/AccountKeeper.git
 
 ## 版本历史
 
-### v1.0.0 (当前版本)
+### v1.1.20 (当前版本)
+- **资产管理功能** - 新增资产/负债管理，支持借贷记录追踪、附件上传
+- **搜索功能** - 首页支持关键词搜索交易记录
+- **分类筛选** - 统计页面点击分类排行可查看该分类所有交易
+- **账单导入增强** - 支持微信/支付宝 Excel 和 CSV 格式，智能退款处理
+- **分页加载** - 大数据量性能优化
+- **界面优化** - 布局适配，减少空白区域
+
+### v1.0.0
 - 基础收支记录功能
 - 统计分析功能
 - 分类管理
@@ -441,4 +549,4 @@ git clone https://github.com/miaotenone/AccountKeeper.git
 
 ---
 
-*最后更新: 2025年2月*
+*最后更新: 2025年3月*

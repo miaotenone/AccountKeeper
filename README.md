@@ -4,7 +4,7 @@
 
 # AccountKeeper
 
-### 📱 一款简洁易用的个人财务管理 Android 应用
+### 一款简洁易用的个人财务管理 Android 应用
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![API](https://img.shields.io/badge/API-26%2B-brightgreen.svg?style=flat)](https://android-arsenal.com/api?level=26)
@@ -19,26 +19,46 @@
 
 ## 简体中文
 
-### ✨ 特性
+### 特性
 
-- 💰 **完整记账功能** - 记录收入和支出，支持自定义分类和备注
-- 📊 **智能统计分析** - 多维度数据展示，图表可视化
-- 🧾 **账单自动导入** - 支持微信和支付宝账单 CSV 导入
-- 💾 **多重数据备份** - 自动备份 + 手动备份，数据安全无忧
-- 🎨 **现代化界面** - Material 3 设计，支持深色模式
-- 🌍 **国际化支持** - 中英文切换，多种货币符号
-- ⚡ **流畅交互** - 滑动删除、批量操作，高效管理
+- **完整记账功能** - 记录收入和支出，支持自定义分类和备注
+- **资产管理** - 追踪资产和负债，管理借贷记录，支持附件
+- **智能统计分析** - 多维度数据展示，图表可视化，分类筛选
+- **账单自动导入** - 支持微信和支付宝账单（Excel/CSV）导入，智能退款处理
+- **搜索功能** - 关键词搜索快速定位交易记录
+- **多重数据备份** - ZIP 备份 + 自动备份，数据安全无忧
+- **现代化界面** - Material 3 设计，支持深色模式
+- **国际化支持** - 中英文切换，多种货币符号
+- **流畅交互** - 滑动删除、批量操作、分页加载
 
-### 📸 截图
+### 更新日志
+
+#### v1.1.20 (最新版本)
+- 新增资产管理功能，支持资产/负债追踪
+- 新增首页搜索功能，快速定位交易
+- 新增统计页面分类筛选，点击排行榜查看详情
+- 完善微信/支付宝账单导入，支持 Excel 格式
+- 分页加载优化，大数据量性能提升
+- 界面布局优化
+
+#### v1.0.0
+- 基础收支记录功能
+- 统计分析功能
+- 分类管理
+- CSV 导入导出
+- 本地备份系统
+- 主题切换、国际化支持
+
+### 截图
 
 <div align="center">
   <img src="https://via.placeholder.com/200x400/1f77b4/ffffff?text=Home" width="200" />
   <img src="https://via.placeholder.com/200x400/ff7f0e/ffffff?text=Statistics" width="200" />
-  <img src="https://via.placeholder.com/200x400/2ca02c/ffffff?text=Settings" width="200" />
-  <img src="https://via.placeholder.com/200x400/d62728/ffffff?text=Data" width="200" />
+  <img src="https://via.placeholder.com/200x400/2ca02c/ffffff?text=Assets" width="200" />
+  <img src="https://via.placeholder.com/200x400/d62728/ffffff?text=Settings" width="200" />
 </div>
 
-### 🚀 快速开始
+### 快速开始
 
 #### 下载安装
 
@@ -61,7 +81,7 @@ cd AccountKeeper
 ./gradlew installDebug
 ```
 
-### 📖 使用指南
+### 使用指南
 
 #### 基础操作
 
@@ -69,17 +89,24 @@ cd AccountKeeper
 2. **编辑交易** - 点击交易卡片
 3. **删除交易** - 向左滑动交易卡片
 4. **批量操作** - 长按交易卡片进入选择模式
+5. **搜索记录** - 点击首页搜索图标，输入关键词
 
 #### 数据管理
 
 - **CSV 导出** - 设置 → 数据管理 → 导出全量账本
 - **CSV 导入** - 设置 → 数据管理 → 导入标准备份
-- **账单导入** - 设置 → 数据管理 → 导入微信/支付宝账单
+- **账单导入** - 设置 → 数据管理 → 导入微信/支付宝账单（支持 Excel 和 CSV）
 - **自动备份** - 设置 → 数据管理 → 开启本地自动备份
+
+#### 资产管理
+
+- **添加资产** - 资产页面点击 + 按钮，记录借贷信息
+- **资产状态** - 支持进行中、已完成、已取消等状态
+- **附件支持** - 可添加图片等附件作为凭证
 
 详细教程请查看应用内的帮助页面。
 
-### 🛠️ 技术栈
+### 技术栈
 
 | 技术 | 版本 | 说明 |
 |------|------|------|
@@ -90,9 +117,11 @@ cd AccountKeeper
 | Hilt | 2.48.x | 依赖注入 |
 | Navigation | 2.7.x | 导航组件 |
 | DataStore | - | 轻量级存储 |
+| Paging 3 | - | 分页加载 |
+| Apache POI | 5.2.x | Excel 解析 |
 | KSP | - | 注解处理器 |
 
-### 📁 项目结构
+### 项目结构
 
 ```
 app/
@@ -109,7 +138,7 @@ app/
 └── utils/            # 工具类
 ```
 
-### 🤝 贡献
+### 贡献
 
 欢迎贡献代码、报告问题或提出建议！
 
@@ -119,20 +148,20 @@ app/
 4. 推送到分支 (`git push origin feature/AmazingFeature`)
 5. 开启 Pull Request
 
-### 📝 开源协议
+### 开源协议
 
 本项目采用 [MIT 协议](LICENSE) 开源。
 
-### 👨‍💻 作者
+### 作者
 
 **Ricky Miao** - [GitHub](https://github.com/miaotenone)
 
-### 📧 联系方式
+### 联系方式
 
 - 邮箱: rickymiao63@163.com
 - GitHub: [miaotenone](https://github.com/miaotenone/AccountKeeper)
 
-### 🙏 致谢
+### 致谢
 
 感谢所有为这个项目贡献的开发者和用户！
 
@@ -140,26 +169,46 @@ app/
 
 ## English
 
-### ✨ Features
+### Features
 
-- 💰 **Complete Bookkeeping** - Record income and expenses with custom categories and notes
-- 📊 **Smart Statistics** - Multi-dimensional data display with visual charts
-- 🧾 **Bill Auto Import** - Support for WeChat and Alipay bill CSV import
-- 💾 **Multiple Data Backups** - Auto backup + manual backup for data security
-- 🎨 **Modern Interface** - Material 3 design with dark mode support
-- 🌍 **Internationalization** - Chinese/English switching, multiple currency symbols
-- ⚡ **Smooth Interactions** - Swipe-to-delete, batch operations for efficient management
+- **Complete Bookkeeping** - Record income and expenses with custom categories and notes
+- **Asset Management** - Track assets and liabilities, manage loan records with attachments
+- **Smart Statistics** - Multi-dimensional data display with visual charts and category filtering
+- **Bill Auto Import** - Support for WeChat and Alipay bills (Excel/CSV) with smart refund handling
+- **Search Function** - Quick keyword search to locate transactions
+- **Multiple Data Backups** - ZIP backup + auto backup for data security
+- **Modern Interface** - Material 3 design with dark mode support
+- **Internationalization** - Chinese/English switching, multiple currency symbols
+- **Smooth Interactions** - Swipe-to-delete, batch operations, paginated loading
 
-### 📸 Screenshots
+### Changelog
+
+#### v1.1.20 (Latest)
+- Added asset management for tracking assets/liabilities
+- Added home page search functionality
+- Added statistics page category filtering
+- Improved WeChat/Alipay bill import with Excel support
+- Optimized pagination for better performance
+- UI layout improvements
+
+#### v1.0.0
+- Basic income/expense recording
+- Statistics and analysis
+- Category management
+- CSV import/export
+- Local backup system
+- Theme switching, i18n support
+
+### Screenshots
 
 <div align="center">
   <img src="https://via.placeholder.com/200x400/1f77b4/ffffff?text=Home" width="200" />
   <img src="https://via.placeholder.com/200x400/ff7f0e/ffffff?text=Statistics" width="200" />
-  <img src="https://via.placeholder.com/200x400/2ca02c/ffffff?text=Settings" width="200" />
-  <img src="https://via.placeholder.com/200x400/d62728/ffffff?text=Data" width="200" />
+  <img src="https://via.placeholder.com/200x400/2ca02c/ffffff?text=Assets" width="200" />
+  <img src="https://via.placeholder.com/200x400/d62728/ffffff?text=Settings" width="200" />
 </div>
 
-### 🚀 Getting Started
+### Getting Started
 
 #### Download & Install
 
@@ -182,7 +231,7 @@ cd AccountKeeper
 ./gradlew installDebug
 ```
 
-### 📖 Usage Guide
+### Usage Guide
 
 #### Basic Operations
 
@@ -190,17 +239,24 @@ cd AccountKeeper
 2. **Edit Transaction** - Tap on a transaction card
 3. **Delete Transaction** - Swipe left on a transaction card
 4. **Batch Operations** - Long press a transaction card to enter selection mode
+5. **Search Records** - Tap the search icon on home page and enter keywords
 
 #### Data Management
 
 - **CSV Export** - Settings → Data Management → Export Full Ledger
 - **CSV Import** - Settings → Data Management → Import Standard Backup
-- **Bill Import** - Settings → Data Management → Import WeChat/Alipay Bill
+- **Bill Import** - Settings → Data Management → Import WeChat/Alipay Bill (Excel/CSV)
 - **Auto Backup** - Settings → Data Management → Enable Local Auto Backup
+
+#### Asset Management
+
+- **Add Asset** - Tap + on Assets page to record loan information
+- **Asset Status** - Supports In Progress, Completed, Cancelled statuses
+- **Attachments** - Add images and other files as evidence
 
 For detailed tutorials, please check the Help page in the app.
 
-### 🛠️ Tech Stack
+### Tech Stack
 
 | Technology | Version | Description |
 |------------|---------|-------------|
@@ -211,9 +267,11 @@ For detailed tutorials, please check the Help page in the app.
 | Hilt | 2.48.x | Dependency Injection |
 | Navigation | 2.7.x | Navigation Component |
 | DataStore | - | Lightweight Storage |
+| Paging 3 | - | Paginated Loading |
+| Apache POI | 5.2.x | Excel Parsing |
 | KSP | - | Annotation Processor |
 
-### 📁 Project Structure
+### Project Structure
 
 ```
 app/
@@ -230,7 +288,7 @@ app/
 └── utils/            # Utilities
 ```
 
-### 🤝 Contributing
+### Contributing
 
 Contributions are welcome! Feel free to submit issues, feature requests, or pull requests.
 
@@ -240,25 +298,25 @@ Contributions are welcome! Feel free to submit issues, feature requests, or pull
 4. Push to the branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
 
-### 📝 License
+### License
 
 This project is licensed under the [MIT License](LICENSE).
 
-### 👨‍💻 Author
+### Author
 
 **Ricky Miao** - [GitHub](https://github.com/miaotenone)
 
-### 📧 Contact
+### Contact
 
 - Email: rickymiao63@163.com
 - GitHub: [miaotenone](https://github.com/miaotenone/AccountKeeper)
 
-### 🙏 Acknowledgments
+### Acknowledgments
 
 Thanks to all developers and users who contribute to this project!
 
 ---
 
 <div align="center">
-  <sub>Built with ❤️ by <a href="https://github.com/miaotenone">Ricky Miao</a></sub>
+  <sub>Built with love by <a href="https://github.com/miaotenone">Ricky Miao</a></sub>
 </div>

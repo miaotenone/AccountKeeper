@@ -98,12 +98,12 @@ fun DataManagementScreen(
                     withContext(Dispatchers.Main) {
                         if (success) {
                             snackbarHostState.showSnackbar(
-                                if (strings.language == "中文") "导出成功！包含 ${transactions.size} 笔交易和 ${assets.size} 条资产记录"
+                                if (strings.language == "界面语言") "导出成功！包含 ${transactions.size} 笔交易和 ${assets.size} 条资产记录"
                                 else "Export successful! ${transactions.size} transactions and ${assets.size} assets"
                             )
                         } else {
                             snackbarHostState.showSnackbar(
-                                if (strings.language == "中文") "导出失败"
+                                if (strings.language == "界面语言") "导出失败"
                                 else "Export failed"
                             )
                         }
@@ -112,7 +112,7 @@ fun DataManagementScreen(
                     e.printStackTrace()
                     withContext(Dispatchers.Main) {
                         snackbarHostState.showSnackbar(
-                            if (strings.language == "中文") "导出失败: ${e.localizedMessage}"
+                            if (strings.language == "界面语言") "导出失败: ${e.localizedMessage}"
                             else "Export failed: ${e.localizedMessage}"
                         )
                     }
@@ -248,13 +248,13 @@ fun DataManagementScreen(
                 }
             }
             snackbarHostState.showSnackbar(if (successCount > 0) {
-                                        if (strings.language == "中文") "成功融合 $successCount 笔数据！" else "Successfully merged $successCount records!"
+                                        if (strings.language == "界面语言") "成功融合 $successCount 笔数据！" else "Successfully merged $successCount records!"
                                     } else {
-                                        if (strings.language == "中文") "合并完毕：但未识别出任何需要补充的新数据" else "Merge complete: no new data to add"
+                                        if (strings.language == "界面语言") "合并完毕：但未识别出任何需要补充的新数据" else "Merge complete: no new data to add"
                                     })
                                 } catch (e: Exception) {
                                     e.printStackTrace()
-                                    snackbarHostState.showSnackbar(if (strings.language == "中文") "合并解析失败: ${e.localizedMessage}" else "Merge parsing failed: ${e.localizedMessage}")        }
+                                    snackbarHostState.showSnackbar(if (strings.language == "界面语言") "合并解析失败: ${e.localizedMessage}" else "Merge parsing failed: ${e.localizedMessage}")        }
     }
 
     // ZIP 导入处理 - 内联函数避免 return 标签问题
@@ -265,7 +265,7 @@ fun DataManagementScreen(
             if (!result.success) {
                 withContext(Dispatchers.Main) {
                     snackbarHostState.showSnackbar(
-                        if (strings.language == "中文") "导入失败: ${result.errorMessage}"
+                        if (strings.language == "界面语言") "导入失败: ${result.errorMessage}"
                         else "Import failed: ${result.errorMessage}"
                     )
                 }
@@ -380,7 +380,7 @@ fun DataManagementScreen(
             settingsViewModel.backupManager.cleanupTempFiles()
             
             withContext(Dispatchers.Main) {
-                val message = if (strings.language == "中文") {
+                val message = if (strings.language == "界面语言") {
                     "导入成功！交易记录: $txCount 笔，资产记录: $assetCount 条"
                 } else {
                     "Import successful! Transactions: $txCount, Assets: $assetCount"
@@ -391,7 +391,7 @@ fun DataManagementScreen(
             e.printStackTrace()
             withContext(Dispatchers.Main) {
                 snackbarHostState.showSnackbar(
-                    if (strings.language == "中文") "导入失败: ${e.localizedMessage}"
+                    if (strings.language == "界面语言") "导入失败: ${e.localizedMessage}"
                     else "Import failed: ${e.localizedMessage}"
                 )
             }
@@ -419,18 +419,19 @@ fun DataManagementScreen(
                     if (lines.isNullOrEmpty()) {
                         withContext(Dispatchers.Main) {
                             snackbarHostState.showSnackbar(
-                                if (strings.language == "中文") "无法读取文件内容" else "Unable to read file content"
+                                if (strings.language == "界面语言") "无法读取文件内容" else "Unable to read file content"
                             )
                         }
                         return@launch
                     }
 
-                    val parsedTransactions = BillParser.parseWeChatBill(lines)
+                    val parseResult = BillParser.parseWeChatBill(lines)
+                    val parsedTransactions = parseResult.transactions
 
                     if (parsedTransactions.isEmpty()) {
                         withContext(Dispatchers.Main) {
                             snackbarHostState.showSnackbar(
-                                if (strings.language == "中文") "未找到可导入的交易记录" else "No transaction records found to import"
+                                if (strings.language == "界面语言") "未找到可导入的交易记录" else "No transaction records found to import"
                             )
                         }
                         return@launch
@@ -469,28 +470,35 @@ fun DataManagementScreen(
                                 amount = tx.amount,
                                 note = tx.note,
                                 date = tx.date,
-                                categoryId = categoryId
+                                categoryId = categoryId,
+                                source = tx.source
                             )
                             viewModel.addTransaction(transaction)
                             successCount++
                         }
                     }
 
-                    settingsViewModel.backupManager.saveBillFile(uri, "wechat")
+                    val billTypeName = if (strings.language == "界面语言") "微信" else "WeChat"
+                    val excludedInfo = if (parseResult.excludedCount > 0) {
+                        if (strings.language == "界面语言") "（已排除 ${parseResult.excludedCount} 笔退款交易）"
+                        else " (${parseResult.excludedCount} refund transactions excluded)"
+                    } else ""
+                    val savedFile = settingsViewModel.backupManager.saveBillFile(uri, "wechat")
                     refreshBackupTrigger++
-
-                    val billTypeName = if (strings.language == "中文") "微信" else "WeChat"
+                    val duplicateInfo = if (savedFile == null && successCount > 0) {
+                        if (strings.language == "界面语言") "（文件已存在，未重复保存）" else " (File already exists, not saved again)"
+                    } else ""
                     withContext(Dispatchers.Main) {
                         snackbarHostState.showSnackbar(
-                            if (strings.language == "中文") "${billTypeName}账单导入成功！共导入 $successCount 笔交易"
-                            else "$billTypeName bill import successful! Imported $successCount transactions"
+                            if (strings.language == "界面语言") "${billTypeName}账单导入成功！共导入 $successCount 笔交易$excludedInfo$duplicateInfo"
+                            else "$billTypeName bill import successful! Imported $successCount transactions$excludedInfo$duplicateInfo"
                         )
                     }
                 } catch (e: Exception) {
                     e.printStackTrace()
                     withContext(Dispatchers.Main) {
                         snackbarHostState.showSnackbar(
-                            if (strings.language == "中文") "导入失败: ${e.localizedMessage}" else "Import failed: ${e.localizedMessage}"
+                            if (strings.language == "界面语言") "导入失败: ${e.localizedMessage}" else "Import failed: ${e.localizedMessage}"
                         )
                     }
                 }
@@ -509,18 +517,19 @@ fun DataManagementScreen(
                     if (lines.isNullOrEmpty()) {
                         withContext(Dispatchers.Main) {
                             snackbarHostState.showSnackbar(
-                                if (strings.language == "中文") "无法读取文件内容" else "Unable to read file content"
+                                if (strings.language == "界面语言") "无法读取文件内容" else "Unable to read file content"
                             )
                         }
                         return@launch
                     }
 
-                    val parsedTransactions = BillParser.parseAlipayBill(lines)
+                    val parseResult = BillParser.parseAlipayBill(lines)
+                    val parsedTransactions = parseResult.transactions
 
                     if (parsedTransactions.isEmpty()) {
                         withContext(Dispatchers.Main) {
                             snackbarHostState.showSnackbar(
-                                if (strings.language == "中文") "未找到可导入的交易记录" else "No transaction records found to import"
+                                if (strings.language == "界面语言") "未找到可导入的交易记录" else "No transaction records found to import"
                             )
                         }
                         return@launch
@@ -559,28 +568,35 @@ fun DataManagementScreen(
                                 amount = tx.amount,
                                 note = tx.note,
                                 date = tx.date,
-                                categoryId = categoryId
+                                categoryId = categoryId,
+                                source = tx.source
                             )
                             viewModel.addTransaction(transaction)
                             successCount++
                         }
                     }
 
-                    settingsViewModel.backupManager.saveBillFile(uri, "alipay")
+                    val billTypeName = if (strings.language == "界面语言") "支付宝" else "Alipay"
+                    val excludedInfo = if (parseResult.excludedCount > 0) {
+                        if (strings.language == "界面语言") "（已排除 ${parseResult.excludedCount} 笔退款交易）"
+                        else " (${parseResult.excludedCount} refund transactions excluded)"
+                    } else ""
+                    val savedFile = settingsViewModel.backupManager.saveBillFile(uri, "alipay")
                     refreshBackupTrigger++
-
-                    val billTypeName = if (strings.language == "中文") "支付宝" else "Alipay"
+                    val duplicateInfo = if (savedFile == null && successCount > 0) {
+                        if (strings.language == "界面语言") "（文件已存在，未重复保存）" else " (File already exists, not saved again)"
+                    } else ""
                     withContext(Dispatchers.Main) {
                         snackbarHostState.showSnackbar(
-                            if (strings.language == "中文") "${billTypeName}账单导入成功！共导入 $successCount 笔交易"
-                            else "$billTypeName bill import successful! Imported $successCount transactions"
+                            if (strings.language == "界面语言") "${billTypeName}账单导入成功！共导入 $successCount 笔交易$excludedInfo$duplicateInfo"
+                            else "$billTypeName bill import successful! Imported $successCount transactions$excludedInfo$duplicateInfo"
                         )
                     }
                 } catch (e: Exception) {
                     e.printStackTrace()
                     withContext(Dispatchers.Main) {
                         snackbarHostState.showSnackbar(
-                            if (strings.language == "中文") "导入失败: ${e.localizedMessage}" else "Import failed: ${e.localizedMessage}"
+                            if (strings.language == "界面语言") "导入失败: ${e.localizedMessage}" else "Import failed: ${e.localizedMessage}"
                         )
                     }
                 }
@@ -631,7 +647,7 @@ fun DataManagementScreen(
             PremiumDataCard(
                 icon = Icons.Default.Description,
                 title = strings.manualDataManagement,
-                description = if (strings.language == "中文") "ZIP 全量导入导出（含交易、资产和附件）" else "ZIP Full Import/Export (Transactions, Assets & Attachments)",
+                description = if (strings.language == "界面语言") "ZIP 全量导入导出（含交易、资产和附件）" else "ZIP Full Import/Export (Transactions, Assets & Attachments)",
                 color = if (isSystemInDarkTheme()) DarkGradientIncome else LightGradientIncome
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -904,7 +920,7 @@ fun DataManagementScreen(
                                         snackbarHostState.showSnackbar(strings.manualBackupSuccess)
                                     } else {
                                         snackbarHostState.showSnackbar(
-                                            if (strings.language == "中文") "创建备份失败"
+                                            if (strings.language == "界面语言") "创建备份失败"
                                             else "Backup creation failed"
                                         )
                                     }
@@ -912,7 +928,7 @@ fun DataManagementScreen(
                             } catch (e: Exception) {
                                 withContext(Dispatchers.Main) {
                                     snackbarHostState.showSnackbar(
-                                        if (strings.language == "中文") "创建备份失败: ${e.localizedMessage}"
+                                        if (strings.language == "界面语言") "创建备份失败: ${e.localizedMessage}"
                                         else "Backup creation failed: ${e.localizedMessage}"
                                     )
                                 }
@@ -1207,7 +1223,7 @@ fun ManualBackupsDialog(
                                                     .clickable {
                                                         scope.launch {
                                                             // TODO: Implement restore functionality
-                                                            snackbarHostState.showSnackbar(if (strings.language == "中文") "恢复功能暂未实现" else "Restore feature not yet implemented")
+                                                            snackbarHostState.showSnackbar(if (strings.language == "界面语言") "恢复功能暂未实现" else "Restore feature not yet implemented")
                                                         }
                                                     },
                                                 shape = RoundedCornerShape(12.dp)
@@ -1268,6 +1284,12 @@ fun BillFileDialog(
     val scope = rememberCoroutineScope()
 
     val isChinese = strings.language == "界面语言"
+    
+    // 分类账单文件
+    val wechatBills = bills.filter { backupManager.detectBillType(it) == "wechat" }
+    val alipayBills = bills.filter { backupManager.detectBillType(it) == "alipay" }
+    val otherBills = bills.filter { backupManager.detectBillType(it) !in listOf("wechat", "alipay") }
+    
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (isChinese) "已导入的账单文件" else "Imported Bill Files") },
@@ -1276,203 +1298,86 @@ fun BillFileDialog(
                 Text(if (isChinese) "尚未导入任何账单文件" else "No bill files imported yet")
             } else {
                 Column(
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    bills.forEach { bill ->
-                        val billType = backupManager.detectBillType(bill)
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(12.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        bill.name,
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        maxLines = 1,
-                                        softWrap = false,
-                                        modifier = Modifier.horizontalScroll(rememberScrollState())
-                                    )
-                                    Text(
-                                        "${if (billType == "wechat") {
-                                            if (isChinese) "微信" else "WeChat"
-                                        } else if (billType == "alipay") {
-                                            if (isChinese) "支付宝" else "Alipay"
-                                        } else {
-                                            if (isChinese) "未知" else "Unknown"
-                                        }} - ${backupManager.getBillFileSize(bill)}",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                                Row {
-                                    // 重新导入按钮
-                                    IconButton(
-                                        onClick = {
-                                            scope.launch(Dispatchers.IO) {
-                                                try {
-                                                    // 直接从 File 读取内容
-                                                    val lines = if (bill.extension.equals("xlsx", ignoreCase = true)) {
-                                                        // Excel 文件
-                                                        val workbook = org.apache.poi.ss.usermodel.WorkbookFactory.create(bill.inputStream())
-                                                        val lineList = mutableListOf<String>()
-                                                        val sheet = workbook.getSheetAt(0)
-                                                        for (row in sheet) {
-                                                            val cells = mutableListOf<String>()
-                                                            for (cell in row) {
-                                                                val cellValue = when (cell.cellType) {
-                                                                    org.apache.poi.ss.usermodel.CellType.STRING -> cell.stringCellValue ?: ""
-                                                                    org.apache.poi.ss.usermodel.CellType.NUMERIC -> {
-                                                                        if (org.apache.poi.ss.usermodel.DateUtil.isCellDateFormatted(cell)) {
-                                                                            cell.dateCellValue?.let { 
-                                                                                java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(it)
-                                                                            } ?: ""
-                                                                        } else {
-                                                                            val num = cell.numericCellValue
-                                                                            if (num == num.toLong().toDouble()) num.toLong().toString() else num.toString()
-                                                                        }
-                                                                    }
-                                                                    org.apache.poi.ss.usermodel.CellType.BOOLEAN -> cell.booleanCellValue.toString()
-                                                                    org.apache.poi.ss.usermodel.CellType.FORMULA -> {
-                                                                        try { cell.stringCellValue ?: cell.numericCellValue.toString() } catch (e: Exception) { "" }
-                                                                    }
-                                                                    else -> ""
-                                                                }
-                                                                cells.add(cellValue.trim())
-                                                            }
-                                                            if (cells.any { it.isNotBlank() }) {
-                                                                lineList.add(cells.joinToString(","))
-                                                            }
-                                                        }
-                                                        workbook.close()
-                                                        lineList
-                                                    } else {
-                                                        // CSV 文件，尝试检测编码
-                                                        val bytes = bill.readBytes()
-                                                        val content = try {
-                                                            String(bytes, charset("GBK"))
-                                                        } catch (e: Exception) {
-                                                            String(bytes, Charsets.UTF_8)
-                                                        }
-                                                        content.lines().filter { it.isNotBlank() }
-                                                    }
-                                                    
-                                                    if (lines.isNullOrEmpty()) {
-                                                        withContext(Dispatchers.Main) {
-                                                            snackbarHostState.showSnackbar(
-                                                                if (isChinese) "无法读取文件内容" else "Unable to read file content"
-                                                            )
-                                                        }
-                                                        return@launch
-                                                    }
-
-                                                    val parsedTransactions = when (billType) {
-                                                        "wechat" -> BillParser.parseWeChatBill(lines)
-                                                        "alipay" -> BillParser.parseAlipayBill(lines)
-                                                        else -> {
-                                                            withContext(Dispatchers.Main) {
-                                                                snackbarHostState.showSnackbar(
-                                                                    if (isChinese) "无法识别的账单格式" else "Unable to recognize bill format"
-                                                                )
-                                                            }
-                                                            return@launch
-                                                        }
-                                                    }
-
-                                                    if (parsedTransactions.isEmpty()) {
-                                                        withContext(Dispatchers.Main) {
-                                                            snackbarHostState.showSnackbar(
-                                                                if (isChinese) "未找到可导入的交易记录" else "No transaction records found to import"
-                                                            )
-                                                        }
-                                                        return@launch
-                                                    }
-
-                                                    val importNewCategoriesMap = mutableMapOf<Pair<String, TransactionType>, Boolean>()
-                                                    parsedTransactions.forEach { tx ->
-                                                        val catMatch = categories.find { it.name.equals(tx.category, ignoreCase = true) && it.type == tx.type }
-                                                        if (catMatch == null && tx.category.isNotBlank()) {
-                                                            importNewCategoriesMap[tx.category to tx.type] = true
-                                                        }
-                                                    }
-
-                                                    for ((name, type) in importNewCategoriesMap.keys) {
-                                                        categoryViewModel.addCategory(com.example.accountkeeper.data.model.Category(name = name, type = type, isDefault = false))
-                                                    }
-
-                                                    kotlinx.coroutines.delay(500)
-
-                                                    val latestCategories = categoryViewModel.categories.value
-                                                    val latestTransactions = viewModel.transactions.value
-                                                    var successCount = 0
-
-                                                    parsedTransactions.forEach { tx ->
-                                                        if (latestTransactions.any { it.id == tx.id }) {
-                                                            return@forEach
-                                                        }
-
-                                                        val catMatch = latestCategories.find { it.name.equals(tx.category, ignoreCase = true) && it.type == tx.type }
-                                                        val categoryId = catMatch?.id ?: latestCategories.firstOrNull { it.type == tx.type }?.id
-
-                                                        if (categoryId != null) {
-                                                            val transaction = Transaction(
-                                                                id = tx.id,
-                                                                type = tx.type,
-                                                                amount = tx.amount,
-                                                                note = tx.note,
-                                                                date = tx.date,
-                                                                categoryId = categoryId
-                                                            )
-                                                            viewModel.addTransaction(transaction)
-                                                            successCount++
-                                                        }
-                                                    }
-
-                                                    withContext(Dispatchers.Main) {
-                                                        if (successCount > 0) {
-                                                            snackbarHostState.showSnackbar(
-                                                                if (isChinese) "成功导入 $successCount 条新记录"
-                                                                else "Successfully imported $successCount new records"
-                                                            )
-                                                        } else {
-                                                            snackbarHostState.showSnackbar(
-                                                                if (isChinese) "没有新记录可导入"
-                                                                else "No new records to import"
-                                                            )
-                                                        }
-                                                    }
-                                                } catch (e: Exception) {
-                                                    e.printStackTrace()
-                                                    withContext(Dispatchers.Main) {
-                                                        snackbarHostState.showSnackbar(
-                                                            if (isChinese) "导入失败: ${e.localizedMessage}" 
-                                                            else "Import failed: ${e.localizedMessage}"
-                                                        )
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    ) {
-                                        Icon(Icons.Default.Refresh, contentDescription = strings.reimportBill, tint = MaterialTheme.colorScheme.primary)
-                                    }
-                                    // 删除按钮
-                                    IconButton(
-                                        onClick = {
-                                            backupManager.deleteBillFile(bill)
-                                            onRefresh()
-                                        }
-                                    ) {
-                                        Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
-                                    }
-                                }
-                            }
+                    // 微信账单分组
+                    if (wechatBills.isNotEmpty()) {
+                        Text(
+                            text = if (isChinese) "微信 (${wechatBills.size})" else "WeChat (${wechatBills.size})",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        wechatBills.forEach { bill -> 
+                            BillFileItem(
+                                bill = bill, 
+                                billType = "wechat", 
+                                backupManager = backupManager, 
+                                isChinese = isChinese, 
+                                scope = scope, 
+                                categories = categories, 
+                                categoryViewModel = categoryViewModel, 
+                                viewModel = viewModel, 
+                                snackbarHostState = snackbarHostState, 
+                                onRefresh = onRefresh,
+                                strings = strings
+                            ) 
+                        }
+                    }
+                    
+                    // 支付宝账单分组
+                    if (alipayBills.isNotEmpty()) {
+                        if (wechatBills.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
+                        Text(
+                            text = if (isChinese) "支付宝 (${alipayBills.size})" else "Alipay (${alipayBills.size})",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        alipayBills.forEach { bill -> 
+                            BillFileItem(
+                                bill = bill, 
+                                billType = "alipay", 
+                                backupManager = backupManager, 
+                                isChinese = isChinese, 
+                                scope = scope, 
+                                categories = categories, 
+                                categoryViewModel = categoryViewModel, 
+                                viewModel = viewModel, 
+                                snackbarHostState = snackbarHostState, 
+                                onRefresh = onRefresh,
+                                strings = strings
+                            ) 
+                        }
+                    }
+                    
+                    // 其他账单分组
+                    if (otherBills.isNotEmpty()) {
+                        if (wechatBills.isNotEmpty() || alipayBills.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
+                        Text(
+                            text = if (isChinese) "其他 (${otherBills.size})" else "Other (${otherBills.size})",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        otherBills.forEach { bill -> 
+                            BillFileItem(
+                                bill = bill, 
+                                billType = backupManager.detectBillType(bill), 
+                                backupManager = backupManager, 
+                                isChinese = isChinese, 
+                                scope = scope, 
+                                categories = categories, 
+                                categoryViewModel = categoryViewModel, 
+                                viewModel = viewModel, 
+                                snackbarHostState = snackbarHostState, 
+                                onRefresh = onRefresh,
+                                strings = strings
+                            ) 
                         }
                     }
                 }
@@ -1481,4 +1386,214 @@ fun BillFileDialog(
         confirmButton = { TextButton(onClick = onDismiss) { Text(strings.close) } },
         shape = RoundedCornerShape(20.dp)
     )
+}
+
+@Composable
+fun BillFileItem(
+    bill: java.io.File,
+    billType: String,
+    backupManager: com.example.accountkeeper.utils.BackupManager,
+    isChinese: Boolean,
+    scope: kotlinx.coroutines.CoroutineScope,
+    categories: List<com.example.accountkeeper.data.model.Category>,
+    categoryViewModel: CategoryViewModel,
+    viewModel: TransactionViewModel,
+    snackbarHostState: SnackbarHostState,
+    onRefresh: () -> Unit,
+    strings: AppStrings
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    bill.name,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    softWrap = false,
+                    modifier = Modifier.horizontalScroll(rememberScrollState())
+                )
+                Text(
+                    backupManager.getBillFileSize(bill),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Row {
+                // 重新导入按钮
+                IconButton(
+                    onClick = {
+                        scope.launch(Dispatchers.IO) {
+                            try {
+                                val lines = if (bill.extension.equals("xlsx", ignoreCase = true)) {
+                                    val workbook = org.apache.poi.ss.usermodel.WorkbookFactory.create(bill.inputStream())
+                                    val lineList = mutableListOf<String>()
+                                    val sheet = workbook.getSheetAt(0)
+                                    for (row in sheet) {
+                                        val cells = mutableListOf<String>()
+                                        for (cell in row) {
+                                            val cellValue = when (cell.cellType) {
+                                                org.apache.poi.ss.usermodel.CellType.STRING -> cell.stringCellValue ?: ""
+                                                org.apache.poi.ss.usermodel.CellType.NUMERIC -> {
+                                                    if (org.apache.poi.ss.usermodel.DateUtil.isCellDateFormatted(cell)) {
+                                                        cell.dateCellValue?.let { 
+                                                            java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(it)
+                                                        } ?: ""
+                                                    } else {
+                                                        val num = cell.numericCellValue
+                                                        if (num == num.toLong().toDouble()) num.toLong().toString() else num.toString()
+                                                    }
+                                                }
+                                                org.apache.poi.ss.usermodel.CellType.BOOLEAN -> cell.booleanCellValue.toString()
+                                                org.apache.poi.ss.usermodel.CellType.FORMULA -> {
+                                                    try { cell.stringCellValue ?: cell.numericCellValue.toString() } catch (e: Exception) { "" }
+                                                }
+                                                else -> ""
+                                            }
+                                            cells.add(cellValue.trim())
+                                        }
+                                        if (cells.any { it.isNotBlank() }) {
+                                            lineList.add(cells.joinToString(","))
+                                        }
+                                    }
+                                    workbook.close()
+                                    lineList
+                                } else {
+                                    val bytes = bill.readBytes()
+                                    val content = try {
+                                        String(bytes, charset("GBK"))
+                                    } catch (e: Exception) {
+                                        String(bytes, Charsets.UTF_8)
+                                    }
+                                    content.lines().filter { it.isNotBlank() }
+                                }
+                                
+                                if (lines.isNullOrEmpty()) {
+                                    withContext(Dispatchers.Main) {
+                                        snackbarHostState.showSnackbar(
+                                            if (isChinese) "无法读取文件内容" else "Unable to read file content"
+                                        )
+                                    }
+                                    return@launch
+                                }
+
+                                val parseResult = when (billType) {
+                                    "wechat" -> BillParser.parseWeChatBill(lines)
+                                    "alipay" -> BillParser.parseAlipayBill(lines)
+                                    else -> {
+                                        withContext(Dispatchers.Main) {
+                                            snackbarHostState.showSnackbar(
+                                                if (isChinese) "无法识别的账单格式" else "Unable to recognize bill format"
+                                            )
+                                        }
+                                        return@launch
+                                    }
+                                }
+                                val parsedTransactions = parseResult.transactions
+
+                                if (parsedTransactions.isEmpty()) {
+                                    withContext(Dispatchers.Main) {
+                                        snackbarHostState.showSnackbar(
+                                            if (isChinese) "未找到可导入的交易记录" else "No transaction records found to import"
+                                        )
+                                    }
+                                    return@launch
+                                }
+
+                                val importNewCategoriesMap = mutableMapOf<Pair<String, TransactionType>, Boolean>()
+                                parsedTransactions.forEach { tx ->
+                                    val catMatch = categories.find { it.name.equals(tx.category, ignoreCase = true) && it.type == tx.type }
+                                    if (catMatch == null && tx.category.isNotBlank()) {
+                                        importNewCategoriesMap[tx.category to tx.type] = true
+                                    }
+                                }
+
+                                for ((name, type) in importNewCategoriesMap.keys) {
+                                    categoryViewModel.addCategory(com.example.accountkeeper.data.model.Category(name = name, type = type, isDefault = false))
+                                }
+
+                                kotlinx.coroutines.delay(500)
+
+                                val latestCategories = categoryViewModel.categories.value
+                                val latestTransactions = viewModel.transactions.value
+                                var successCount = 0
+
+                                parsedTransactions.forEach { tx ->
+                                    if (latestTransactions.any { it.id == tx.id }) {
+                                        return@forEach
+                                    }
+
+                                    val catMatch = latestCategories.find { it.name.equals(tx.category, ignoreCase = true) && it.type == tx.type }
+                                    val categoryId = catMatch?.id ?: latestCategories.firstOrNull { it.type == tx.type }?.id
+
+                                    if (categoryId != null) {
+                                        val transaction = Transaction(
+                                            id = tx.id,
+                                            type = tx.type,
+                                            amount = tx.amount,
+                                            note = tx.note,
+                                            date = tx.date,
+                                            categoryId = categoryId,
+                                            source = tx.source
+                                        )
+                                        viewModel.addTransaction(transaction)
+                                        successCount++
+                                    }
+                                }
+
+                                val excludedInfo = if (parseResult.excludedCount > 0) {
+                                    if (isChinese) "（已排除 ${parseResult.excludedCount} 笔退款交易）"
+                                    else " (${parseResult.excludedCount} refund transactions excluded)"
+                                } else ""
+                                withContext(Dispatchers.Main) {
+                                    if (successCount > 0) {
+                                        snackbarHostState.showSnackbar(
+                                            if (isChinese) "成功导入 $successCount 条新记录$excludedInfo"
+                                            else "Successfully imported $successCount new records$excludedInfo"
+                                        )
+                                    } else {
+                                        snackbarHostState.showSnackbar(
+                                            if (isChinese) "没有新记录可导入"
+                                            else "No new records to import"
+                                        )
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                                withContext(Dispatchers.Main) {
+                                    snackbarHostState.showSnackbar(
+                                        if (isChinese) "导入失败: ${e.localizedMessage}" 
+                                        else "Import failed: ${e.localizedMessage}"
+                                    )
+                                }
+                            }
+                        }
+                    }
+                ) {
+                    Icon(Icons.Default.Refresh, contentDescription = if (isChinese) "重新导入" else "Re-import", tint = MaterialTheme.colorScheme.primary)
+                }
+                // 删除按钮
+                IconButton(
+                    onClick = {
+                        backupManager.deleteBillFile(bill)
+                        onRefresh()
+                        scope.launch {
+                            snackbarHostState.showSnackbar(if (isChinese) "账单文件已删除" else "Bill file deleted")
+                        }
+                    }
+                ) {
+                    Icon(Icons.Default.Delete, contentDescription = if (isChinese) "删除" else "Delete", tint = MaterialTheme.colorScheme.error)
+                }
+            }
+        }
+    }
 }

@@ -1,6 +1,6 @@
 package com.example.accountkeeper.utils
 
-import com.example.accountkeeper.data.model.Transaction
+import com.example.accountkeeper.data.model.TransactionSource
 import com.example.accountkeeper.data.model.TransactionType
 import java.text.SimpleDateFormat
 import java.util.*
@@ -11,6 +11,9 @@ import java.util.*
  */
 object BillParser {
 
+    /**
+     * 解析后的交易数据
+     */
     data class ParsedTransaction(
         val id: Long = IdGenerator.generateId(),
         val date: Long,
@@ -18,7 +21,40 @@ object BillParser {
         val amount: Double,
         val category: String,
         val note: String,
-        val originalType: String = "" // 原始账单类型（收入/支出）
+        val originalType: String = "",      // 原始账单类型（收入/支出）
+        val source: TransactionSource = TransactionSource.MANUAL,
+        val isRefund: Boolean = false,       // 是否为退款记录
+        val relatedTransactionId: String? = null, // 关联的原交易单号
+        val counterparty: String = ""        // 交易对方
+    )
+
+    /**
+     * 解析结果
+     * @param transactions 解析后的交易列表（已排除已退款的原交易）
+     * @param excludedCount 被排除的交易数量（用于显示统计）
+     */
+    data class ParseResult(
+        val transactions: List<ParsedTransaction>,
+        val excludedCount: Int = 0
+    )
+
+    /**
+     * 内部使用的原始交易数据（用于退款配对）
+     */
+    private data class RawTransaction(
+        val transactionId: String,          // 交易单号
+        val merchantOrderId: String,        // 商户单号
+        val date: Long,
+        val type: TransactionType,
+        val amount: Double,
+        val category: String,
+        val note: String,
+        val counterparty: String,
+        val transactionType: String,        // 原始交易类型（如"商户消费"、"中铁网络-退款"）
+        val status: String,                 // 当前状态
+        val payMethod: String,              // 支付方式
+        val source: TransactionSource,
+        val isRefund: Boolean = false       // 是否为退款记录
     )
 
     /**
@@ -30,10 +66,14 @@ object BillParser {
      * 
      * 2. CSV 格式 - 微信导出的备选格式
      *    表头: 交易时间, 交易类型, 交易对方, 金额, 收/支, 交易单号, 商户单号, 备注
+     * 
+     * 退款处理策略：
+     * - 已全额退款的原交易：不导入
+     * - 退款记录：尝试配对原交易，若配对成功则两者都不导入；若配对失败则保留退款记录作为收入
      */
-    fun parseWeChatBill(lines: List<String>): List<ParsedTransaction> {
-        val transactions = mutableListOf<ParsedTransaction>()
+    fun parseWeChatBill(lines: List<String>): ParseResult {
         val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+        val rawTransactions = mutableListOf<RawTransaction>()
         
         // 查找表头行
         var startIndex = 0
@@ -58,7 +98,7 @@ object BillParser {
             if (line.isEmpty()) continue
             
             // 跳过分隔线和统计信息
-            if (line.startsWith("--") || line.contains("共") && line.contains("笔记录")) continue
+            if (line.startsWith("--") || (line.contains("共") && line.contains("笔记录"))) continue
             
             val parts = parseCsvLine(line)
             
@@ -74,35 +114,36 @@ object BillParser {
                     val payMethod = parts[6]
                     val status = parts[7]
                     val transactionId = parts[8]
-                    
-                    // 跳过退款记录（已全额退款的不计入支出）
-                    if (status.contains("已退款") || transactionType.contains("退款")) {
-                        continue
-                    }
+                    val merchantOrderId = if (parts.size >= 10) parts[9] else ""
                     
                     val date = dateFormat.parse(dateStr)
                     val amount = amountStr.toDoubleOrNull() ?: 0.0
                     
-                    // 收/支判断: "支出" 或 "收入"，"/" 表示中性交易（不记录）
+                    // 收/支判断
                     val type = when {
                         incomeExpense == "支出" || incomeExpense == "Expense" -> TransactionType.EXPENSE
                         incomeExpense == "收入" || incomeExpense == "Income" -> TransactionType.INCOME
-                        else -> continue // 跳过中性交易（如充值、提现等）
+                        else -> null // 中性交易（如充值、提现等）
                     }
                     
-                    val category = mapWeChatCategory(transactionType, type, counterparty)
-                    val note = buildWeChatNote(transactionType, counterparty, product, payMethod)
-                    
-                    if (date != null && amount > 0) {
-                        transactions.add(
-                            ParsedTransaction(
-                                id = transactionId.hashCode().toLong().takeIf { it > 0 } ?: IdGenerator.generateId(),
+                    if (date != null && amount > 0 && type != null) {
+                        val isRefund = transactionType.contains("退款") || status.contains("退款")
+                        
+                        rawTransactions.add(
+                            RawTransaction(
+                                transactionId = transactionId,
+                                merchantOrderId = merchantOrderId,
                                 date = date.time,
                                 type = type,
                                 amount = amount,
-                                category = category,
-                                note = note,
-                                originalType = incomeExpense
+                                category = mapWeChatCategory(transactionType, type, counterparty),
+                                note = buildWeChatNote(transactionType, counterparty, product, payMethod),
+                                counterparty = counterparty,
+                                transactionType = transactionType,
+                                status = status,
+                                payMethod = payMethod,
+                                source = TransactionSource.WECHAT,
+                                isRefund = isRefund
                             )
                         )
                     }
@@ -114,39 +155,128 @@ object BillParser {
                     val amountStr = parts[3].replace("¥", "").replace("￥", "").replace(",", "").trim()
                     val incomeExpense = parts[4]
                     val transactionId = parts[5]
+                    val merchantOrderId = if (parts.size >= 7) parts[6] else ""
                     
                     val date = dateFormat.parse(dateStr)
                     val amount = amountStr.toDoubleOrNull() ?: 0.0
                     val type = when (incomeExpense) {
                         "支出", "Expense" -> TransactionType.EXPENSE
                         "收入", "Income" -> TransactionType.INCOME
-                        else -> continue
+                        else -> null
                     }
                     
-                    val category = mapWeChatCategory(transactionType, type, counterparty)
-                    val note = "$transactionType - $counterparty"
-                    
-                    if (date != null && amount > 0) {
-                        transactions.add(
-                            ParsedTransaction(
-                                id = transactionId.hashCode().toLong().takeIf { it > 0 } ?: IdGenerator.generateId(),
+                    if (date != null && amount > 0 && type != null) {
+                        val isRefund = transactionType.contains("退款")
+                        
+                        rawTransactions.add(
+                            RawTransaction(
+                                transactionId = transactionId,
+                                merchantOrderId = merchantOrderId,
                                 date = date.time,
                                 type = type,
                                 amount = amount,
-                                category = category,
-                                note = note,
-                                originalType = incomeExpense
+                                category = mapWeChatCategory(transactionType, type, counterparty),
+                                note = "$transactionType - $counterparty",
+                                counterparty = counterparty,
+                                transactionType = transactionType,
+                                status = "",
+                                payMethod = "",
+                                source = TransactionSource.WECHAT,
+                                isRefund = isRefund
                             )
                         )
                     }
                 }
             } catch (e: Exception) {
-                // 跳过解析失败的行
                 e.printStackTrace()
             }
         }
         
-        return transactions
+        // 处理退款配对
+        return processWeChatRefunds(rawTransactions)
+    }
+
+    /**
+     * 处理微信退款配对逻辑
+     */
+    private fun processWeChatRefunds(rawTransactions: List<RawTransaction>): ParseResult {
+        val resultTransactions = mutableListOf<ParsedTransaction>()
+        val excludeIds = mutableSetOf<String>()
+        var excludedCount = 0
+        
+        // 1. 识别所有需要排除的已退款交易
+        val fullyRefundedTransactions = rawTransactions.filter { 
+            it.status.contains("已全额退款") && it.type == TransactionType.EXPENSE 
+        }
+        fullyRefundedTransactions.forEach { 
+            excludeIds.add(it.transactionId)
+            excludedCount++
+        }
+        
+        // 2. 处理退款记录，尝试配对
+        val refundRecords = rawTransactions.filter { it.isRefund && it.type == TransactionType.INCOME }
+        val normalTransactions = rawTransactions.filter { !it.isRefund && it.type != TransactionType.INCOME || (it.type == TransactionType.INCOME && !it.isRefund) }
+        
+        val matchedRefundIds = mutableSetOf<String>()
+        
+        for (refund in refundRecords) {
+            // 尝试找到配对的原交易
+            val matchedOriginal = normalTransactions.find { original ->
+                original.type == TransactionType.EXPENSE &&
+                original.amount == refund.amount &&
+                // 时间相近（7天内）
+                kotlin.math.abs(original.date - refund.date) <= 7 * 24 * 60 * 60 * 1000L &&
+                // 商家名匹配（提取退款记录中的商家名）
+                extractMerchantName(refund.transactionType) == extractMerchantName(original.transactionType) ||
+                refund.counterparty == original.counterparty
+            }
+            
+            if (matchedOriginal != null) {
+                // 配对成功，都不导入
+                excludeIds.add(refund.transactionId)
+                excludeIds.add(matchedOriginal.transactionId)
+                matchedRefundIds.add(refund.transactionId)
+                excludedCount += 2
+            }
+        }
+        
+        // 3. 构建最终结果
+        rawTransactions.forEach { raw ->
+            if (raw.transactionId !in excludeIds) {
+                resultTransactions.add(
+                    ParsedTransaction(
+                        id = kotlin.math.abs(raw.transactionId.hashCode().toLong()),
+                        date = raw.date,
+                        type = raw.type,
+                        amount = raw.amount,
+                        category = raw.category,
+                        note = raw.note,
+                        originalType = if (raw.type == TransactionType.EXPENSE) "支出" else "收入",
+                        source = TransactionSource.WECHAT,
+                        isRefund = raw.isRefund,
+                        relatedTransactionId = null,
+                        counterparty = raw.counterparty
+                    )
+                )
+            }
+        }
+        
+        return ParseResult(
+            transactions = resultTransactions,
+            excludedCount = excludedCount
+        )
+    }
+
+    /**
+     * 从退款交易类型中提取商家名
+     * 例如: "中铁网络-退款" -> "中铁网络"
+     */
+    private fun extractMerchantName(transactionType: String): String {
+        return transactionType
+            .replace("-退款", "")
+            .replace("退款-", "")
+            .replace("退款", "")
+            .trim()
     }
 
     /**
@@ -181,9 +311,9 @@ object BillParser {
      * 示例数据：
      * 2026-02-20 18:03:55,餐饮,支出,64.30,美团外卖-某某商家,余额,账单同步,,
      */
-    fun parseAlipayBill(lines: List<String>): List<ParsedTransaction> {
-        val transactions = mutableListOf<ParsedTransaction>()
+    fun parseAlipayBill(lines: List<String>): ParseResult {
         val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+        val rawTransactions = mutableListOf<RawTransaction>()
         
         // 查找表头行
         var startIndex = 0
@@ -194,6 +324,8 @@ object BillParser {
                 break
             }
         }
+        
+        var transactionIndex = 0  // 用于生成唯一ID的计数器
         
         for (i in startIndex until lines.size) {
             val line = lines[i].trim()
@@ -210,6 +342,8 @@ object BillParser {
                 val incomeExpense: String
                 val amountStr: String
                 val note: String
+                val counterparty: String
+                val status: String
                 
                 if (parts.size >= 5 && (parts[2] == "支出" || parts[2] == "收入" || parts[2] == "不计收支")) {
                     // 新格式 (8列): 记录时间, 分类, 收支类型, 金额, 备注, 账户, 来源, 标签
@@ -218,14 +352,16 @@ object BillParser {
                     incomeExpense = parts[2]
                     amountStr = parts[3].replace("¥", "").replace("￥", "").replace(",", "").trim()
                     note = parts[4].ifBlank { category }
+                    counterparty = extractCounterpartyFromNote(parts[4])
+                    status = ""
                 } else if (parts.size >= 7) {
                     // 旧格式: 交易时间, 商品说明, 交易对方, 收/支, 金额, 交易状态, 交易分类, ...
                     dateStr = parts[0]
                     val productName = parts[1]
-                    val counterparty = parts[2]
+                    counterparty = parts[2]
                     incomeExpense = parts[3]
                     amountStr = parts[4].replace("¥", "").replace("￥", "").replace(",", "").trim()
-                    val status = parts[5]
+                    status = parts[5]
                     category = parts[6]
                     
                     // 只处理交易成功的记录
@@ -247,27 +383,144 @@ object BillParser {
                     else -> continue
                 }
                 
-                val mappedCategory = mapAlipayCategory(category, type)
+                // 识别退款
+                val isRefund = category == "退款" || note.contains("退款")
                 
                 if (date != null && amount > 0) {
-                    transactions.add(
-                        ParsedTransaction(
+                    transactionIndex++  // 递增计数器保证唯一性
+                    // 使用时间戳+金额+类型+索引+备注hash来保证ID唯一
+                    val uniqueId = "${date.time}_${amount}_${type.name}_${transactionIndex}_${note.hashCode()}"
+                    
+                    rawTransactions.add(
+                        RawTransaction(
+                            transactionId = uniqueId,
+                            merchantOrderId = "",
                             date = date.time,
                             type = type,
                             amount = amount,
-                            category = mappedCategory,
+                            category = mapAlipayCategory(category, type, isRefund),
                             note = note,
-                            originalType = incomeExpense
+                            counterparty = counterparty,
+                            transactionType = category,
+                            status = status,
+                            payMethod = "",
+                            source = TransactionSource.ALIPAY,
+                            isRefund = isRefund
                         )
                     )
                 }
             } catch (e: Exception) {
-                // 跳过解析失败的行
                 e.printStackTrace()
             }
         }
         
-        return transactions
+        // 处理支付宝退款配对
+        return processAlipayRefunds(rawTransactions)
+    }
+
+    /**
+     * 处理支付宝退款配对逻辑
+     */
+    private fun processAlipayRefunds(rawTransactions: List<RawTransaction>): ParseResult {
+        val resultTransactions = mutableListOf<ParsedTransaction>()
+        val excludeIndices = mutableSetOf<Int>()
+        var excludedCount = 0
+        
+        val refundRecords = rawTransactions.filter { it.isRefund }
+        val normalExpenses = rawTransactions.filter { it.type == TransactionType.EXPENSE && !it.isRefund }
+        
+        for (refund in refundRecords) {
+            // 尝试找到配对的原支出
+            val matchedIndex = normalExpenses.indexOfFirst { expense ->
+                expense.amount == refund.amount &&
+                // 时间相近（7天内）
+                kotlin.math.abs(expense.date - refund.date) <= 7 * 24 * 60 * 60 * 1000L &&
+                // 备注中包含相似信息
+                hasCommonKeywords(expense.note, refund.note) ||
+                hasCommonKeywords(expense.counterparty, refund.counterparty)
+            }
+            
+            if (matchedIndex >= 0) {
+                val matchedOriginal = normalExpenses[matchedIndex]
+                // 找到原始交易在rawTransactions中的索引
+                val originalIndex = rawTransactions.indexOf(matchedOriginal)
+                val refundIndex = rawTransactions.indexOf(refund)
+                
+                if (originalIndex >= 0 && refundIndex >= 0) {
+                    excludeIndices.add(originalIndex)
+                    excludeIndices.add(refundIndex)
+                    excludedCount += 2
+                }
+            }
+        }
+        
+        // 构建最终结果
+        rawTransactions.forEachIndexed { index, raw ->
+            if (index !in excludeIndices) {
+                // 使用稳定的ID生成方式，确保同一笔交易每次解析都生成相同的ID
+                val stableId = kotlin.math.abs(raw.transactionId.hashCode().toLong())
+                resultTransactions.add(
+                    ParsedTransaction(
+                        id = stableId,
+                        date = raw.date,
+                        type = raw.type,
+                        amount = raw.amount,
+                        category = raw.category,
+                        note = raw.note,
+                        originalType = if (raw.type == TransactionType.EXPENSE) "支出" else "收入",
+                        source = TransactionSource.ALIPAY,
+                        isRefund = raw.isRefund,
+                        relatedTransactionId = null,
+                        counterparty = raw.counterparty
+                    )
+                )
+            }
+        }
+        
+        return ParseResult(
+            transactions = resultTransactions,
+            excludedCount = excludedCount
+        )
+    }
+
+    /**
+     * 从备注中提取交易对方
+     */
+    private fun extractCounterpartyFromNote(note: String): String {
+        // 尝试从备注中提取商家名，格式如 "美团外卖-某某商家"
+        val dashIndex = note.indexOf("-")
+        return if (dashIndex > 0) {
+            note.substring(0, dashIndex).trim()
+        } else {
+            note
+        }
+    }
+
+    /**
+     * 检查两个字符串是否有共同关键词
+     */
+    private fun hasCommonKeywords(str1: String, str2: String): Boolean {
+        if (str1.isBlank() || str2.isBlank()) return false
+        
+        // 提取关键词（去除常见后缀）
+        val keywords1 = extractKeywords(str1)
+        val keywords2 = extractKeywords(str2)
+        
+        return keywords1.any { kw1 -> 
+            keywords2.any { kw2 -> 
+                kw1.length >= 2 && kw2.length >= 2 && (kw1.contains(kw2) || kw2.contains(kw1))
+            }
+        }
+    }
+
+    /**
+     * 提取关键词
+     */
+    private fun extractKeywords(str: String): List<String> {
+        return str
+            .replace(Regex("""[\[\]【】()（）]"""), " ")
+            .split(Regex("""[\s\-_—－,，、]"""))
+            .filter { it.isNotBlank() && it.length >= 2 }
     }
 
     /**
@@ -302,9 +555,18 @@ object BillParser {
         return when {
             // 支出分类
             type == TransactionType.EXPENSE -> when {
+                // 特定商户识别
+                counterparty.contains("中铁网络") || counterparty.contains("12306") || original.contains("12306") -> "交通出行"
+                counterparty.contains("滴滴") || counterparty.contains("出行") -> "交通出行"
+                counterparty.contains("京东") || counterparty.contains("拼多多") || counterparty.contains("淘宝") -> "购物消费"
+                counterparty.contains("美团") || counterparty.contains("饿了么") -> "餐饮美食"
+                counterparty.contains("腾讯") || counterparty.contains("音乐") || original.contains("音乐") -> "休闲娱乐"
+                counterparty.contains("携程") -> "交通出行"
+                
+                // 通用分类
                 original.contains("餐饮") || original.contains("食品") || original.contains("外卖") -> "餐饮美食"
-                original.contains("交通") || original.contains("出行") || original.contains("打车") || original.contains("滴滴") -> "交通出行"
-                original.contains("购物") || original.contains("商城") || original.contains("京东") || original.contains("拼多多") -> "购物消费"
+                original.contains("交通") || original.contains("出行") || original.contains("打车") -> "交通出行"
+                original.contains("购物") || original.contains("商城") -> "购物消费"
                 original.contains("娱乐") || original.contains("游戏") -> "休闲娱乐"
                 original.contains("医疗") || original.contains("健康") -> "医疗健康"
                 original.contains("教育") || original.contains("学习") -> "教育培训"
@@ -312,10 +574,13 @@ object BillParser {
                 original.contains("住房") || original.contains("物业") || original.contains("房租") -> "住房物业"
                 original.contains("扫二维码") || original.contains("二维码") -> "日常消费"
                 original.contains("商户消费") -> when {
-                    counterparty.contains("餐饮") || counterparty.contains("食堂") -> "餐饮美食"
-                    counterparty.contains("超市") || counterparty.contains("便利") -> "购物消费"
+                    counterparty.contains("餐饮") || counterparty.contains("食堂") || counterparty.contains("米线") || 
+                    counterparty.contains("烤肉") || counterparty.contains("牛肉面") -> "餐饮美食"
+                    counterparty.contains("超市") || counterparty.contains("便利") || counterparty.contains("零食") -> "购物消费"
+                    counterparty.contains("咖啡") || counterparty.contains("奶茶") -> "餐饮美食"
                     else -> "日常消费"
                 }
+                original.contains("群收款") -> "日常消费"
                 else -> "日常消费"
             }
             // 收入分类
@@ -332,8 +597,10 @@ object BillParser {
     /**
      * 支付宝分类映射
      */
-    private fun mapAlipayCategory(original: String, type: TransactionType): String {
+    private fun mapAlipayCategory(original: String, type: TransactionType, isRefund: Boolean = false): String {
         return when {
+            // 退款单独分类
+            isRefund -> "退款收入"
             // 支出分类
             type == TransactionType.EXPENSE -> when {
                 original.contains("餐饮") || original.contains("美食") || original.contains("外卖") -> "餐饮美食"
@@ -346,6 +613,7 @@ object BillParser {
                 original.contains("住房") || original.contains("物业") -> "住房物业"
                 original.contains("生活") || original.contains("日用") -> "生活日用"
                 original.contains("转账") -> "转账支出"
+                original.contains("投资") || original.contains("理财") -> "理财投资"
                 else -> "日常消费"
             }
             // 收入分类
