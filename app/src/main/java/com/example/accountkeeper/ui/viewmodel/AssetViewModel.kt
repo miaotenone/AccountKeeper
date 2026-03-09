@@ -214,6 +214,12 @@ class AssetViewModel @Inject constructor(
         }
     }
 
+    fun deleteAllAssets() {
+        viewModelScope.launch {
+            assetRepository.deleteAllAssets()
+        }
+    }
+
     fun toggleAssetCompletion(asset: Asset) {
         viewModelScope.launch {
             assetRepository.updateAsset(asset.copy(

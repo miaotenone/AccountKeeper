@@ -987,6 +987,10 @@ fun PremiumTransactionItem(
                         offsetX = value
                     }
                 }
+                // Reset hasTriggeredAction when dialog is closed
+                if (!showDeleteDialog) {
+                    hasTriggeredAction = false
+                }
             }
             
             // Delete confirmation dialog

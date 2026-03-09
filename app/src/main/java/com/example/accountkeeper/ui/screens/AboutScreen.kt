@@ -1,6 +1,7 @@
 package com.example.accountkeeper.ui.screens
 
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -37,7 +38,18 @@ fun AboutScreen(
 ) {
     val strings = LocalAppStrings.current
     val isDark = isSystemInDarkTheme()
+    val context = LocalContext.current
     var showHelpDialog by remember { mutableStateOf(false) }
+    
+    // 获取应用版本名
+    val versionName = remember {
+        try {
+            val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+            "v${packageInfo.versionName}"
+        } catch (e: PackageManager.NameNotFoundException) {
+            strings.version
+        }
+    }
     
     Scaffold(
         topBar = {
@@ -96,7 +108,7 @@ fun AboutScreen(
 
             // Version
             Text(
-                strings.version,
+                versionName,
                 style = MaterialTheme.typography.bodyLarge,
                 color = if (isDark) DarkOnBackground.copy(alpha = 0.7f) else LightOnBackground.copy(alpha = 0.7f)
             )

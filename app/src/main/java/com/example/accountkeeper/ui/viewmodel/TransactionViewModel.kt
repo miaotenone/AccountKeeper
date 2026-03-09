@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 // No ViewModel import needed anymore
 import com.example.accountkeeper.data.model.Transaction
 import com.example.accountkeeper.data.model.TransactionType
+import com.example.accountkeeper.data.repository.AssetRepository
 import com.example.accountkeeper.data.repository.CategoryRepository
 import com.example.accountkeeper.data.repository.SettingsRepository
 import com.example.accountkeeper.data.repository.TransactionRepository
@@ -18,6 +19,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -28,7 +30,8 @@ class TransactionViewModel @Inject constructor(
     application: Application,
     private val transactionRepository: TransactionRepository,
     private val categoryRepository: CategoryRepository,
-    private val settingsRepository: SettingsRepository
+    private val settingsRepository: SettingsRepository,
+    private val assetRepository: AssetRepository
 ) : AndroidViewModel(application) {
 
     private val backupManager = BackupManager(application)
@@ -87,21 +90,21 @@ class TransactionViewModel @Inject constructor(
         val settings = settingsRepository.settingsFlow.first()
         if (settings.isAutoBackupEnabled) {
             val txList = transactionRepository.getAllTransactions().first()
+            val assetList = assetRepository.getAllAssets().first()
             val catList = categoryRepository.getAllCategories().first()
             
-            val safeCsvSequence = sequence {
-                yield("ID,Date,Type,Amount,Category,Note")
-                val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-                for (tx in txList) {
-                    val categoryName = catList.find { it.id == tx.categoryId }?.name ?: "Other"
-                    val typeString = if (tx.type == TransactionType.INCOME) "Income" else "Expense"
-                    val safeNote = tx.note.replace("\"", "\"\"")
-                    yield("${tx.id},${dateFormat.format(Date(tx.date))},${typeString},${tx.amount},${categoryName},\"${safeNote}\"")
-                }
-            }
+            // 创建分类 ID -> 名称的映射
+            val categoryMap = catList.associate { it.id to it.name }
+            
             // Switch to IO since file operations
-            kotlinx.coroutines.withContext(Dispatchers.IO) {
-                backupManager.writeNewBackup(safeCsvSequence, settings.backupRetentionLimit)
+            withContext(Dispatchers.IO) {
+                backupManager.writeZipBackup(
+                    transactions = txList,
+                    assets = assetList,
+                    categoryMap = categoryMap,
+                    maxKeep = settings.backupRetentionLimit,
+                    isAuto = true
+                )
             }
         }
     }
