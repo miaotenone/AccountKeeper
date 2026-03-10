@@ -11,13 +11,16 @@ import android.content.pm.ServiceInfo
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import com.example.accountkeeper.MainActivity
 import com.example.accountkeeper.R
 import kotlinx.coroutines.*
 import java.io.File
+import java.net.HttpURLConnection
 import java.net.URL
+import javax.net.ssl.HttpsURLConnection
 
 /**
  * OTA 更新下载服务
@@ -44,6 +47,9 @@ class UpdateDownloadService : Service() {
         const val EXTRA_TOTAL = "total"
         const val EXTRA_FILE_PATH = "file_path"
         const val EXTRA_ERROR_MESSAGE = "error_message"
+        
+        private const val TAG = "UpdateDownloadService"
+        private const val MAX_REDIRECTS = 10
     }
 
     private val binder = LocalBinder()
@@ -115,6 +121,8 @@ class UpdateDownloadService : Service() {
 
         // 开始下载
         downloadJob = CoroutineScope(Dispatchers.IO).launch {
+            var errorMsg: String? = null
+            
             try {
                 val file = downloadFile(url) { progress, downloaded, total ->
                     downloadProgress = progress
@@ -122,29 +130,32 @@ class UpdateDownloadService : Service() {
                     sendProgressBroadcast(progress, downloaded, total)
                 }
 
-                if (file != null) {
+                if (file != null && file.exists() && file.length() > 0) {
                     // 下载完成
+                    Log.d(TAG, "下载完成: ${file.absolutePath}, 大小: ${file.length()}")
                     updateNotificationComplete(file.absolutePath)
                     sendCompleteBroadcast(file.absolutePath)
                 } else {
-                    // 下载失败
-                    updateNotificationError("下载失败")
-                    sendErrorBroadcast("下载失败")
+                    errorMsg = "下载失败：文件保存失败"
                 }
             } catch (e: CancellationException) {
-                // 用户取消
-                updateNotificationError("下载已取消")
-                sendErrorBroadcast("下载已取消")
+                errorMsg = "下载已取消"
             } catch (e: Exception) {
-                e.printStackTrace()
-                updateNotificationError(e.message ?: "下载出错")
-                sendErrorBroadcast(e.message ?: "下载出错")
-            } finally {
-                isDownloading = false
-                delay(2000)  // 延迟停止服务，让用户看到结果
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf()
+                Log.e(TAG, "下载异常", e)
+                errorMsg = "下载失败：${e.javaClass.simpleName}: ${e.message}"
             }
+            
+            // 处理错误
+            if (errorMsg != null) {
+                Log.e(TAG, errorMsg)
+                updateNotificationError(errorMsg)
+                sendErrorBroadcast(errorMsg)
+            }
+            
+            isDownloading = false
+            delay(2000)
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
         }
     }
 
@@ -152,6 +163,8 @@ class UpdateDownloadService : Service() {
         url: String,
         onProgress: (Int, Long, Long) -> Unit
     ): File? = withContext(Dispatchers.IO) {
+        var connection: HttpURLConnection? = null
+        
         try {
             val downloadDir = File(cacheDir, "updates").apply { mkdirs() }
             val targetFile = File(downloadDir, "AccountKeeper_update.apk")
@@ -160,42 +173,106 @@ class UpdateDownloadService : Service() {
                 targetFile.delete()
             }
 
-            val downloadUrl = URL(url)
-            val connection = downloadUrl.openConnection()
-            connection.connectTimeout = 15000
-            connection.readTimeout = 30000
-
+            // 处理重定向获取最终URL
+            var currentUrl = url
+            var redirectCount = 0
+            
+            while (redirectCount < MAX_REDIRECTS) {
+                Log.d(TAG, "尝试连接: $currentUrl")
+                
+                connection = URL(currentUrl).openConnection() as HttpURLConnection
+                connection.apply {
+                    connectTimeout = 30000
+                    readTimeout = 60000
+                    instanceFollowRedirects = false
+                    setRequestProperty("User-Agent", "AccountKeeper-Downloader/1.0")
+                    setRequestProperty("Accept", "*/*")
+                    setRequestProperty("Accept-Encoding", "identity")
+                }
+                
+                val responseCode = connection.responseCode
+                Log.d(TAG, "响应码: $responseCode")
+                
+                when {
+                    responseCode == HttpURLConnection.HTTP_OK -> {
+                        Log.d(TAG, "连接成功，开始下载")
+                        break
+                    }
+                    responseCode in listOf(301, 302, 303, 307, 308) -> {
+                        val newUrl = connection.getHeaderField("Location")
+                        connection.disconnect()
+                        connection = null
+                        
+                        if (newUrl.isNullOrEmpty()) {
+                            Log.e(TAG, "重定向URL为空")
+                            return@withContext null
+                        }
+                        
+                        Log.d(TAG, "重定向到: $newUrl")
+                        currentUrl = newUrl
+                        redirectCount++
+                    }
+                    else -> {
+                        Log.e(TAG, "HTTP错误: $responseCode")
+                        connection.disconnect()
+                        return@withContext null
+                    }
+                }
+            }
+            
+            if (connection == null) {
+                Log.e(TAG, "无法建立连接")
+                return@withContext null
+            }
+            
             val fileSize = connection.contentLengthLong
+            Log.d(TAG, "文件大小: $fileSize bytes")
+            
+            if (fileSize <= 0) {
+                // 有些服务器不返回Content-Length，继续下载
+                Log.w(TAG, "服务器未返回文件大小")
+            }
+            
             var downloadedBytes = 0L
 
-            connection.getInputStream().use { input ->
+            connection.inputStream.use { input ->
                 targetFile.outputStream().use { output ->
                     val buffer = ByteArray(8192)
                     var bytesRead: Int
 
                     while (input.read(buffer).also { bytesRead = it } != -1) {
-                        if (!isActive) return@withContext null  // 已取消
+                        if (!isActive) {
+                            Log.d(TAG, "下载被取消")
+                            return@withContext null
+                        }
 
                         output.write(buffer, 0, bytesRead)
                         downloadedBytes += bytesRead
 
                         val progress = if (fileSize > 0) {
-                            (downloadedBytes * 100 / fileSize).toInt()
+                            (downloadedBytes * 100 / fileSize).toInt().coerceIn(0, 100)
                         } else {
-                            0
+                            -1 // 未知大小
                         }
                         onProgress(progress, downloadedBytes, fileSize)
                     }
                 }
             }
+            
+            connection.disconnect()
+            connection = null
 
+            Log.d(TAG, "下载完成，已下载: $downloadedBytes bytes")
+            
             if (downloadedBytes > 0 && targetFile.exists()) {
                 targetFile
             } else {
+                Log.e(TAG, "文件不存在或大小为0")
                 null
             }
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e(TAG, "下载异常: ${e.message}", e)
+            connection?.disconnect()
             null
         }
     }
@@ -214,15 +291,19 @@ class UpdateDownloadService : Service() {
             .setContentText(content)
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setOngoing(true)
-            .setProgress(100, progress, progress == 0)
+            .setProgress(100, progress, progress == 0 || progress < 0)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "取消", cancelPendingIntent)
             .build()
     }
 
     private fun updateNotification(progress: Int, downloaded: Long, total: Long) {
         val downloadedMB = downloaded / (1024.0 * 1024.0)
-        val totalMB = total / (1024.0 * 1024.0)
-        val content = String.format("%.1f MB / %.1f MB", downloadedMB, totalMB)
+        val content = if (total > 0) {
+            val totalMB = total / (1024.0 * 1024.0)
+            String.format("%.1f MB / %.1f MB", downloadedMB, totalMB)
+        } else {
+            String.format("%.1f MB", downloadedMB)
+        }
 
         val notification = buildNotification(progress, "正在下载更新...", content)
         notificationManager.notify(NOTIFICATION_ID, notification)

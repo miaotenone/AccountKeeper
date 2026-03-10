@@ -31,7 +31,7 @@ sealed class UpdateState {
     object NoUpdate : UpdateState()
     data class Downloading(val progress: Int = 0, val downloadedBytes: Long = 0, val totalBytes: Long = 0) : UpdateState()
     data class DownloadComplete(val filePath: String) : UpdateState()
-    data class Error(val message: String) : UpdateState()
+    data class Error(val message: String, val downloadUrl: String = "") : UpdateState()
 }
 
 @HiltViewModel
@@ -71,7 +71,7 @@ class UpdateViewModel @Inject constructor(
                 }
                 UpdateDownloadService.ACTION_DOWNLOAD_ERROR -> {
                     val message = intent.getStringExtra(UpdateDownloadService.EXTRA_ERROR_MESSAGE) ?: "下载失败"
-                    _updateState.value = UpdateState.Error(message)
+                    _updateState.value = UpdateState.Error(message, updateInfo?.downloadUrl ?: "")
                 }
             }
         }

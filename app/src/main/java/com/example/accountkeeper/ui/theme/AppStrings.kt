@@ -230,7 +230,9 @@ data class AppStrings(
     val alreadyLatest: String,
     val checkUpdateFailed: String,
     val downloading: String,
-    val downloadHint: String
+    val downloadHint: String,
+    val downloadFailed: String,
+    val openInBrowser: String
 )
 
 val EnStrings = AppStrings(
@@ -970,7 +972,9 @@ Thank you for using AccountKeeper! Wish you smooth financial management!""",
     alreadyLatest = "Already Latest Version",
     checkUpdateFailed = "Check Update Failed",
     downloading = "Downloading...",
-    downloadHint = "Please wait while downloading"
+    downloadHint = "Please wait while downloading",
+    downloadFailed = "Download Failed",
+    openInBrowser = "Open in Browser"
 )
 
 val ZhStrings = AppStrings(
@@ -1710,7 +1714,9 @@ A: 取决于数据量，可以在设置中查看备份大小。
     alreadyLatest = "已是最新版本",
     checkUpdateFailed = "检查更新失败",
     downloading = "正在下载...",
-    downloadHint = "请等待下载完成"
+    downloadHint = "请等待下载完成",
+    downloadFailed = "下载失败",
+    openInBrowser = "浏览器下载"
 )
 
 val LocalAppStrings = androidx.compose.runtime.compositionLocalOf { EnStrings }

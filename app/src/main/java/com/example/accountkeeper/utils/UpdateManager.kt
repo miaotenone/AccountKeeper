@@ -24,15 +24,15 @@ import java.net.URL
 class UpdateManager(internal val context: Context) {
 
     companion object {
-        // GitHub 仓库信息
+        // GitHub 仓库信息（主）
         private const val GITHUB_OWNER = "miaotenone"
         private const val GITHUB_REPO = "AccountKeeper"
-        
-        // GitHub API 地址
         private const val GITHUB_API_RELEASES = "https://api.github.com/repos/$GITHUB_OWNER/$GITHUB_REPO/releases/latest"
         
-        // 备用 API 地址（可配置自己的服务器）
-        private const val CUSTOM_UPDATE_API = ""  // 留空则使用 GitHub
+        // Gitee 仓库信息（备用）
+        private const val GITEE_OWNER = "di-renjie"
+        private const val GITEE_REPO = "AccountKeeper"
+        private const val GITEE_API_RELEASES = "https://gitee.com/api/v5/repos/$GITEE_OWNER/$GITEE_REPO/releases/latest"
         
         // 下载超时时间
         private const val CONNECT_TIMEOUT = 15000
@@ -110,19 +110,28 @@ class UpdateManager(internal val context: Context) {
     }
 
     /**
-     * 从 GitHub API 获取最新 Release 信息
+     * 获取最新 Release 信息
+     * 优先使用 GitHub，失败时回退到 Gitee
      */
     private fun fetchLatestRelease(): GitHubRelease? {
-        val apiUrl = if (CUSTOM_UPDATE_API.isNotEmpty()) {
-            CUSTOM_UPDATE_API
-        } else {
-            GITHUB_API_RELEASES
+        // 优先尝试 GitHub
+        val githubRelease = fetchFromGitHub()
+        if (githubRelease != null) {
+            return githubRelease
         }
-
-        val url = URL(apiUrl)
-        val connection = url.openConnection() as HttpURLConnection
         
+        // GitHub 失败，尝试 Gitee
+        return fetchFromGitee()
+    }
+
+    /**
+     * 从 GitHub API 获取最新 Release 信息
+     */
+    private fun fetchFromGitHub(): GitHubRelease? {
         return try {
+            val url = URL(GITHUB_API_RELEASES)
+            val connection = url.openConnection() as HttpURLConnection
+            
             connection.apply {
                 requestMethod = "GET"
                 connectTimeout = CONNECT_TIMEOUT
@@ -135,15 +144,46 @@ class UpdateManager(internal val context: Context) {
                 val reader = BufferedReader(InputStreamReader(connection.inputStream))
                 val response = reader.readText()
                 reader.close()
+                connection.disconnect()
                 json.decodeFromString<GitHubRelease>(response)
             } else {
+                connection.disconnect()
                 null
             }
         } catch (e: Exception) {
             e.printStackTrace()
             null
-        } finally {
-            connection.disconnect()
+        }
+    }
+
+    /**
+     * 从 Gitee API 获取最新 Release 信息
+     */
+    private fun fetchFromGitee(): GitHubRelease? {
+        return try {
+            val url = URL(GITEE_API_RELEASES)
+            val connection = url.openConnection() as HttpURLConnection
+            
+            connection.apply {
+                requestMethod = "GET"
+                connectTimeout = CONNECT_TIMEOUT
+                readTimeout = READ_TIMEOUT
+                setRequestProperty("User-Agent", "AccountKeeper-UpdateChecker")
+            }
+
+            if (connection.responseCode == HttpURLConnection.HTTP_OK) {
+                val reader = BufferedReader(InputStreamReader(connection.inputStream))
+                val response = reader.readText()
+                reader.close()
+                connection.disconnect()
+                json.decodeFromString<GitHubRelease>(response)
+            } else {
+                connection.disconnect()
+                null
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
         }
     }
 
