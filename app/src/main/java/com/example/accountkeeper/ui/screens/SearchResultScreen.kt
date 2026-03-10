@@ -200,7 +200,8 @@ fun SearchResultScreen(
                         },
                         colors = TopAppBarDefaults.topAppBarColors(
                             containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
-                        )
+                        ),
+                        windowInsets = WindowInsets(0, 0, 0, 0)
                     )
                 } else {
                     TopAppBar(
@@ -244,11 +245,13 @@ fun SearchResultScreen(
                         },
                         colors = TopAppBarDefaults.topAppBarColors(
                             containerColor = Color.Transparent
-                        )
+                        ),
+                        windowInsets = WindowInsets(0, 0, 0, 0)
                     )
                 }
             }
-        }
+        },
+        contentWindowInsets = WindowInsets(0, 0, 0, 0)
     ) { paddingValues ->
         LazyColumn(
             modifier = Modifier

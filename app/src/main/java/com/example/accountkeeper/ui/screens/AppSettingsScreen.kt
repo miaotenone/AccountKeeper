@@ -63,10 +63,12 @@ fun AppSettingsScreen(
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = strings.back)
                         }
                     },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
+                    windowInsets = WindowInsets(0, 0, 0, 0)
                 )
             }
-        }
+        },
+        contentWindowInsets = WindowInsets(0, 0, 0, 0)
     ) { paddingValues ->
         Column(
             modifier = Modifier

@@ -330,7 +330,8 @@ fun AssetsScreen(
                         },
                         colors = TopAppBarDefaults.topAppBarColors(
                             containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
-                        )
+                        ),
+                        windowInsets = WindowInsets(0, 0, 0, 0)
                     )
                 } else {
                     TopAppBar(
@@ -431,7 +432,8 @@ fun AssetsScreen(
                         },
                         colors = TopAppBarDefaults.topAppBarColors(
                             containerColor = Color.Transparent
-                        )
+                        ),
+                        windowInsets = WindowInsets(0, 0, 0, 0)
                     )
                     LaunchedEffect(isSearchExpanded) {
                         if (isSearchExpanded) {
@@ -460,7 +462,8 @@ fun AssetsScreen(
                     )
                 }
             }
-        }
+        },
+        contentWindowInsets = WindowInsets(0, 0, 0, 0)
     ) { paddingValues ->
         Column(
             modifier = Modifier

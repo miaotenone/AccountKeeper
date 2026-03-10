@@ -170,7 +170,8 @@ fun HomeScreen(
                         },
                         colors = TopAppBarDefaults.topAppBarColors(
                             containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
-                        )
+                        ),
+                        windowInsets = WindowInsets(0, 0, 0, 0)
                     )
                 } else {
                     TopAppBar(
@@ -268,7 +269,8 @@ fun HomeScreen(
                         },
                         colors = TopAppBarDefaults.topAppBarColors(
                             containerColor = Color.Transparent
-                        )
+                        ),
+                        windowInsets = WindowInsets(0, 0, 0, 0)
                     )
                     LaunchedEffect(isSearchExpanded) {
                         if (isSearchExpanded) {
@@ -297,7 +299,8 @@ fun HomeScreen(
                     )
                 }
             }
-        }
+        },
+        contentWindowInsets = WindowInsets(0, 0, 0, 0)
     ) { paddingValues ->
         // 将分页数据转换为列表用于分组显示
         val pagedList = remember(pagedTransactions.itemCount) {

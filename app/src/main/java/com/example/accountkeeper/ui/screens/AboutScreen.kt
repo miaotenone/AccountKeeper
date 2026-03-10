@@ -16,6 +16,9 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -29,17 +32,26 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.accountkeeper.ui.theme.*
+import com.example.accountkeeper.ui.viewmodel.UpdateState
+import com.example.accountkeeper.ui.viewmodel.UpdateViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AboutScreen(
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    updateViewModel: UpdateViewModel = hiltViewModel()
 ) {
     val strings = LocalAppStrings.current
     val isDark = isSystemInDarkTheme()
     val context = LocalContext.current
     var showHelpDialog by remember { mutableStateOf(false) }
+    
+    // 更新状态
+    val updateState by updateViewModel.updateState.collectAsState()
+    val downloadProgress by updateViewModel.downloadProgress.collectAsState()
+    var showUpdateDialog by remember { mutableStateOf(false) }
     
     // 获取应用版本名
     val versionName = remember {
@@ -51,35 +63,43 @@ fun AboutScreen(
         }
     }
     
+    // 监听更新状态变化
+    LaunchedEffect(updateState) {
+        if (updateState is UpdateState.UpdateAvailable) {
+            showUpdateDialog = true
+        }
+    }
+    
     Scaffold(
         topBar = {
-            TopAppBar(
+            CenterAlignedTopAppBar(
                 title = { Text(strings.about, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                     containerColor = if (isDark) DarkSurface else LightSurface
-                )
+                ),
+                windowInsets = WindowInsets(0, 0, 0, 0)
             )
-        }
+        },
+        contentWindowInsets = WindowInsets(0, 0, 0, 0)
     ) { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
+                .padding(top = paddingValues.calculateTopPadding())
                 .verticalScroll(rememberScrollState())
                 .background(if (isDark) DarkBackground else LightBackground)
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(24.dp)
+                .padding(horizontal = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // App Icon with Gradient
             Box(
                 modifier = Modifier
-                    .size(100.dp)
+                    .size(72.dp)
                     .clip(CircleShape)
                     .background(
                         if (isDark) {
@@ -92,11 +112,13 @@ fun AboutScreen(
             ) {
                 Text(
                     "AK",
-                    style = MaterialTheme.typography.displayMedium,
+                    style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
                     color = Color.White
                 )
             }
+
+            Spacer(modifier = Modifier.height(8.dp))
 
             // App Name
             Text(
@@ -106,6 +128,8 @@ fun AboutScreen(
                 color = if (isDark) DarkOnBackground else LightOnBackground
             )
 
+            Spacer(modifier = Modifier.height(2.dp))
+
             // Version
             Text(
                 versionName,
@@ -113,13 +137,62 @@ fun AboutScreen(
                 color = if (isDark) DarkOnBackground.copy(alpha = 0.7f) else LightOnBackground.copy(alpha = 0.7f)
             )
 
+            Spacer(modifier = Modifier.height(6.dp))
+
             // Divider
             HorizontalDivider(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp),
+                modifier = Modifier.fillMaxWidth(),
                 color = if (isDark) DarkOnBackground.copy(alpha = 0.1f) else LightOnBackground.copy(alpha = 0.1f)
             )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Check Update Card
+            AboutCardWithStatus(
+                icon = Icons.Default.SystemUpdate,
+                title = strings.checkUpdate,
+                description = strings.currentVersion + " " + versionName,
+                statusContent = {
+                    when (updateState) {
+                        is UpdateState.Checking -> {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        is UpdateState.UpdateAvailable -> {
+                            Icon(
+                                Icons.Default.NewReleases,
+                                contentDescription = "New version available",
+                                tint = Color(0xFF4CAF50),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        is UpdateState.Downloading -> {
+                            Text(
+                                "$downloadProgress%",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        is UpdateState.NoUpdate -> {
+                            Icon(
+                                Icons.Default.CheckCircle,
+                                contentDescription = "Up to date",
+                                tint = Color(0xFF4CAF50),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        else -> {}
+                    }
+                },
+                onClick = { updateViewModel.checkUpdate(force = true) },
+                isDark = isDark
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
 
             // Help Tutorial Card
             AboutCard(
@@ -130,6 +203,8 @@ fun AboutScreen(
                 onClick = { showHelpDialog = true }
             )
 
+            Spacer(modifier = Modifier.height(8.dp))
+
             // GitHub Card
             AboutCard(
                 icon = Icons.Default.Star,
@@ -138,6 +213,8 @@ fun AboutScreen(
                 link = "https://github.com/miaotenone/AccountKeeper",
                 isLink = true
             )
+
+            Spacer(modifier = Modifier.height(8.dp))
 
             // Contact Card
             AboutCard(
@@ -148,7 +225,7 @@ fun AboutScreen(
                 isLink = true
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             // Credits
             Card(
@@ -188,6 +265,24 @@ fun AboutScreen(
     if (showHelpDialog) {
         HelpTutorialDialog(
             onDismiss = { showHelpDialog = false },
+            isDark = isDark
+        )
+    }
+    
+    // Update Dialog
+    if (showUpdateDialog) {
+        UpdateDialog(
+            updateState = updateState,
+            downloadProgress = downloadProgress,
+            currentVersion = versionName,
+            onDismiss = { 
+                showUpdateDialog = false
+                updateViewModel.resetState()
+            },
+            onDownload = { updateViewModel.downloadUpdate() },
+            onInstall = { updateViewModel.installUpdate() },
+            onCancelDownload = { updateViewModel.cancelDownload() },
+            strings = strings,
             isDark = isDark
         )
     }
@@ -274,6 +369,76 @@ fun AboutCard(
                     color = if (isDark) DarkOnBackground.copy(alpha = 0.6f) else LightOnBackground.copy(alpha = 0.6f)
                 )
             }
+        }
+    }
+}
+
+@Composable
+fun AboutCardWithStatus(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    description: String,
+    statusContent: @Composable () -> Unit = {},
+    onClick: () -> Unit,
+    isDark: Boolean
+) {
+    val context = LocalContext.current
+    
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isDark) DarkSurfaceVariant else LightSurfaceVariant
+        ),
+        shape = RoundedCornerShape(20.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(50.dp)
+                    .clip(CircleShape)
+                    .background(
+                        if (isDark) {
+                            Brush.verticalGradient(DarkGradientPrimary)
+                        } else {
+                            Brush.verticalGradient(LightGradientPrimary)
+                        }
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = title,
+                    tint = Color.White,
+                    modifier = Modifier.size(28.dp)
+                )
+            }
+
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isDark) DarkOnBackground else LightOnBackground
+                )
+                Text(
+                    description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (isDark) DarkOnBackground.copy(alpha = 0.6f) else LightOnBackground.copy(alpha = 0.6f)
+                )
+            }
+            
+            statusContent()
         }
     }
 }

@@ -337,8 +337,9 @@ fun ImportExportScreen(
     }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text(strings.settings) }) },
-        snackbarHost = { SnackbarHost(snackbarHostState) }
+        topBar = { TopAppBar(title = { Text(strings.settings) }, windowInsets = WindowInsets(0, 0, 0, 0)) },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        contentWindowInsets = WindowInsets(0, 0, 0, 0)
     ) { paddingValues ->
         Column(
             modifier = Modifier

@@ -54,7 +54,8 @@ fun CategorySettingsScreen(
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = strings.back)
                     }
-                }
+                },
+                windowInsets = WindowInsets(0, 0, 0, 0)
             )
         },
         floatingActionButton = {
@@ -64,7 +65,8 @@ fun CategorySettingsScreen(
             }) {
                 Icon(Icons.Default.Add, contentDescription = strings.add)
             }
-        }
+        },
+        contentWindowInsets = WindowInsets(0, 0, 0, 0)
     ) { paddingValues ->
         Column(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
             TabRow(selectedTabIndex = selectedTab) {

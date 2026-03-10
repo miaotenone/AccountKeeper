@@ -34,7 +34,6 @@ import com.example.accountkeeper.ui.theme.*
 import com.example.accountkeeper.ui.theme.LocalAppStrings
 import com.example.accountkeeper.ui.viewmodel.SettingsViewModel
 import com.example.accountkeeper.ui.viewmodel.UpdateState
-import com.example.accountkeeper.ui.viewmodel.UpdateViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -43,37 +42,11 @@ fun SettingsScreen(
     onNavigateToAppSettings: () -> Unit = {},
     onNavigateToCategorySettings: () -> Unit = {},
     onNavigateToAbout: () -> Unit = {},
-    settingsViewModel: SettingsViewModel = hiltViewModel(),
-    updateViewModel: UpdateViewModel = hiltViewModel()
+    settingsViewModel: SettingsViewModel = hiltViewModel()
 ) {
     val strings = LocalAppStrings.current
     val appSettings by settingsViewModel.appSettings.collectAsState()
     val isDark = isSystemInDarkTheme()
-    val context = LocalContext.current
-    
-    // 更新状态
-    val updateState by updateViewModel.updateState.collectAsState()
-    val downloadProgress by updateViewModel.downloadProgress.collectAsState()
-    
-    // 获取当前版本
-    val currentVersion = remember {
-        try {
-            val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
-            "v${packageInfo.versionName}"
-        } catch (e: PackageManager.NameNotFoundException) {
-            "v1.1.20"
-        }
-    }
-    
-    // 更新对话框状态
-    var showUpdateDialog by remember { mutableStateOf(false) }
-
-    // 监听更新状态变化
-    LaunchedEffect(updateState) {
-        if (updateState is UpdateState.UpdateAvailable) {
-            showUpdateDialog = true
-        }
-    }
 
     Scaffold(
         topBar = {
@@ -99,10 +72,12 @@ fun SettingsScreen(
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = Color.Transparent
-                    )
+                    ),
+                    windowInsets = WindowInsets(0, 0, 0, 0)
                 )
             }
-        }
+        },
+        contentWindowInsets = WindowInsets(0, 0, 0, 0)
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -171,51 +146,6 @@ fun SettingsScreen(
                 icon = Icons.Default.Info,
                 color = if (isDark) Color(0xFF9D4EDD) else Color(0xFF7209B7)
             ) {
-                // 检查更新
-                SettingsItemWithStatus(
-                    icon = Icons.Default.SystemUpdate,
-                    title = strings.checkUpdate,
-                    description = strings.currentVersion + " " + currentVersion,
-                    statusContent = {
-                        when (updateState) {
-                            is UpdateState.Checking -> {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(20.dp),
-                                    strokeWidth = 2.dp,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                            is UpdateState.UpdateAvailable -> {
-                                Icon(
-                                    Icons.Default.NewReleases,
-                                    contentDescription = "New version available",
-                                    tint = Color(0xFF4CAF50),
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                            is UpdateState.Downloading -> {
-                                Text(
-                                    "$downloadProgress%",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                            is UpdateState.NoUpdate -> {
-                                Icon(
-                                    Icons.Default.CheckCircle,
-                                    contentDescription = "Up to date",
-                                    tint = Color(0xFF4CAF50),
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                            else -> {}
-                        }
-                    },
-                    onClick = { 
-                        updateViewModel.checkUpdate(force = true)
-                    }
-                )
                 SettingsItem(
                     icon = Icons.Default.Info,
                     title = strings.about,
@@ -226,90 +156,6 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
         }
-    }
-    
-    // 更新对话框
-    if (showUpdateDialog) {
-        UpdateDialog(
-            updateState = updateState,
-            downloadProgress = downloadProgress,
-            currentVersion = currentVersion,
-            onDismiss = { 
-                showUpdateDialog = false
-                updateViewModel.resetState()
-            },
-            onDownload = { updateViewModel.downloadUpdate() },
-            onInstall = { updateViewModel.installUpdate() },
-            onCancelDownload = { updateViewModel.cancelDownload() },
-            strings = strings,
-            isDark = isDark
-        )
-    }
-}
-
-@Composable
-fun SettingsItemWithStatus(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    title: String,
-    description: String,
-    statusContent: @Composable () -> Unit = {},
-    onClick: () -> Unit
-) {
-    val isDark = isSystemInDarkTheme()
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(12.dp),
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .size(44.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(
-                    if (isDark) {
-                        MaterialTheme.colorScheme.surfaceVariant
-                    } else {
-                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-                    }
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = title,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(22.dp)
-            )
-        }
-
-        Column(
-            modifier = Modifier.weight(1f)
-        ) {
-            Text(
-                title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Text(
-                description,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        
-        statusContent()
-
-        Icon(
-            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-            contentDescription = "Navigate",
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(20.dp)
-        )
     }
 }
 
