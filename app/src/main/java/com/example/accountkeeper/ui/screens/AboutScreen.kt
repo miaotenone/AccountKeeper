@@ -642,6 +642,16 @@ fun HelpTutorialDialog(
                             isDark = isDark
                         )
                         HelpDetailItem(
+                            title = "📱 如何导出账单",
+                            details = listOf(
+                                "微信：我 → 服务 → 钱包 → 账单 → 常见问题 → 下载账单",
+                                "支付宝：我的 → 账单 → 右上角... → 开具交易流水证明",
+                                "选择「用于个人对账」下载 Excel 格式",
+                                "下载后导入到本应用即可"
+                            ),
+                            isDark = isDark
+                        )
+                        HelpDetailItem(
                             title = "🔐 自动备份",
                             details = listOf(
                                 "每次增删改自动创建备份",
