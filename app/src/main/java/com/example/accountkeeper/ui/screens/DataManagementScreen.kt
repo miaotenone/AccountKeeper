@@ -79,6 +79,7 @@ fun DataManagementScreen(
     var showClearDataDialog by remember { mutableStateOf(false) }
     var showClearTransactionsDialog by remember { mutableStateOf(false) }
     var showClearAssetsDialog by remember { mutableStateOf(false) }
+    var showDisableAutoBackupDialog by remember { mutableStateOf(false) }
 
     // Launcher for Export (Create Document) - ZIP format
     val exportZipLauncher = rememberLauncherForActivityResult(
@@ -736,8 +737,88 @@ fun DataManagementScreen(
                         Spacer(modifier = Modifier.width(8.dp))
                         Switch(
                             checked = appSettings.isAutoBackupEnabled,
-                            onCheckedChange = { settingsViewModel.updateAutoBackup(it) }
+                            onCheckedChange = { enabled ->
+                                if (!enabled && settingsViewModel.backupManager.hasBackupChain()) {
+                                    // 关闭自动备份且有备份链，显示确认对话框
+                                    showDisableAutoBackupDialog = true
+                                } else {
+                                    settingsViewModel.updateAutoBackup(enabled)
+                                }
+                            }
                         )
+                    }
+
+                    HorizontalDivider()
+
+                    // Scheduled Backup Toggle
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                if (strings.language == "界面语言") "定时备份" else "Scheduled Backup",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Text(
+                                if (strings.language == "界面语言") "按照设定的时间间隔自动备份" else "Auto backup at scheduled intervals",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Switch(
+                            checked = appSettings.isScheduledBackupEnabled,
+                            onCheckedChange = { settingsViewModel.updateScheduledBackup(it) }
+                        )
+                    }
+
+                    // Scheduled Backup Interval (only show when enabled)
+                    if (appSettings.isScheduledBackupEnabled) {
+                        var expandedInterval by remember { mutableStateOf(false) }
+                        val intervalOptions = listOf(6, 12, 24, 48, 72)
+                        val intervalLabels = if (strings.language == "界面语言") {
+                            mapOf(6 to "每6小时", 12 to "每12小时", 24 to "每天", 48 to "每2天", 72 to "每3天")
+                        } else {
+                            mapOf(6 to "Every 6 hours", 12 to "Every 12 hours", 24 to "Daily", 48 to "Every 2 days", 72 to "Every 3 days")
+                        }
+                        
+                        Column {
+                            Text(
+                                if (strings.language == "界面语言") "备份间隔" else "Backup Interval",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            ExposedDropdownMenuBox(
+                                expanded = expandedInterval,
+                                onExpandedChange = { expandedInterval = it }
+                            ) {
+                                OutlinedTextField(
+                                    value = intervalLabels[appSettings.scheduledBackupInterval] ?: "",
+                                    onValueChange = {},
+                                    readOnly = true,
+                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedInterval) },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .menuAnchor()
+                                )
+                                ExposedDropdownMenu(
+                                    expanded = expandedInterval,
+                                    onDismissRequest = { expandedInterval = false }
+                                ) {
+                                    intervalOptions.forEach { hours ->
+                                        DropdownMenuItem(
+                                            text = { Text(intervalLabels[hours] ?: "") },
+                                            onClick = {
+                                                settingsViewModel.updateScheduledBackupInterval(hours)
+                                                expandedInterval = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
 
                     HorizontalDivider()
@@ -768,19 +849,38 @@ fun DataManagementScreen(
 
                     // Backup Status
                     Text(strings.currentBackupStatus, style = MaterialTheme.typography.bodyLarge)
-                    val latestAuto = settingsViewModel.backupManager.getLatestAutoBackupDateStr()
-                    val latestManual = settingsViewModel.backupManager.getLatestManualBackupDateStr()
+                    
+                    // 增量备份链状态
+                    val (baseBackupTime, deltaSteps) = settingsViewModel.backupManager.getBackupChainInfo()
+                    val isChinese = strings.language == "界面语言"
+                    
                     Column {
-                        Text(
-                            text = strings.latestAutoBackup + (latestAuto ?: strings.noAutoBackup),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (latestAuto != null) Color(0xFF07C160) else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = strings.latestManualBackup + (latestManual ?: strings.noManualBackup),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (latestManual != null) Color(0xFF5BD9CA) else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        if (baseBackupTime != null) {
+                            Text(
+                                text = (if (isChinese) "基准备份: " else "Base Backup: ") + baseBackupTime,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF07C160)
+                            )
+                            Text(
+                                text = (if (isChinese) "备份步骤: " else "Backup Steps: ") + 
+                                       (if (isChinese) "${deltaSteps.size} 步" else "${deltaSteps.size} steps"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (deltaSteps.isNotEmpty()) Color(0xFF5BD9CA) else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        } else {
+                            val latestManual = settingsViewModel.backupManager.getLatestZipManualBackupDateStr()
+                            Text(
+                                text = (if (isChinese) "增量备份: " else "Delta Backup: ") + 
+                                       (if (isChinese) "未开启" else "Not enabled"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = strings.latestManualBackup + (latestManual ?: strings.noManualBackup),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (latestManual != null) Color(0xFF5BD9CA) else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
 
                     // Backup Actions
@@ -796,7 +896,7 @@ fun DataManagementScreen(
                     ) {
                         OutlinedButton(
                             onClick = {
-                                settingsViewModel.backupManager.clearAllAutoBackups()
+                                settingsViewModel.backupManager.clearAllDeltaBackups()
                                 refreshBackupTrigger++
                                 scope.launch { snackbarHostState.showSnackbar(strings.backupsCleared) }
                             },
@@ -805,7 +905,7 @@ fun DataManagementScreen(
 
                         OutlinedButton(
                             onClick = {
-                                settingsViewModel.backupManager.clearAllManualBackups()
+                                settingsViewModel.backupManager.clearAllZipManualBackups()
                                 refreshBackupTrigger++
                                 scope.launch { snackbarHostState.showSnackbar(strings.manualBackupsCleared) }
                             },
@@ -953,7 +1053,11 @@ fun DataManagementScreen(
             strings = strings,
             refreshTrigger = refreshBackupTrigger,
             onRefresh = { refreshBackupTrigger++ },
-            snackbarHostState = snackbarHostState
+            snackbarHostState = snackbarHostState,
+            categories = categories,
+            categoryViewModel = categoryViewModel,
+            transactionViewModel = viewModel,
+            assetViewModel = assetViewModel
         )
     }
 
@@ -1117,6 +1221,76 @@ fun DataManagementScreen(
             shape = RoundedCornerShape(20.dp)
         )
     }
+    
+    // Disable Auto Backup Confirmation Dialog
+    if (showDisableAutoBackupDialog) {
+        val isChinese = strings.language == "界面语言"
+        AlertDialog(
+            onDismissRequest = { showDisableAutoBackupDialog = false },
+            title = { 
+                Text(
+                    if (isChinese) "关闭自动备份" else "Disable Auto Backup"
+                )
+            },
+            text = {
+                Column {
+                    Text(
+                        if (isChinese) "检测到存在增量备份数据。关闭自动备份后，您希望如何处理这些备份？"
+                        else "Existing incremental backup data detected. How would you like to handle these backups?"
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        if (isChinese) "• 保留备份：备份数据将被保留，可随时重新开启自动备份"
+                        else "• Keep: Backup data will be preserved, can re-enable anytime",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        if (isChinese) "• 删除备份：清除所有增量备份数据"
+                        else "• Delete: Clear all incremental backup data",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            },
+            confirmButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(
+                        onClick = {
+                            settingsViewModel.updateAutoBackup(false)
+                            showDisableAutoBackupDialog = false
+                        }
+                    ) {
+                        Text(if (isChinese) "保留备份" else "Keep Backup")
+                    }
+                    Button(
+                        onClick = {
+                            settingsViewModel.backupManager.clearAllDeltaBackups()
+                            settingsViewModel.updateAutoBackup(false)
+                            showDisableAutoBackupDialog = false
+                            refreshBackupTrigger++
+                            scope.launch {
+                                snackbarHostState.showSnackbar(
+                                    if (isChinese) "已关闭自动备份并清除备份数据" else "Auto backup disabled and backup data cleared"
+                                )
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error
+                        )
+                    ) {
+                        Text(if (isChinese) "删除备份" else "Delete Backup")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDisableAutoBackupDialog = false }) {
+                    Text(strings.cancel)
+                }
+            },
+            shape = RoundedCornerShape(20.dp)
+        )
+    }
 }
 
 @Composable
@@ -1201,70 +1375,570 @@ fun ManualBackupsDialog(
     strings: AppStrings,
     refreshTrigger: Int,
     onRefresh: () -> Unit,
-    snackbarHostState: SnackbarHostState
+    snackbarHostState: SnackbarHostState,
+    categories: List<com.example.accountkeeper.data.model.Category>,
+    categoryViewModel: CategoryViewModel,
+    transactionViewModel: TransactionViewModel,
+    assetViewModel: AssetViewModel
 ) {
-    val backups by remember(refreshTrigger) { mutableStateOf(backupManager.getAllManualBackups()) }
+    val manualBackups by remember(refreshTrigger) { mutableStateOf(backupManager.getAllZipManualBackups()) }
     val scope = rememberCoroutineScope()
+    val isChinese = strings.language == "界面语言"
+    
+    // 增量备份链信息
+    val (baseBackupTime, deltaSteps) = remember(refreshTrigger) { backupManager.getBackupChainInfo() }
+    val hasDeltaBackup = baseBackupTime != null
+    
+    var showRestoreConfirmDialog by remember { mutableStateOf<java.io.File?>(null) }
+    var showDeltaRestoreDialog by remember { mutableStateOf<Int?>(null) } // 步骤号，-1表示最新
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(strings.backupVault) },
         text = {
-            if (backups.isEmpty()) {
-                                    Text(strings.noManualBackups)
-                                } else {
-                                    Column(
-                                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        backups.forEach { backup ->
-                                            Card(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .clickable {
-                                                        scope.launch {
-                                                            // TODO: Implement restore functionality
-                                                            snackbarHostState.showSnackbar(if (strings.language == "界面语言") "恢复功能暂未实现" else "Restore feature not yet implemented")
-                                                        }
-                                                    },
-                                                shape = RoundedCornerShape(12.dp)
-                                            ) {                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(12.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        backup.name,
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                    Text(
-                                        java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date(backup.lastModified())),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                                IconButton(
-                                    onClick = {
-                                        backupManager.deleteBackupFile(backup)
-                                        onRefresh()
-                                    }
-                                ) {
-                                    Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
-                                }
+            Column(
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.verticalScroll(rememberScrollState())
+            ) {
+                // 增量备份链部分
+                if (hasDeltaBackup) {
+                    Text(
+                        text = if (isChinese) "增量备份链" else "Incremental Backup Chain",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF07C160)
+                    )
+                    
+                    // 基准备份信息
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    if (isChinese) "基准备份" else "Base Backup",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    baseBackupTime ?: "",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            TextButton(onClick = { showDeltaRestoreDialog = 0 }) {
+                                Text(if (isChinese) "还原到此" else "Restore")
                             }
                         }
                     }
+                    
+                    // 步骤列表
+                    if (deltaSteps.isNotEmpty()) {
+                        Text(
+                            text = if (isChinese) "备份步骤 (${deltaSteps.size})" else "Backup Steps (${deltaSteps.size})",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        
+                        deltaSteps.forEachIndexed { index, step ->
+                            DeltaStepItem(
+                                stepNumber = step.stepNumber,
+                                timestamp = step.timestamp,
+                                changeCount = step.changeCount,
+                                isChinese = isChinese,
+                                onRestore = { showDeltaRestoreDialog = step.stepNumber }
+                            )
+                        }
+                        
+                        // 还原到最新
+                        OutlinedButton(
+                            onClick = { showDeltaRestoreDialog = -1 },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.Restore, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(if (isChinese) "还原到最新状态" else "Restore to Latest")
+                        }
+                    }
+                    
+                    if (manualBackups.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        HorizontalDivider()
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                }
+                
+                // 手动备份分组
+                if (manualBackups.isNotEmpty()) {
+                    Text(
+                        text = if (isChinese) "手动备份 (${manualBackups.size})" else "Manual Backups (${manualBackups.size})",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF5BD9CA)
+                    )
+                    manualBackups.forEach { backup ->
+                        BackupFileItem(
+                            backup = backup,
+                            isChinese = isChinese,
+                            onRestore = { showRestoreConfirmDialog = backup },
+                            onDelete = {
+                                backupManager.deleteBackupFile(backup)
+                                onRefresh()
+                            }
+                        )
+                    }
+                }
+                
+                // 如果没有备份
+                if (!hasDeltaBackup && manualBackups.isEmpty()) {
+                    Text(strings.noManualBackups)
                 }
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text(strings.close) } },
         shape = RoundedCornerShape(20.dp)
     )
+    
+    // 增量备份还原确认对话框
+    showDeltaRestoreDialog?.let { targetStep ->
+        val stepLabel = when (targetStep) {
+            0 -> if (isChinese) "基准备份" else "Base Backup"
+            -1 -> if (isChinese) "最新状态" else "Latest"
+            else -> if (isChinese) "第 $targetStep 步" else "Step $targetStep"
+        }
+        
+        AlertDialog(
+            onDismissRequest = { showDeltaRestoreDialog = null },
+            title = { 
+                Text(
+                    if (isChinese) "还原到 $stepLabel" else "Restore to $stepLabel",
+                    color = MaterialTheme.colorScheme.primary
+                )
+            },
+            text = {
+                Column {
+                    Text(if (isChinese) "确定要还原到 $stepLabel 吗？" else "Are you sure you want to restore to $stepLabel?")
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        if (isChinese) "注意：此操作将清除现有数据并恢复到选定状态。" 
+                        else "Note: This will clear existing data and restore to the selected state.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        scope.launch(Dispatchers.IO) {
+                            try {
+                                val result = backupManager.restoreToStep(targetStep)
+                                
+                                if (!result.success) {
+                                    withContext(Dispatchers.Main) {
+                                        snackbarHostState.showSnackbar(
+                                            if (isChinese) "恢复失败: ${result.errorMessage}" 
+                                            else "Restore failed: ${result.errorMessage}"
+                                        )
+                                    }
+                                    return@launch
+                                }
+                                
+                                var txCount = 0
+                                var assetCount = 0
+                                val importNewCategoriesMap = mutableMapOf<Pair<String, TransactionType>, Boolean>()
+                                
+                                // 收集需要创建的新分类
+                                for (tx in result.transactions) {
+                                    val type = if (tx.type.equals("Income", ignoreCase = true)) TransactionType.INCOME else TransactionType.EXPENSE
+                                    val catMatch = categories.find { it.name.equals(tx.categoryName, ignoreCase = true) && it.type == type }
+                                    if (catMatch == null && tx.categoryName.isNotBlank() && tx.categoryName != "Other") {
+                                        importNewCategoriesMap[tx.categoryName to type] = true
+                                    }
+                                }
+                                
+                                // 创建新分类
+                                for ((name, type) in importNewCategoriesMap.keys) {
+                                    categoryViewModel.addCategory(com.example.accountkeeper.data.model.Category(name = name, type = type, isDefault = false))
+                                }
+                                
+                                kotlinx.coroutines.delay(300)
+                                val latestCategories = categoryViewModel.categories.value
+                                
+                                // 先清除现有数据
+                                transactionViewModel.deleteAllTransactions()
+                                assetViewModel.deleteAllAssets()
+                                
+                                kotlinx.coroutines.delay(100)
+                                
+                                // 导入交易记录
+                                for (tx in result.transactions) {
+                                    val type = if (tx.type.equals("Income", ignoreCase = true)) TransactionType.INCOME else TransactionType.EXPENSE
+                                    val catMatch = latestCategories.find { it.name.equals(tx.categoryName, ignoreCase = true) && it.type == type }
+                                    val categoryId = catMatch?.id ?: latestCategories.firstOrNull { it.type == type }?.id
+                                    
+                                    if (tx.amount > 0 && categoryId != null) {
+                                        val transaction = Transaction(
+                                            id = tx.id,
+                                            type = type,
+                                            amount = tx.amount,
+                                            note = tx.note,
+                                            date = tx.date,
+                                            categoryId = categoryId
+                                        )
+                                        transactionViewModel.addTransaction(transaction)
+                                        txCount++
+                                    }
+                                }
+                                
+                                // 导入资产记录
+                                for (assetData in result.assets) {
+                                    val catMatch = latestCategories.find { it.name.equals(assetData.categoryName, ignoreCase = true) }
+                                    val categoryId = catMatch?.id
+                                    
+                                    val asset = Asset(
+                                        id = assetData.id,
+                                        date = assetData.date,
+                                        amount = assetData.amount,
+                                        status = try { AssetStatus.valueOf(assetData.status) } catch (e: Exception) { AssetStatus.NONE },
+                                        categoryId = categoryId,
+                                        targetPerson = assetData.targetPerson,
+                                        targetAccount = assetData.targetAccount,
+                                        note = assetData.note,
+                                        isCompleted = assetData.isCompleted,
+                                        attachments = AttachmentConverter.toJson(assetData.attachments),
+                                        createdAt = assetData.createdAt,
+                                        updatedAt = assetData.updatedAt
+                                    )
+                                    assetViewModel.addAsset(asset)
+                                    assetCount++
+                                }
+                                
+                                withContext(Dispatchers.Main) {
+                                    showDeltaRestoreDialog = null
+                                    val message = if (isChinese) {
+                                        "已还原到$stepLabel！交易记录: $txCount 笔，资产记录: $assetCount 条"
+                                    } else {
+                                        "Restored to $stepLabel! Transactions: $txCount, Assets: $assetCount"
+                                    }
+                                    snackbarHostState.showSnackbar(message)
+                                }
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                                withContext(Dispatchers.Main) {
+                                    snackbarHostState.showSnackbar(
+                                        if (isChinese) "恢复失败: ${e.localizedMessage}"
+                                        else "Restore failed: ${e.localizedMessage}"
+                                    )
+                                }
+                            }
+                        }
+                    }
+                ) {
+                    Text(if (isChinese) "还原" else "Restore")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeltaRestoreDialog = null }) {
+                    Text(strings.cancel)
+                }
+            },
+            shape = RoundedCornerShape(20.dp)
+        )
+    }
+    
+    // 手动备份恢复确认对话框
+    showRestoreConfirmDialog?.let { backupFile ->
+        AlertDialog(
+            onDismissRequest = { showRestoreConfirmDialog = null },
+            title = { 
+                Text(
+                    if (isChinese) "确认恢复" else "Confirm Restore",
+                    color = MaterialTheme.colorScheme.primary
+                )
+            },
+            text = {
+                Column {
+                    Text(if (isChinese) "确定要从以下备份文件恢复数据吗？" else "Are you sure you want to restore from this backup?")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        backupFile.name,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        if (isChinese) "注意：恢复操作将合并备份数据与现有数据，不会删除现有记录。" 
+                        else "Note: Restore will merge backup data with existing data. Existing records will not be deleted.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        scope.launch(Dispatchers.IO) {
+                            try {
+                                val result = backupManager.readZipBackupFromFile(backupFile)
+                                
+                                if (!result.success) {
+                                    withContext(Dispatchers.Main) {
+                                        snackbarHostState.showSnackbar(
+                                            if (isChinese) "恢复失败: ${result.errorMessage}" 
+                                            else "Restore failed: ${result.errorMessage}"
+                                        )
+                                    }
+                                    return@launch
+                                }
+                                
+                                var txCount = 0
+                                var assetCount = 0
+                                val importNewCategoriesMap = mutableMapOf<Pair<String, TransactionType>, Boolean>()
+                                val importNewAssetCategoriesMap = mutableMapOf<String, Boolean>()
+                                
+                                // 收集需要创建的新分类
+                                for (tx in result.transactions) {
+                                    val type = if (tx.type.equals("Income", ignoreCase = true)) TransactionType.INCOME else TransactionType.EXPENSE
+                                    val catMatch = categories.find { it.name.equals(tx.categoryName, ignoreCase = true) && it.type == type }
+                                    if (catMatch == null && tx.categoryName.isNotBlank() && tx.categoryName != "Other") {
+                                        importNewCategoriesMap[tx.categoryName to type] = true
+                                    }
+                                }
+                                
+                                for (asset in result.assets) {
+                                    if (asset.categoryName != null && asset.categoryName.isNotBlank()) {
+                                        val catMatch = categories.find { it.name.equals(asset.categoryName, ignoreCase = true) }
+                                        if (catMatch == null) {
+                                            importNewAssetCategoriesMap[asset.categoryName] = true
+                                        }
+                                    }
+                                }
+                                
+                                // 创建新分类
+                                for ((name, type) in importNewCategoriesMap.keys) {
+                                    categoryViewModel.addCategory(com.example.accountkeeper.data.model.Category(name = name, type = type, isDefault = false))
+                                }
+                                for (name in importNewAssetCategoriesMap.keys) {
+                                    categoryViewModel.addCategory(com.example.accountkeeper.data.model.Category(name = name, type = TransactionType.EXPENSE, isDefault = false))
+                                }
+                                
+                                kotlinx.coroutines.delay(500)
+                                
+                                val latestCategories = categoryViewModel.categories.value
+                                val latestTransactions = transactionViewModel.transactions.value
+                                val latestAssets = assetViewModel.assets.value
+                                
+                                // 处理附件文件映射
+                                val processedAttachments = mutableMapOf<String, Attachment>()
+                                for ((attachmentId, tempFile) in result.attachmentFiles) {
+                                    val originalFileName = tempFile.name.substringAfter("_", tempFile.name)
+                                    val newAttachment = backupManager.copyAttachmentToInternalStorage(
+                                        attachmentId = attachmentId,
+                                        tempFile = tempFile,
+                                        originalFileName = originalFileName
+                                    )
+                                    if (newAttachment != null) {
+                                        processedAttachments[attachmentId] = newAttachment
+                                    }
+                                }
+                                
+                                // 导入交易记录
+                                for (tx in result.transactions) {
+                                    if (latestTransactions.any { it.id == tx.id }) continue
+                                    
+                                    val type = if (tx.type.equals("Income", ignoreCase = true)) TransactionType.INCOME else TransactionType.EXPENSE
+                                    val catMatch = latestCategories.find { it.name.equals(tx.categoryName, ignoreCase = true) && it.type == type }
+                                    val categoryId = catMatch?.id ?: latestCategories.firstOrNull { it.type == type }?.id
+                                    
+                                    if (tx.amount > 0 && categoryId != null) {
+                                        val transaction = Transaction(
+                                            id = tx.id,
+                                            type = type,
+                                            amount = tx.amount,
+                                            note = tx.note,
+                                            date = tx.date,
+                                            categoryId = categoryId
+                                        )
+                                        transactionViewModel.addTransaction(transaction)
+                                        txCount++
+                                    }
+                                }
+                                
+                                // 导入资产记录
+                                for (assetData in result.assets) {
+                                    if (latestAssets.any { it.id == assetData.id }) continue
+                                    
+                                    val catMatch = latestCategories.find { it.name.equals(assetData.categoryName, ignoreCase = true) }
+                                    val categoryId = catMatch?.id
+                                    
+                                    // 更新附件路径
+                                    val updatedAttachments = assetData.attachments.map { att ->
+                                        processedAttachments[att.id] ?: att
+                                    }
+                                    
+                                    val asset = Asset(
+                                        id = assetData.id,
+                                        date = assetData.date,
+                                        amount = assetData.amount,
+                                        status = try { AssetStatus.valueOf(assetData.status) } catch (e: Exception) { AssetStatus.NONE },
+                                        categoryId = categoryId,
+                                        targetPerson = assetData.targetPerson,
+                                        targetAccount = assetData.targetAccount,
+                                        note = assetData.note,
+                                        isCompleted = assetData.isCompleted,
+                                        attachments = AttachmentConverter.toJson(updatedAttachments),
+                                        createdAt = assetData.createdAt,
+                                        updatedAt = assetData.updatedAt
+                                    )
+                                    assetViewModel.addAsset(asset)
+                                    assetCount++
+                                }
+                                
+                                // 清理临时文件
+                                backupManager.cleanupTempFiles()
+                                
+                                withContext(Dispatchers.Main) {
+                                    showRestoreConfirmDialog = null
+                                    val message = if (isChinese) {
+                                        "恢复成功！交易记录: $txCount 笔，资产记录: $assetCount 条"
+                                    } else {
+                                        "Restore successful! Transactions: $txCount, Assets: $assetCount"
+                                    }
+                                    snackbarHostState.showSnackbar(message)
+                                }
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                                withContext(Dispatchers.Main) {
+                                    snackbarHostState.showSnackbar(
+                                        if (isChinese) "恢复失败: ${e.localizedMessage}"
+                                        else "Restore failed: ${e.localizedMessage}"
+                                    )
+                                }
+                            }
+                        }
+                    }
+                ) {
+                    Text(if (isChinese) "恢复" else "Restore")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRestoreConfirmDialog = null }) {
+                    Text(strings.cancel)
+                }
+            },
+            shape = RoundedCornerShape(20.dp)
+        )
+    }
+}
+
+@Composable
+private fun DeltaStepItem(
+    stepNumber: Int,
+    timestamp: Long,
+    changeCount: Int,
+    isChinese: Boolean,
+    onRestore: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    if (isChinese) "步骤 $stepNumber" else "Step $stepNumber",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
+                        .format(java.util.Date(timestamp)),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    if (isChinese) "变更: $changeCount 项" else "Changes: $changeCount",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+            TextButton(onClick = onRestore) {
+                Text(if (isChinese) "还原" else "Restore")
+            }
+        }
+    }
+}
+
+@Composable
+private fun BackupFileItem(
+    backup: java.io.File,
+    isChinese: Boolean,
+    onRestore: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    backup.name,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
+                        .format(java.util.Date(backup.lastModified())),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Row {
+                // 恢复按钮
+                IconButton(onClick = onRestore) {
+                    Icon(
+                        Icons.Default.Restore,
+                        contentDescription = if (isChinese) "恢复" else "Restore",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+                // 删除按钮
+                IconButton(onClick = onDelete) {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = if (isChinese) "删除" else "Delete",
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        }
+    }
 }
 
 @Composable

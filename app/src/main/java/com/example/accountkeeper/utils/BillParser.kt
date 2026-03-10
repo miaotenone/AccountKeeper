@@ -305,11 +305,12 @@ object BillParser {
      * 支付宝账单解析器
      * 
      * 支持格式：
-     * CSV 格式 (GBK 编码)
-     * 表头: 记录时间, 分类, 收支类型, 金额, 备注, 账户, 来源, 标签
+     * 1. 12列新格式 (2024+): 交易时间,交易分类,交易对方,对方账号,商品说明,收/支,金额,收/付款方式,交易状态,交易订单号,商家订单号,备注
+     * 2. 8列格式: 记录时间, 分类, 收支类型, 金额, 备注, 账户, 来源, 标签
+     * 3. 旧格式 (>=7列): 交易时间, 商品说明, 交易对方, 收/支, 金额, 交易状态, 交易分类, ...
      * 
-     * 示例数据：
-     * 2026-02-20 18:03:55,餐饮,支出,64.30,美团外卖-某某商家,余额,账单同步,,
+     * 示例数据 (12列新格式)：
+     * 2026-03-10 13:52:08,生活服务,深圳市凯路创新科技有限公司,578***@qq.com,热水表记账,支出,0.00,趣智校园钱包,交易成功,2026031023001497641423824301,1020260310134700341400011907,,
      */
     fun parseAlipayBill(lines: List<String>): ParseResult {
         val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
@@ -334,9 +335,6 @@ object BillParser {
             val parts = parseCsvLine(line)
             
             try {
-                // 新格式: 记录时间, 分类, 收支类型, 金额, 备注, 账户, 来源, 标签
-                // 旧格式: 交易时间, 商品说明, 交易对方, 收/支, 金额, 交易状态, 交易分类, ...
-                
                 val dateStr: String
                 val category: String
                 val incomeExpense: String
@@ -344,9 +342,32 @@ object BillParser {
                 val note: String
                 val counterparty: String
                 val status: String
+                val transactionId: String
                 
-                if (parts.size >= 5 && (parts[2] == "支出" || parts[2] == "收入" || parts[2] == "不计收支")) {
-                    // 新格式 (8列): 记录时间, 分类, 收支类型, 金额, 备注, 账户, 来源, 标签
+                // 检测格式类型
+                if (parts.size == 12 && (parts[5] == "支出" || parts[5] == "收入" || parts[5] == "不计收支")) {
+                    // 12列新格式: 交易时间,交易分类,交易对方,对方账号,商品说明,收/支,金额,收/付款方式,交易状态,交易订单号,商家订单号,备注
+                    dateStr = parts[0]
+                    category = parts[1]
+                    counterparty = parts[2]
+                    // parts[3] = 对方账号，跳过
+                    val productDescription = parts[4]
+                    incomeExpense = parts[5]
+                    amountStr = parts[6].replace("¥", "").replace("￥", "").replace(",", "").trim()
+                    // parts[7] = 收/付款方式
+                    status = parts[8]
+                    transactionId = parts[9].ifBlank { "" }
+                    // parts[10] = 商家订单号
+                    // parts[11] = 备注
+                    
+                    // 过滤掉交易关闭、已关闭等无效交易
+                    if (status == "交易关闭" || status == "已关闭" || status == "关闭") continue
+                    
+                    // 构建备注
+                    note = buildAlipayNoteV2(category, counterparty, productDescription, parts[11])
+                    
+                } else if (parts.size >= 5 && (parts[2] == "支出" || parts[2] == "收入" || parts[2] == "不计收支")) {
+                    // 8列格式: 记录时间, 分类, 收支类型, 金额, 备注, 账户, 来源, 标签
                     dateStr = parts[0]
                     category = parts[1]
                     incomeExpense = parts[2]
@@ -354,6 +375,8 @@ object BillParser {
                     note = parts[4].ifBlank { category }
                     counterparty = extractCounterpartyFromNote(parts[4])
                     status = ""
+                    transactionId = ""
+                    
                 } else if (parts.size >= 7) {
                     // 旧格式: 交易时间, 商品说明, 交易对方, 收/支, 金额, 交易状态, 交易分类, ...
                     dateStr = parts[0]
@@ -363,11 +386,13 @@ object BillParser {
                     amountStr = parts[4].replace("¥", "").replace("￥", "").replace(",", "").trim()
                     status = parts[5]
                     category = parts[6]
+                    transactionId = if (parts.size >= 10) parts[9] else ""
                     
                     // 只处理交易成功的记录
                     if (status != "交易成功" && status != "Success" && !status.contains("成功")) continue
                     
                     note = if (productName.isNotBlank()) productName else counterparty
+                    
                 } else {
                     continue
                 }
@@ -383,13 +408,17 @@ object BillParser {
                     else -> continue
                 }
                 
-                // 识别退款
-                val isRefund = category == "退款" || note.contains("退款")
+                // 识别退款（包括12列格式中状态为退款成功的情况）
+                val isRefund = category == "退款" || note.contains("退款") || status == "退款成功"
                 
                 if (date != null && amount > 0) {
                     transactionIndex++  // 递增计数器保证唯一性
-                    // 使用时间戳+金额+类型+索引+备注hash来保证ID唯一
-                    val uniqueId = "${date.time}_${amount}_${type.name}_${transactionIndex}_${note.hashCode()}"
+                    // 使用交易订单号作为ID（如果有），否则使用时间戳+金额+类型+索引
+                    val uniqueId = if (transactionId.isNotBlank()) {
+                        transactionId
+                    } else {
+                        "${date.time}_${amount}_${type.name}_${transactionIndex}_${note.hashCode()}"
+                    }
                     
                     rawTransactions.add(
                         RawTransaction(
@@ -416,6 +445,30 @@ object BillParser {
         
         // 处理支付宝退款配对
         return processAlipayRefunds(rawTransactions)
+    }
+    
+    /**
+     * 构建支付宝12列格式备注
+     */
+    private fun buildAlipayNoteV2(category: String, counterparty: String, productDescription: String, remark: String): String {
+        val noteParts = mutableListOf<String>()
+        
+        // 优先使用商品说明
+        if (productDescription.isNotBlank() && productDescription != "/") {
+            noteParts.add(productDescription)
+        }
+        
+        // 添加交易对方
+        if (counterparty.isNotBlank() && counterparty != "/" && counterparty !in noteParts) {
+            noteParts.add(counterparty)
+        }
+        
+        // 添加备注
+        if (remark.isNotBlank() && remark != "/" && remark !in noteParts) {
+            noteParts.add(remark)
+        }
+        
+        return noteParts.joinToString(" - ").ifBlank { category }
     }
 
     /**

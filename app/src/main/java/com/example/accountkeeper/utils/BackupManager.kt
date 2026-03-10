@@ -54,6 +54,42 @@ data class AssetData(
 )
 
 /**
+ * 增量备份数据结构
+ */
+@Serializable
+data class DeltaBackupData(
+    val baseBackupId: String,           // 基准备份ID
+    val stepNumber: Int,                // 步骤号（从1开始）
+    val timestamp: Long,                // 创建时间戳
+    val addedTransactions: List<TransactionData>,    // 新增的交易
+    val modifiedTransactions: List<TransactionData>, // 修改的交易
+    val deletedTransactionIds: List<Long>,           // 删除的交易ID
+    val addedAssets: List<AssetData>,                // 新增的资产
+    val modifiedAssets: List<AssetData>,             // 修改的资产
+    val deletedAssetIds: List<Long>,                 // 删除的资产ID
+    val version: Int = 1
+)
+
+/**
+ * 备份链索引（用于跟踪备份链）
+ */
+@Serializable
+data class BackupChainIndex(
+    val baseBackupId: String,           // 基准备份ID
+    val baseBackupTime: Long,           // 基准备份时间
+    val deltaBackups: List<DeltaBackupInfo>, // 增量备份列表
+    val version: Int = 1
+)
+
+@Serializable
+data class DeltaBackupInfo(
+    val fileName: String,               // 文件名
+    val stepNumber: Int,                // 步骤号
+    val timestamp: Long,                // 创建时间
+    val changeCount: Int                // 变更数量
+)
+
+/**
  * ZIP 备份导入结果
  */
 data class ZipImportResult(
@@ -64,9 +100,28 @@ data class ZipImportResult(
     val errorMessage: String? = null
 )
 
+/**
+ * 增量备份导入结果
+ */
+data class DeltaImportResult(
+    val transactions: List<TransactionData>,
+    val assets: List<AssetData>,
+    val attachmentFiles: Map<String, File>,
+    val targetStep: Int,                // 恢复到的步骤号
+    val success: Boolean,
+    val errorMessage: String? = null
+)
+
 class BackupManager(private val context: Context) {
 
     private val backupDir = File(context.filesDir, "backups").apply {
+        if (!exists()) {
+            mkdirs()
+        }
+    }
+    
+    // 增量备份目录
+    private val deltaBackupDir = File(context.filesDir, "delta_backups").apply {
         if (!exists()) {
             mkdirs()
         }
@@ -492,7 +547,7 @@ class BackupManager(private val context: Context) {
     }
 
     /**
-     * 从 ZIP 文件读取备份数据
+     * 从 ZIP 文件读取备份数据（通过 Uri）
      */
     fun readZipBackup(uri: Uri): ZipImportResult {
         return try {
@@ -504,6 +559,55 @@ class BackupManager(private val context: Context) {
                     success = false,
                     errorMessage = "Cannot open input stream"
                 )
+            
+            readZipBackupFromStream(inputStream)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            ZipImportResult(
+                transactions = emptyList(),
+                assets = emptyList(),
+                attachmentFiles = emptyMap(),
+                success = false,
+                errorMessage = e.localizedMessage
+            )
+        }
+    }
+
+    /**
+     * 从 ZIP File 读取备份数据（内部存储的备份文件）
+     */
+    fun readZipBackupFromFile(file: File): ZipImportResult {
+        return try {
+            if (!file.exists()) {
+                return ZipImportResult(
+                    transactions = emptyList(),
+                    assets = emptyList(),
+                    attachmentFiles = emptyMap(),
+                    success = false,
+                    errorMessage = "Backup file not found"
+                )
+            }
+            
+            file.inputStream().use { inputStream ->
+                readZipBackupFromStream(inputStream)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            ZipImportResult(
+                transactions = emptyList(),
+                assets = emptyList(),
+                attachmentFiles = emptyMap(),
+                success = false,
+                errorMessage = e.localizedMessage
+            )
+        }
+    }
+
+    /**
+     * 从输入流读取 ZIP 备份数据（内部方法）
+     */
+    private fun readZipBackupFromStream(inputStream: java.io.InputStream): ZipImportResult {
+        return try {
             
             val transactions = mutableListOf<TransactionData>()
             val assets = mutableListOf<AssetData>()
@@ -817,5 +921,433 @@ class BackupManager(private val context: Context) {
             e.printStackTrace()
             false
         }
+    }
+    
+    // ========== 增量备份管理 ==========
+    
+    /**
+     * 创建基准备份（完整备份）
+     * 返回基准备份ID
+     */
+    fun createBaseBackup(
+        transactions: List<Transaction>,
+        assets: List<Asset>,
+        categoryMap: Map<Long, String>
+    ): String? {
+        return try {
+            val baseBackupId = "base_${System.currentTimeMillis()}"
+            val baseFile = File(deltaBackupDir, "${baseBackupId}.zip")
+            
+            // 写入完整数据
+            ZipOutputStream(baseFile.outputStream()).use { zipOut ->
+                // 写入数据
+                val backupData = ZipBackupData(
+                    transactions = transactions.map { tx ->
+                        TransactionData(
+                            id = tx.id,
+                            date = tx.date,
+                            type = if (tx.type == TransactionType.INCOME) "Income" else "Expense",
+                            amount = tx.amount,
+                            categoryName = categoryMap[tx.categoryId] ?: "Other",
+                            note = tx.note
+                        )
+                    },
+                    assets = assets.map { asset ->
+                        AssetData(
+                            id = asset.id,
+                            date = asset.date,
+                            amount = asset.amount,
+                            status = asset.status.name,
+                            categoryName = categoryMap[asset.categoryId],
+                            targetPerson = asset.targetPerson,
+                            targetAccount = asset.targetAccount,
+                            note = asset.note,
+                            isCompleted = asset.isCompleted,
+                            attachments = AttachmentConverter.fromJson(asset.attachments),
+                            createdAt = asset.createdAt,
+                            updatedAt = asset.updatedAt
+                        )
+                    },
+                    version = 1
+                )
+                
+                zipOut.putNextEntry(ZipEntry("data.json"))
+                zipOut.write(json.encodeToString(backupData).toByteArray(Charsets.UTF_8))
+                zipOut.closeEntry()
+                
+                // 写入附件
+                val attachmentEntries = mutableSetOf<String>()
+                for (asset in assets) {
+                    val attachmentList = AttachmentConverter.fromJson(asset.attachments)
+                    for (attachment in attachmentList) {
+                        val attachmentFile = File(attachment.filePath)
+                        if (attachmentFile.exists()) {
+                            val entryName = "attachments/${attachment.id}_${attachment.fileName}"
+                            if (entryName !in attachmentEntries) {
+                                attachmentEntries.add(entryName)
+                                zipOut.putNextEntry(ZipEntry(entryName))
+                                attachmentFile.inputStream().use { input ->
+                                    input.copyTo(zipOut)
+                                }
+                                zipOut.closeEntry()
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // 创建备份链索引
+            val chainIndex = BackupChainIndex(
+                baseBackupId = baseBackupId,
+                baseBackupTime = System.currentTimeMillis(),
+                deltaBackups = emptyList()
+            )
+            saveBackupChainIndex(chainIndex)
+            
+            baseBackupId
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+    
+    /**
+     * 创建增量备份
+     */
+    fun createDeltaBackup(
+        previousTransactions: List<Transaction>,
+        previousAssets: List<Asset>,
+        currentTransactions: List<Transaction>,
+        currentAssets: List<Asset>,
+        categoryMap: Map<Long, String>,
+        maxKeep: Int = 50
+    ): Boolean {
+        return try {
+            val chainIndex = getBackupChainIndex()
+            if (chainIndex == null) {
+                // 没有基准备份，先创建一个
+                createBaseBackup(currentTransactions, currentAssets, categoryMap)
+                return true
+            }
+            
+            // 计算差异
+            val previousTxMap = previousTransactions.associateBy { it.id }
+            val previousAssetMap = previousAssets.associateBy { it.id }
+            val currentTxMap = currentTransactions.associateBy { it.id }
+            val currentAssetMap = currentAssets.associateBy { it.id }
+            
+            // 新增的交易
+            val addedTransactions = currentTransactions
+                .filter { it.id !in previousTxMap }
+                .map { tx ->
+                    TransactionData(
+                        id = tx.id,
+                        date = tx.date,
+                        type = if (tx.type == TransactionType.INCOME) "Income" else "Expense",
+                        amount = tx.amount,
+                        categoryName = categoryMap[tx.categoryId] ?: "Other",
+                        note = tx.note
+                    )
+                }
+            
+            // 修改的交易
+            val modifiedTransactions = currentTransactions
+                .filter { tx ->
+                    val prev = previousTxMap[tx.id]
+                    prev != null && (prev.amount != tx.amount || prev.note != tx.note || 
+                                     prev.date != tx.date || prev.categoryId != tx.categoryId)
+                }
+                .map { tx ->
+                    TransactionData(
+                        id = tx.id,
+                        date = tx.date,
+                        type = if (tx.type == TransactionType.INCOME) "Income" else "Expense",
+                        amount = tx.amount,
+                        categoryName = categoryMap[tx.categoryId] ?: "Other",
+                        note = tx.note
+                    )
+                }
+            
+            // 删除的交易ID
+            val deletedTransactionIds = previousTransactions
+                .filter { it.id !in currentTxMap }
+                .map { it.id }
+            
+            // 新增的资产
+            val addedAssets = currentAssets
+                .filter { it.id !in previousAssetMap }
+                .map { asset ->
+                    AssetData(
+                        id = asset.id,
+                        date = asset.date,
+                        amount = asset.amount,
+                        status = asset.status.name,
+                        categoryName = categoryMap[asset.categoryId],
+                        targetPerson = asset.targetPerson,
+                        targetAccount = asset.targetAccount,
+                        note = asset.note,
+                        isCompleted = asset.isCompleted,
+                        attachments = AttachmentConverter.fromJson(asset.attachments),
+                        createdAt = asset.createdAt,
+                        updatedAt = asset.updatedAt
+                    )
+                }
+            
+            // 修改的资产
+            val modifiedAssets = currentAssets
+                .filter { asset ->
+                    val prev = previousAssetMap[asset.id]
+                    prev != null && (prev.amount != asset.amount || prev.note != asset.note ||
+                                     prev.status != asset.status || prev.isCompleted != asset.isCompleted ||
+                                     prev.updatedAt != asset.updatedAt)
+                }
+                .map { asset ->
+                    AssetData(
+                        id = asset.id,
+                        date = asset.date,
+                        amount = asset.amount,
+                        status = asset.status.name,
+                        categoryName = categoryMap[asset.categoryId],
+                        targetPerson = asset.targetPerson,
+                        targetAccount = asset.targetAccount,
+                        note = asset.note,
+                        isCompleted = asset.isCompleted,
+                        attachments = AttachmentConverter.fromJson(asset.attachments),
+                        createdAt = asset.createdAt,
+                        updatedAt = asset.updatedAt
+                    )
+                }
+            
+            // 删除的资产ID
+            val deletedAssetIds = previousAssets
+                .filter { it.id !in currentAssetMap }
+                .map { it.id }
+            
+            // 如果没有变更，不创建增量备份
+            if (addedTransactions.isEmpty() && modifiedTransactions.isEmpty() && deletedTransactionIds.isEmpty() &&
+                addedAssets.isEmpty() && modifiedAssets.isEmpty() && deletedAssetIds.isEmpty()) {
+                return true
+            }
+            
+            val stepNumber = chainIndex.deltaBackups.size + 1
+            val timestamp = System.currentTimeMillis()
+            val fileName = "delta_${chainIndex.baseBackupId}_step$stepNumber.json"
+            
+            // 创建增量备份数据
+            val deltaBackup = DeltaBackupData(
+                baseBackupId = chainIndex.baseBackupId,
+                stepNumber = stepNumber,
+                timestamp = timestamp,
+                addedTransactions = addedTransactions,
+                modifiedTransactions = modifiedTransactions,
+                deletedTransactionIds = deletedTransactionIds,
+                addedAssets = addedAssets,
+                modifiedAssets = modifiedAssets,
+                deletedAssetIds = deletedAssetIds
+            )
+            
+            // 写入增量备份文件
+            val deltaFile = File(deltaBackupDir, fileName)
+            deltaFile.writeText(json.encodeToString(deltaBackup))
+            
+            // 更新备份链索引
+            val updatedChain = chainIndex.copy(
+                deltaBackups = chainIndex.deltaBackups + DeltaBackupInfo(
+                    fileName = fileName,
+                    stepNumber = stepNumber,
+                    timestamp = timestamp,
+                    changeCount = addedTransactions.size + modifiedTransactions.size + deletedTransactionIds.size +
+                                  addedAssets.size + modifiedAssets.size + deletedAssetIds.size
+                )
+            )
+            saveBackupChainIndex(updatedChain)
+            
+            // 清理旧的增量备份（超过maxKeep个）
+            if (updatedChain.deltaBackups.size > maxKeep) {
+                val toRemove = updatedChain.deltaBackups.take(updatedChain.deltaBackups.size - maxKeep)
+                toRemove.forEach { info ->
+                    File(deltaBackupDir, info.fileName).delete()
+                }
+                val cleanedChain = updatedChain.copy(
+                    deltaBackups = updatedChain.deltaBackups.drop(toRemove.size)
+                )
+                saveBackupChainIndex(cleanedChain)
+            }
+            
+            true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
+    
+    /**
+     * 获取备份链索引
+     */
+    fun getBackupChainIndex(): BackupChainIndex? {
+        return try {
+            val indexFile = File(deltaBackupDir, "chain_index.json")
+            if (!indexFile.exists()) return null
+            json.decodeFromString<BackupChainIndex>(indexFile.readText())
+        } catch (e: Exception) {
+            null
+        }
+    }
+    
+    /**
+     * 保存备份链索引
+     */
+    private fun saveBackupChainIndex(index: BackupChainIndex) {
+        try {
+            val indexFile = File(deltaBackupDir, "chain_index.json")
+            indexFile.writeText(json.encodeToString(index))
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+    
+    /**
+     * 恢复到指定步骤
+     * @param targetStep 目标步骤（0表示恢复到基准，-1表示恢复到最新）
+     */
+    fun restoreToStep(targetStep: Int): DeltaImportResult {
+        return try {
+            val chainIndex = getBackupChainIndex()
+                ?: return DeltaImportResult(
+                    transactions = emptyList(),
+                    assets = emptyList(),
+                    attachmentFiles = emptyMap(),
+                    targetStep = 0,
+                    success = false,
+                    errorMessage = "No backup chain found"
+                )
+            
+            // 读取基准备份
+            val baseFile = File(deltaBackupDir, "${chainIndex.baseBackupId}.zip")
+            if (!baseFile.exists()) {
+                return DeltaImportResult(
+                    transactions = emptyList(),
+                    assets = emptyList(),
+                    attachmentFiles = emptyMap(),
+                    targetStep = 0,
+                    success = false,
+                    errorMessage = "Base backup not found"
+                )
+            }
+            
+            // 解析基准备份
+            var result = readZipBackupFromFile(baseFile)
+            if (!result.success) {
+                return DeltaImportResult(
+                    transactions = emptyList(),
+                    assets = emptyList(),
+                    attachmentFiles = emptyMap(),
+                    targetStep = 0,
+                    success = false,
+                    errorMessage = result.errorMessage
+                )
+            }
+            
+            val transactions = result.transactions.toMutableList()
+            val assets = result.assets.toMutableList()
+            val attachmentFiles = result.attachmentFiles.toMutableMap()
+            
+            // 确定要应用到的步骤
+            val actualTargetStep = if (targetStep == -1) {
+                chainIndex.deltaBackups.size
+            } else {
+                targetStep.coerceIn(0, chainIndex.deltaBackups.size)
+            }
+            
+            // 应用增量备份
+            for (i in 0 until actualTargetStep) {
+                if (i >= chainIndex.deltaBackups.size) break
+                
+                val deltaInfo = chainIndex.deltaBackups[i]
+                val deltaFile = File(deltaBackupDir, deltaInfo.fileName)
+                if (!deltaFile.exists()) continue
+                
+                val deltaBackup = json.decodeFromString<DeltaBackupData>(deltaFile.readText())
+                
+                // 应用删除
+                transactions.removeAll { it.id in deltaBackup.deletedTransactionIds }
+                assets.removeAll { it.id in deltaBackup.deletedAssetIds }
+                
+                // 应用修改
+                deltaBackup.modifiedTransactions.forEach { modifiedTx ->
+                    transactions.removeAll { it.id == modifiedTx.id }
+                    transactions.add(modifiedTx)
+                }
+                deltaBackup.modifiedAssets.forEach { modifiedAsset ->
+                    assets.removeAll { it.id == modifiedAsset.id }
+                    assets.add(modifiedAsset)
+                }
+                
+                // 应用新增
+                transactions.addAll(deltaBackup.addedTransactions)
+                assets.addAll(deltaBackup.addedAssets)
+            }
+            
+            DeltaImportResult(
+                transactions = transactions,
+                assets = assets,
+                attachmentFiles = attachmentFiles,
+                targetStep = actualTargetStep,
+                success = true
+            )
+        } catch (e: Exception) {
+            e.printStackTrace()
+            DeltaImportResult(
+                transactions = emptyList(),
+                assets = emptyList(),
+                attachmentFiles = emptyMap(),
+                targetStep = 0,
+                success = false,
+                errorMessage = e.localizedMessage
+            )
+        }
+    }
+    
+    /**
+     * 获取增量备份步骤列表（用于UI显示）
+     */
+    fun getDeltaBackupSteps(): List<DeltaBackupInfo> {
+        val chainIndex = getBackupChainIndex() ?: return emptyList()
+        return chainIndex.deltaBackups
+    }
+    
+    /**
+     * 获取备份链信息（用于UI显示）
+     */
+    fun getBackupChainInfo(): Pair<String?, List<DeltaBackupInfo>> {
+        val chainIndex = getBackupChainIndex()
+        return if (chainIndex != null) {
+            val baseTime = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+                .format(Date(chainIndex.baseBackupTime))
+            Pair(baseTime, chainIndex.deltaBackups)
+        } else {
+            Pair(null, emptyList())
+        }
+    }
+    
+    /**
+     * 清空所有增量备份
+     */
+    fun clearAllDeltaBackups() {
+        deltaBackupDir.listFiles()?.forEach { it.delete() }
+    }
+    
+    /**
+     * 是否存在备份链
+     */
+    fun hasBackupChain(): Boolean {
+        return getBackupChainIndex() != null
+    }
+    
+    /**
+     * 删除备份链（关闭自动备份时调用）
+     */
+    fun deleteBackupChain() {
+        clearAllDeltaBackups()
     }
 }

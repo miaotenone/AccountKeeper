@@ -5,6 +5,9 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.paging.PagingData
 import androidx.paging.cachedIn
+import com.example.accountkeeper.data.model.Asset
+import com.example.accountkeeper.data.model.AssetStatus
+import com.example.accountkeeper.data.model.AttachmentConverter
 import com.example.accountkeeper.data.model.Transaction
 import com.example.accountkeeper.data.model.TransactionType
 import com.example.accountkeeper.data.repository.AssetRepository
@@ -189,13 +192,67 @@ class TransactionViewModel @Inject constructor(
             
             // Switch to IO since file operations
             withContext(Dispatchers.IO) {
-                backupManager.writeZipBackup(
-                    transactions = txList,
-                    assets = assetList,
-                    categoryMap = categoryMap,
-                    maxKeep = settings.backupRetentionLimit,
-                    isAuto = true
-                )
+                // 检查是否存在备份链
+                if (!backupManager.hasBackupChain()) {
+                    // 没有备份链，创建基准备份
+                    backupManager.createBaseBackup(
+                        transactions = txList,
+                        assets = assetList,
+                        categoryMap = categoryMap
+                    )
+                } else {
+                    // 有备份链，从基准恢复最新状态作为"上一次"数据
+                    val latestState = backupManager.restoreToStep(-1) // -1表示恢复到最新
+                    
+                    if (latestState.success) {
+                        // 将TransactionData转换为Transaction进行比较
+                        val previousTransactions = latestState.transactions.map { txData ->
+                            Transaction(
+                                id = txData.id,
+                                date = txData.date,
+                                type = if (txData.type == "Income") TransactionType.INCOME else TransactionType.EXPENSE,
+                                amount = txData.amount,
+                                note = txData.note,
+                                categoryId = catList.find { it.name == txData.categoryName }?.id ?: 0L
+                            )
+                        }
+                        
+                        // 将AssetData转换为Asset进行比较
+                        val previousAssets = latestState.assets.map { assetData ->
+                            Asset(
+                                id = assetData.id,
+                                date = assetData.date,
+                                amount = assetData.amount,
+                                status = try { AssetStatus.valueOf(assetData.status) } catch (e: Exception) { AssetStatus.NONE },
+                                categoryId = catList.find { it.name == assetData.categoryName }?.id,
+                                targetPerson = assetData.targetPerson,
+                                targetAccount = assetData.targetAccount,
+                                note = assetData.note,
+                                isCompleted = assetData.isCompleted,
+                                attachments = AttachmentConverter.toJson(assetData.attachments),
+                                createdAt = assetData.createdAt,
+                                updatedAt = assetData.updatedAt
+                            )
+                        }
+                        
+                        // 创建增量备份
+                        backupManager.createDeltaBackup(
+                            previousTransactions = previousTransactions,
+                            previousAssets = previousAssets,
+                            currentTransactions = txList,
+                            currentAssets = assetList,
+                            categoryMap = categoryMap,
+                            maxKeep = settings.backupRetentionLimit
+                        )
+                    } else {
+                        // 恢复失败，重新创建基准备份
+                        backupManager.createBaseBackup(
+                            transactions = txList,
+                            assets = assetList,
+                            categoryMap = categoryMap
+                        )
+                    }
+                }
             }
         }
     }

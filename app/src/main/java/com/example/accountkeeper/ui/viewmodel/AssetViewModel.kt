@@ -1,22 +1,29 @@
 package com.example.accountkeeper.ui.viewmodel
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.accountkeeper.data.model.Asset
 import com.example.accountkeeper.data.model.AssetStatus
+import com.example.accountkeeper.data.model.AttachmentConverter
 import com.example.accountkeeper.data.model.Transaction
 import com.example.accountkeeper.data.model.TransactionType
 import com.example.accountkeeper.data.repository.AssetRepository
 import com.example.accountkeeper.data.repository.CategoryRepository
+import com.example.accountkeeper.data.repository.SettingsRepository
 import com.example.accountkeeper.data.repository.TransactionRepository
+import com.example.accountkeeper.utils.BackupManager
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 /**
@@ -43,10 +50,14 @@ import javax.inject.Inject
  */
 @HiltViewModel
 class AssetViewModel @Inject constructor(
+    application: Application,
     private val assetRepository: AssetRepository,
     private val categoryRepository: CategoryRepository,
-    private val transactionRepository: TransactionRepository
-) : ViewModel() {
+    private val transactionRepository: TransactionRepository,
+    private val settingsRepository: SettingsRepository
+) : AndroidViewModel(application) {
+
+    private val backupManager = BackupManager(application)
 
     val assets: StateFlow<List<Asset>> = assetRepository.getAllAssets()
         .stateIn(
@@ -193,30 +204,35 @@ class AssetViewModel @Inject constructor(
     fun addAsset(asset: Asset) {
         viewModelScope.launch {
             assetRepository.insertAsset(asset)
+            triggerAutoBackup()
         }
     }
 
     fun updateAsset(asset: Asset) {
         viewModelScope.launch {
             assetRepository.updateAsset(asset)
+            triggerAutoBackup()
         }
     }
 
     fun deleteAsset(asset: Asset) {
         viewModelScope.launch {
             assetRepository.deleteAsset(asset)
+            triggerAutoBackup()
         }
     }
 
     fun deleteAssets(assets: List<Asset>) {
         viewModelScope.launch {
             assetRepository.deleteAssets(assets)
+            triggerAutoBackup()
         }
     }
 
     fun deleteAllAssets() {
         viewModelScope.launch {
             assetRepository.deleteAllAssets()
+            triggerAutoBackup()
         }
     }
 
@@ -226,6 +242,7 @@ class AssetViewModel @Inject constructor(
                 isCompleted = !asset.isCompleted,
                 updatedAt = System.currentTimeMillis()
             ))
+            triggerAutoBackup()
         }
     }
 
@@ -253,6 +270,84 @@ class AssetViewModel @Inject constructor(
                 status = newStatus,
                 updatedAt = System.currentTimeMillis()
             ))
+            triggerAutoBackup()
+        }
+    }
+    
+    private suspend fun triggerAutoBackup() {
+        val settings = settingsRepository.settingsFlow.first()
+        if (settings.isAutoBackupEnabled) {
+            val txList = transactionRepository.getAllTransactions().first()
+            val assetList = assetRepository.getAllAssets().first()
+            val catList = categoryRepository.getAllCategories().first()
+            
+            // 创建分类 ID -> 名称的映射
+            val categoryMap = catList.associate { it.id to it.name }
+            
+            // Switch to IO since file operations
+            withContext(Dispatchers.IO) {
+                // 检查是否存在备份链
+                if (!backupManager.hasBackupChain()) {
+                    // 没有备份链，创建基准备份
+                    backupManager.createBaseBackup(
+                        transactions = txList,
+                        assets = assetList,
+                        categoryMap = categoryMap
+                    )
+                } else {
+                    // 有备份链，从基准恢复最新状态作为"上一次"数据
+                    val latestState = backupManager.restoreToStep(-1)
+                    
+                    if (latestState.success) {
+                        // 将TransactionData转换为Transaction进行比较
+                        val previousTransactions = latestState.transactions.map { txData ->
+                            Transaction(
+                                id = txData.id,
+                                date = txData.date,
+                                type = if (txData.type == "Income") TransactionType.INCOME else TransactionType.EXPENSE,
+                                amount = txData.amount,
+                                note = txData.note,
+                                categoryId = catList.find { it.name == txData.categoryName }?.id ?: 0L
+                            )
+                        }
+                        
+                        // 将AssetData转换为Asset进行比较
+                        val previousAssets = latestState.assets.map { assetData ->
+                            Asset(
+                                id = assetData.id,
+                                date = assetData.date,
+                                amount = assetData.amount,
+                                status = try { AssetStatus.valueOf(assetData.status) } catch (e: Exception) { AssetStatus.NONE },
+                                categoryId = catList.find { it.name == assetData.categoryName }?.id,
+                                targetPerson = assetData.targetPerson,
+                                targetAccount = assetData.targetAccount,
+                                note = assetData.note,
+                                isCompleted = assetData.isCompleted,
+                                attachments = AttachmentConverter.toJson(assetData.attachments),
+                                createdAt = assetData.createdAt,
+                                updatedAt = assetData.updatedAt
+                            )
+                        }
+                        
+                        // 创建增量备份
+                        backupManager.createDeltaBackup(
+                            previousTransactions = previousTransactions,
+                            previousAssets = previousAssets,
+                            currentTransactions = txList,
+                            currentAssets = assetList,
+                            categoryMap = categoryMap,
+                            maxKeep = settings.backupRetentionLimit
+                        )
+                    } else {
+                        // 恢复失败，重新创建基准备份
+                        backupManager.createBaseBackup(
+                            transactions = txList,
+                            assets = assetList,
+                            categoryMap = categoryMap
+                        )
+                    }
+                }
+            }
         }
     }
 }

@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.accountkeeper.data.repository.AppSettings
 import com.example.accountkeeper.data.repository.SettingsRepository
 import com.example.accountkeeper.utils.BackupManager
+import com.example.accountkeeper.worker.BackupWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -51,5 +52,29 @@ class SettingsViewModel @Inject constructor(
 
     fun updateSwipeDeleteConfirm(requiresConfirm: Boolean) {
         viewModelScope.launch { settingsRepository.updateSwipeDeleteConfirm(requiresConfirm) }
+    }
+
+    fun updateScheduledBackup(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.updateScheduledBackup(enabled)
+            val context = getApplication<Application>()
+            if (enabled) {
+                val interval = appSettings.value.scheduledBackupInterval
+                BackupWorker.schedule(context, interval)
+            } else {
+                BackupWorker.cancel(context)
+            }
+        }
+    }
+
+    fun updateScheduledBackupInterval(intervalHours: Int) {
+        viewModelScope.launch {
+            settingsRepository.updateScheduledBackupInterval(intervalHours)
+            // 如果定时备份已启用，重新调度
+            if (appSettings.value.isScheduledBackupEnabled) {
+                val context = getApplication<Application>()
+                BackupWorker.schedule(context, intervalHours)
+            }
+        }
     }
 }

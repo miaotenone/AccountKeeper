@@ -22,7 +22,9 @@ data class AppSettings(
     val currencySymbol: String = "¥",
     val isAutoBackupEnabled: Boolean = false,
     val backupRetentionLimit: Int = 15,
-    val swipeDeleteRequiresConfirm: Boolean = true  // 左滑是否直接弹出确认对话框
+    val swipeDeleteRequiresConfirm: Boolean = true,  // 左滑是否直接弹出确认对话框
+    val isScheduledBackupEnabled: Boolean = false,   // 是否启用定时备份
+    val scheduledBackupInterval: Int = 24            // 定时备份间隔（小时）
 )
 
 @Singleton
@@ -36,6 +38,8 @@ class SettingsRepository @Inject constructor(
         val AUTO_BACKUP = booleanPreferencesKey("auto_backup")
         val BACKUP_LIMIT = intPreferencesKey("backup_limit")
         val SWIPE_DELETE_CONFIRM = booleanPreferencesKey("swipe_delete_confirm")
+        val SCHEDULED_BACKUP = booleanPreferencesKey("scheduled_backup")
+        val SCHEDULED_BACKUP_INTERVAL = intPreferencesKey("scheduled_backup_interval")
     }
 
     val settingsFlow: Flow<AppSettings> = context.dataStore.data.map { preferences ->
@@ -45,7 +49,9 @@ class SettingsRepository @Inject constructor(
             currencySymbol = preferences[PreferencesKeys.CURRENCY_SYMBOL] ?: "¥",
             isAutoBackupEnabled = preferences[PreferencesKeys.AUTO_BACKUP] ?: false,
             backupRetentionLimit = preferences[PreferencesKeys.BACKUP_LIMIT] ?: 15,
-            swipeDeleteRequiresConfirm = preferences[PreferencesKeys.SWIPE_DELETE_CONFIRM] ?: true
+            swipeDeleteRequiresConfirm = preferences[PreferencesKeys.SWIPE_DELETE_CONFIRM] ?: true,
+            isScheduledBackupEnabled = preferences[PreferencesKeys.SCHEDULED_BACKUP] ?: false,
+            scheduledBackupInterval = preferences[PreferencesKeys.SCHEDULED_BACKUP_INTERVAL] ?: 24
         )
     }
 
@@ -82,6 +88,18 @@ class SettingsRepository @Inject constructor(
     suspend fun updateSwipeDeleteConfirm(requiresConfirm: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.SWIPE_DELETE_CONFIRM] = requiresConfirm
+        }
+    }
+
+    suspend fun updateScheduledBackup(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.SCHEDULED_BACKUP] = enabled
+        }
+    }
+
+    suspend fun updateScheduledBackupInterval(intervalHours: Int) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.SCHEDULED_BACKUP_INTERVAL] = intervalHours
         }
     }
 }
