@@ -469,7 +469,7 @@ fun AssetsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(horizontal = 20.dp)
+                .padding(horizontal = 16.dp)
                 .verticalScroll(rememberScrollState())
                 .pointerInput(Unit) {
                     detectTapGestures(onTap = {
@@ -483,7 +483,7 @@ fun AssetsScreen(
                         }
                     })
                 },
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             // 统计卡片 - 根据筛选条件显示不同内容
             Card(

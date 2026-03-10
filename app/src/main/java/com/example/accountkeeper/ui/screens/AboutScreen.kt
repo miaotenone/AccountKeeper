@@ -72,14 +72,14 @@ fun AboutScreen(
     
     Scaffold(
         topBar = {
-            CenterAlignedTopAppBar(
+            TopAppBar(
                 title = { Text(strings.about, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = if (isDark) DarkSurface else LightSurface
                 ),
                 windowInsets = WindowInsets(0, 0, 0, 0)
@@ -93,7 +93,7 @@ fun AboutScreen(
                 .padding(top = paddingValues.calculateTopPadding())
                 .verticalScroll(rememberScrollState())
                 .background(if (isDark) DarkBackground else LightBackground)
-                .padding(horizontal = 24.dp),
+                .padding(horizontal = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // App Icon with Gradient

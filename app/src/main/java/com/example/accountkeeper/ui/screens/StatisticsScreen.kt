@@ -252,7 +252,7 @@ fun StatisticsScreen(
                 .fillMaxSize()
                 .padding(paddingValues),
             state = lazyListState,
-            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             // Premium Time Range Selector

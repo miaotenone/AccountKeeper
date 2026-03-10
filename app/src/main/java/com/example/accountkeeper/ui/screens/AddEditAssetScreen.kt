@@ -228,12 +228,10 @@ fun AddEditAssetScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(horizontal = 20.dp)
+                .padding(horizontal = 16.dp)
                 .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Spacer(modifier = Modifier.height(4.dp))
-
             // Status Selector with Premium Design
             PremiumAssetStatusSelector(
                 selectedStatus = selectedStatus,

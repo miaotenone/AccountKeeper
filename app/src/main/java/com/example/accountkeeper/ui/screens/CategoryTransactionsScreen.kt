@@ -116,7 +116,7 @@ fun CategoryTransactionsScreen(
                 .fillMaxSize()
                 .padding(paddingValues),
             state = lazyListState,
-            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             // Summary Card

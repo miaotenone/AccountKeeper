@@ -22,10 +22,11 @@
 ### 特性
 
 - **完整记账功能** - 记录收入和支出，支持自定义分类和备注
-- **资产管理** - 追踪资产和负债，管理借贷记录，支持附件
+- **资产管理** - 追踪资产和负债，管理借贷记录，支持附件，多种状态
 - **智能统计分析** - 多维度数据展示，图表可视化，分类筛选
 - **账单自动导入** - 支持微信和支付宝账单（Excel/CSV）导入，智能退款处理
 - **搜索功能** - 关键词搜索快速定位交易记录
+- **ZIP 全量备份** - 支持交易、资产和附件的完整备份与恢复
 - **多重数据备份** - ZIP 备份 + 自动备份，数据安全无忧
 - **现代化界面** - Material 3 设计，支持深色模式
 - **国际化支持** - 中英文切换，多种货币符号
@@ -33,7 +34,15 @@
 
 ### 更新日志
 
-#### v1.1.20 (最新版本)
+#### v1.1.21 (最新版本)
+- ZIP 全量备份功能，支持交易、资产和附件
+- 数据管理界面优化，新增独立删除按钮
+- 账单重新导入功能
+- 关于界面版本号动态绑定
+- 全局页面布局优化，紧凑美观
+- 帮助教程内容完善
+
+#### v1.1.20
 - 新增资产管理功能，支持资产/负债追踪
 - 新增首页搜索功能，快速定位交易
 - 新增统计页面分类筛选，点击排行榜查看详情
@@ -85,26 +94,31 @@ cd AccountKeeper
 
 #### 基础操作
 
-1. **添加交易** - 点击首页右下角 + 按钮
-2. **编辑交易** - 点击交易卡片
-3. **删除交易** - 向左滑动交易卡片
-4. **批量操作** - 长按交易卡片进入选择模式
-5. **搜索记录** - 点击首页搜索图标，输入关键词
+| 操作 | 方法 |
+|------|------|
+| 添加交易 | 点击首页右下角 + 按钮 |
+| 编辑交易 | 点击交易卡片 |
+| 删除交易 | 向左滑动交易卡片 |
+| 批量操作 | 长按交易卡片进入选择模式 |
+| 搜索记录 | 点击首页搜索图标，输入关键词 |
 
 #### 数据管理
 
-- **CSV 导出** - 设置 → 数据管理 → 导出全量账本
-- **CSV 导入** - 设置 → 数据管理 → 导入标准备份
+- **ZIP 导出** - 设置 → 数据管理 → 导出全量账本（含交易、资产、附件）
+- **ZIP 导入** - 设置 → 数据管理 → 导入 ZIP 备份文件
 - **账单导入** - 设置 → 数据管理 → 导入微信/支付宝账单（支持 Excel 和 CSV）
+- **账单管理** - 可查看已导入账单，支持重新导入和删除
 - **自动备份** - 设置 → 数据管理 → 开启本地自动备份
+- **清除数据** - 支持单独清除交易或资产记录
 
 #### 资产管理
 
 - **添加资产** - 资产页面点击 + 按钮，记录借贷信息
-- **资产状态** - 支持进行中、已完成、已取消等状态
+- **资产状态** - 支持进行中、已完成、已取消三种状态
 - **附件支持** - 可添加图片等附件作为凭证
+- **资产分类** - 支持借出（正资产）和借入（负资产）
 
-详细教程请查看应用内的帮助页面。
+详细教程请查看应用内的帮助页面（设置 → 关于 → 帮助教程）。
 
 ### 技术栈
 
@@ -172,10 +186,11 @@ app/
 ### Features
 
 - **Complete Bookkeeping** - Record income and expenses with custom categories and notes
-- **Asset Management** - Track assets and liabilities, manage loan records with attachments
+- **Asset Management** - Track assets and liabilities, manage loan records with attachments and statuses
 - **Smart Statistics** - Multi-dimensional data display with visual charts and category filtering
 - **Bill Auto Import** - Support for WeChat and Alipay bills (Excel/CSV) with smart refund handling
 - **Search Function** - Quick keyword search to locate transactions
+- **ZIP Full Backup** - Complete backup and restore for transactions, assets and attachments
 - **Multiple Data Backups** - ZIP backup + auto backup for data security
 - **Modern Interface** - Material 3 design with dark mode support
 - **Internationalization** - Chinese/English switching, multiple currency symbols
@@ -183,7 +198,15 @@ app/
 
 ### Changelog
 
-#### v1.1.20 (Latest)
+#### v1.1.21 (Latest)
+- ZIP full backup for transactions, assets and attachments
+- Data management UI optimization with separate delete buttons
+- Bill re-import functionality
+- Dynamic version binding on About page
+- Global layout optimization, more compact design
+- Improved help tutorial content
+
+#### v1.1.20
 - Added asset management for tracking assets/liabilities
 - Added home page search functionality
 - Added statistics page category filtering
@@ -235,26 +258,31 @@ cd AccountKeeper
 
 #### Basic Operations
 
-1. **Add Transaction** - Tap the + button at bottom right of home page
-2. **Edit Transaction** - Tap on a transaction card
-3. **Delete Transaction** - Swipe left on a transaction card
-4. **Batch Operations** - Long press a transaction card to enter selection mode
-5. **Search Records** - Tap the search icon on home page and enter keywords
+| Action | Method |
+|--------|--------|
+| Add Transaction | Tap + button at bottom right of home page |
+| Edit Transaction | Tap on a transaction card |
+| Delete Transaction | Swipe left on a transaction card |
+| Batch Operations | Long press a transaction card |
+| Search Records | Tap search icon, enter keywords |
 
 #### Data Management
 
-- **CSV Export** - Settings → Data Management → Export Full Ledger
-- **CSV Import** - Settings → Data Management → Import Standard Backup
+- **ZIP Export** - Settings → Data Management → Export Full Ledger (transactions, assets, attachments)
+- **ZIP Import** - Settings → Data Management → Import ZIP backup file
 - **Bill Import** - Settings → Data Management → Import WeChat/Alipay Bill (Excel/CSV)
+- **Bill Management** - View imported bills, re-import or delete
 - **Auto Backup** - Settings → Data Management → Enable Local Auto Backup
+- **Clear Data** - Separate clearing for transactions or assets
 
 #### Asset Management
 
 - **Add Asset** - Tap + on Assets page to record loan information
 - **Asset Status** - Supports In Progress, Completed, Cancelled statuses
 - **Attachments** - Add images and other files as evidence
+- **Asset Categories** - Supports lending (positive) and borrowing (negative)
 
-For detailed tutorials, please check the Help page in the app.
+For detailed tutorials, check the Help page in the app (Settings → About → Help Tutorial).
 
 ### Tech Stack
 

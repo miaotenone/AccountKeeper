@@ -75,7 +75,10 @@ fun CategorySettingsScreen(
                 Tab(selected = selectedTab == 2, onClick = { selectedTab = 2 }, text = { Text(strings.asset) })
             }
             
-            LazyColumn(modifier = Modifier.fillMaxSize()) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(vertical = 4.dp)
+            ) {
                 items(displayCategories, key = { it.id }) { category ->
                     ListItem(
                         headlineContent = { Text(category.name) },
@@ -84,7 +87,7 @@ fun CategorySettingsScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                if (category.isDefault) Text(strings.defaultCategory)
+                                if (category.isDefault) Text(strings.defaultCategory, style = MaterialTheme.typography.bodySmall)
                                 // Show asset type badge for ASSET categories
                                 if (currentType == TransactionType.ASSET) {
                                     SuggestionChip(
@@ -97,7 +100,8 @@ fun CategorySettingsScreen(
                                         label = { 
                                             Text(
                                                 if (category.isPositiveAsset) strings.positiveAsset 
-                                                else strings.negativeAsset
+                                                else strings.negativeAsset,
+                                                style = MaterialTheme.typography.labelSmall
                                             ) 
                                         },
                                         colors = SuggestionChipDefaults.suggestionChipColors(
@@ -109,25 +113,35 @@ fun CategorySettingsScreen(
                                                 MaterialTheme.colorScheme.onPrimaryContainer 
                                             else 
                                                 MaterialTheme.colorScheme.onErrorContainer
-                                        )
+                                        ),
+                                        modifier = Modifier.height(28.dp)
                                     )
                                 }
                             }
                         },
                         trailingContent = {
-                            Row {
-                                IconButton(onClick = { 
-                                    categoryNameInput = category.name
-                                    nameError = null
-                                    showRenameDialog = category
-                                }) { Icon(Icons.Default.Edit, contentDescription = strings.editTransaction) }
-                                IconButton(onClick = { showDeleteDialog = category }) { 
-                                    Icon(Icons.Default.Delete, contentDescription = strings.delete, tint = MaterialTheme.colorScheme.error) 
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                IconButton(
+                                    onClick = { 
+                                        categoryNameInput = category.name
+                                        nameError = null
+                                        showRenameDialog = category
+                                    },
+                                    modifier = Modifier.size(40.dp)
+                                ) { 
+                                    Icon(Icons.Default.Edit, contentDescription = strings.editTransaction, modifier = Modifier.size(20.dp)) 
+                                }
+                                IconButton(
+                                    onClick = { showDeleteDialog = category },
+                                    modifier = Modifier.size(40.dp)
+                                ) { 
+                                    Icon(Icons.Default.Delete, contentDescription = strings.delete, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp)) 
                                 }
                             }
-                        }
+                        },
+                        modifier = Modifier.padding(vertical = 2.dp)
                     )
-                    HorizontalDivider()
+                    HorizontalDivider(thickness = 0.5.dp)
                 }
             }
         }
@@ -137,7 +151,7 @@ fun CategorySettingsScreen(
                 onDismissRequest = { showAddDialog = false },
                 title = { Text(strings.addCategory) },
                 text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         OutlinedTextField(
                             value = categoryNameInput,
                             onValueChange = { 
