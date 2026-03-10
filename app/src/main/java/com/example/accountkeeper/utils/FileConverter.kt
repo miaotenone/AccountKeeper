@@ -115,33 +115,57 @@ object FileConverter {
      */
     fun readCsvLines(context: Context, uri: Uri, encoding: String? = null): List<String>? {
         return try {
-            val inputStream = context.contentResolver.openInputStream(uri) ?: return null
-            
             // 如果指定了编码，直接使用
             if (encoding != null) {
+                val inputStream = context.contentResolver.openInputStream(uri) ?: return null
                 return readWithEncoding(inputStream, encoding)
             }
             
-            // 尝试 UTF-8，如果失败则尝试 GBK
-            inputStream.mark(1024 * 1024) // 标记位置以便重置
-            val utf8Result = readWithEncoding(inputStream, "UTF-8")
-            
-            // 检查是否有乱码特征
-            if (utf8Result != null && !hasGarbledText(utf8Result)) {
-                return utf8Result
+            // 先尝试 GBK 编码（支付宝账单通常使用GBK）
+            try {
+                val gbkStream = context.contentResolver.openInputStream(uri) ?: return null
+                val gbkResult = readWithEncoding(gbkStream, "GBK")
+                if (gbkResult != null && isValidChineseText(gbkResult)) {
+                    return gbkResult
+                }
+            } catch (e: Exception) {
+                // GBK读取失败，尝试UTF-8
             }
             
-            // 重置流并尝试 GBK
+            // 尝试 UTF-8
             try {
-                val newStream = context.contentResolver.openInputStream(uri) ?: return utf8Result
-                readWithEncoding(newStream, "GBK")
+                val utf8Stream = context.contentResolver.openInputStream(uri) ?: return null
+                readWithEncoding(utf8Stream, "UTF-8")
             } catch (e: Exception) {
-                utf8Result // 返回 UTF-8 结果作为备选
+                null
             }
         } catch (e: Exception) {
             e.printStackTrace()
             null
         }
+    }
+
+    /**
+     * 检查文本是否是有效的中文文本（没有乱码）
+     */
+    private fun isValidChineseText(lines: List<String>): Boolean {
+        if (lines.isEmpty()) return false
+        
+        // 检查前10行是否有有效中文
+        val sampleLines = lines.take(10).joinToString("")
+        
+        // 检查是否包含常见的中文字符或关键字
+        val chineseKeywords = listOf(
+            "交易", "时间", "金额", "支出", "收入", "分类", "备注", 
+            "支付宝", "微信", "账单", "商品", "成功"
+        )
+        
+        val hasChineseKeywords = chineseKeywords.any { sampleLines.contains(it) }
+        
+        // 检查是否有乱码
+        val hasGarbled = hasGarbledText(lines)
+        
+        return hasChineseKeywords && !hasGarbled
     }
 
     /**
@@ -171,14 +195,34 @@ object FileConverter {
     private fun hasGarbledText(lines: List<String>): Boolean {
         if (lines.isEmpty()) return false
         
-        // 检查前几行是否有乱码特征
-        val sampleLines = lines.take(5).joinToString("")
+        // 检查前10行是否有乱码特征
+        val sampleLines = lines.take(10).joinToString("")
         
         // 常见乱码特征：替换字符、无效UTF-8序列
+        // 检查是否有连续的替换字符或乱码模式
+        var garbledCount = 0
+        var totalChars = 0
+        
+        for (char in sampleLines) {
+            totalChars++
+            // 替换字符（U+FFFD）表示解码失败
+            if (char == '\uFFFD') {
+                garbledCount++
+            }
+        }
+        
+        // 如果替换字符占比超过5%，认为是乱码
+        if (totalChars > 0 && garbledCount.toFloat() / totalChars > 0.05f) {
+            return true
+        }
+        
+        // 检查是否有常见的中文乱码特征
+        // GBK编码的中文用UTF-8读取会产生特定的乱码模式
         val garbledPatterns = listOf(
-            "���",  // 常见乱码
-            "�",    // 替换字符
-            ""
+            "鈥�",   // 常见GBK乱码
+            "銆�",
+            "鈹�",
+            "鈺�"
         )
         
         return garbledPatterns.any { sampleLines.contains(it) }

@@ -332,6 +332,10 @@ object BillParser {
             val line = lines[i].trim()
             if (line.isEmpty()) continue
             
+            // 跳过统计信息和分隔线
+            if (line.startsWith("---") || line.contains("共") && line.contains("笔记录")) continue
+            if (line.contains("支付宝") && line.contains("客户")) continue
+            
             val parts = parseCsvLine(line)
             
             try {
@@ -345,8 +349,9 @@ object BillParser {
                 val transactionId: String
                 
                 // 检测格式类型
-                if (parts.size == 12 && (parts[5] == "支出" || parts[5] == "收入" || parts[5] == "不计收支")) {
-                    // 12列新格式: 交易时间,交易分类,交易对方,对方账号,商品说明,收/支,金额,收/付款方式,交易状态,交易订单号,商家订单号,备注
+                // 12列新格式: 交易时间,交易分类,交易对方,对方账号,商品说明,收/支,金额,收/付款方式,交易状态,交易订单号,商家订单号,备注
+                // 注意：末尾可能有逗号，所以列数可能>=12
+                if (parts.size >= 12 && (parts[5] == "支出" || parts[5] == "收入" || parts[5] == "不计收支")) {
                     dateStr = parts[0]
                     category = parts[1]
                     counterparty = parts[2]
