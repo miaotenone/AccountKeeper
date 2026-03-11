@@ -28,13 +28,19 @@
 - **搜索功能** - 关键词搜索快速定位交易记录
 - **ZIP 全量备份** - 支持交易、资产和附件的完整备份与恢复
 - **多重数据备份** - ZIP 备份 + 自动备份，数据安全无忧
+- **用户反馈** - 内置反馈功能，一键发送邮件反馈问题或建议
 - **现代化界面** - Material 3 设计，支持深色模式
 - **国际化支持** - 中英文切换，多种货币符号
 - **流畅交互** - 滑动删除、批量操作、分页加载
 
 ### 更新日志
 
-#### v1.1.21 (最新版本)
+#### v1.5.1 (最新版本)
+- 新增用户反馈功能，支持邮件反馈
+- 修复账单文件列表无法滚动的问题
+- 优化账单列表布局，更加紧凑
+
+#### v1.1.21
 - ZIP 全量备份功能，支持交易、资产和附件
 - 数据管理界面优化，新增独立删除按钮
 - 账单重新导入功能
@@ -192,13 +198,19 @@ app/
 - **Search Function** - Quick keyword search to locate transactions
 - **ZIP Full Backup** - Complete backup and restore for transactions, assets and attachments
 - **Multiple Data Backups** - ZIP backup + auto backup for data security
+- **User Feedback** - Built-in feedback feature for sending issues or suggestions via email
 - **Modern Interface** - Material 3 design with dark mode support
 - **Internationalization** - Chinese/English switching, multiple currency symbols
 - **Smooth Interactions** - Swipe-to-delete, batch operations, paginated loading
 
 ### Changelog
 
-#### v1.1.21 (Latest)
+#### v1.5.1 (Latest)
+- Added user feedback feature via email
+- Fixed scroll issue in bill file list
+- Optimized bill list layout for compact display
+
+#### v1.1.21
 - ZIP full backup for transactions, assets and attachments
 - Data management UI optimization with separate delete buttons
 - Bill re-import functionality
