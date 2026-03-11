@@ -232,7 +232,16 @@ data class AppStrings(
     val downloading: String,
     val downloadHint: String,
     val downloadFailed: String,
-    val openInBrowser: String
+    val openInBrowser: String,
+    // Feedback related
+    val feedback: String,
+    val feedbackDescription: String,
+    val problemDescription: String,
+    val problemDescriptionHint: String,
+    val contactInfo: String,
+    val contactInfoHint: String,
+    val sendFeedback: String,
+    val feedbackSent: String
 )
 
 val EnStrings = AppStrings(
@@ -974,7 +983,16 @@ Thank you for using AccountKeeper! Wish you smooth financial management!""",
     downloading = "Downloading...",
     downloadHint = "Please wait while downloading",
     downloadFailed = "Download Failed",
-    openInBrowser = "Open in Browser"
+    openInBrowser = "Open in Browser",
+    // Feedback
+    feedback = "Feedback",
+    feedbackDescription = "Report issues or suggest improvements",
+    problemDescription = "Problem Description",
+    problemDescriptionHint = "Please describe your issue or suggestion...",
+    contactInfo = "Contact Info",
+    contactInfoHint = "Email or phone (optional)",
+    sendFeedback = "Send",
+    feedbackSent = "Feedback sent successfully"
 )
 
 val ZhStrings = AppStrings(
@@ -1716,7 +1734,16 @@ A: 取决于数据量，可以在设置中查看备份大小。
     downloading = "正在下载...",
     downloadHint = "请等待下载完成",
     downloadFailed = "下载失败",
-    openInBrowser = "浏览器下载"
+    openInBrowser = "浏览器下载",
+    // Feedback
+    feedback = "意见反馈",
+    feedbackDescription = "报告问题或提出改进建议",
+    problemDescription = "问题描述",
+    problemDescriptionHint = "请描述您遇到的问题或建议...",
+    contactInfo = "联系方式",
+    contactInfoHint = "邮箱或电话（选填）",
+    sendFeedback = "发送",
+    feedbackSent = "反馈已发送"
 )
 
 val LocalAppStrings = androidx.compose.runtime.compositionLocalOf { EnStrings }

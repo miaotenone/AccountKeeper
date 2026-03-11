@@ -1972,7 +1972,11 @@ fun BillFileDialog(
                 Text(if (isChinese) "尚未导入任何账单文件" else "No bill files imported yet")
             } else {
                 Column(
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 400.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     // 微信账单分组
                     if (wechatBills.isNotEmpty()) {
@@ -2002,7 +2006,7 @@ fun BillFileDialog(
                     // 支付宝账单分组
                     if (alipayBills.isNotEmpty()) {
                         if (wechatBills.isNotEmpty()) {
-                            Spacer(modifier = Modifier.height(8.dp))
+                            Spacer(modifier = Modifier.height(4.dp))
                         }
                         Text(
                             text = if (isChinese) "支付宝 (${alipayBills.size})" else "Alipay (${alipayBills.size})",
@@ -2030,7 +2034,7 @@ fun BillFileDialog(
                     // 其他账单分组
                     if (otherBills.isNotEmpty()) {
                         if (wechatBills.isNotEmpty() || alipayBills.isNotEmpty()) {
-                            Spacer(modifier = Modifier.height(8.dp))
+                            Spacer(modifier = Modifier.height(4.dp))
                         }
                         Text(
                             text = if (isChinese) "其他 (${otherBills.size})" else "Other (${otherBills.size})",
@@ -2078,19 +2082,19 @@ fun BillFileItem(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp)
+        shape = RoundedCornerShape(8.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
+                .padding(horizontal = 10.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     bill.name,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,
                     softWrap = false,
@@ -2098,7 +2102,7 @@ fun BillFileItem(
                 )
                 Text(
                     backupManager.getBillFileSize(bill),
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }

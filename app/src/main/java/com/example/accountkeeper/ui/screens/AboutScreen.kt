@@ -14,6 +14,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Feedback
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.SystemUpdate
@@ -47,6 +48,7 @@ fun AboutScreen(
     val isDark = isSystemInDarkTheme()
     val context = LocalContext.current
     var showHelpDialog by remember { mutableStateOf(false) }
+    var showFeedbackDialog by remember { mutableStateOf(false) }
     
     // 更新状态
     val updateState by updateViewModel.updateState.collectAsState()
@@ -205,6 +207,17 @@ fun AboutScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
+            // Feedback Card
+            AboutCard(
+                icon = Icons.Default.Feedback,
+                title = strings.feedback,
+                description = strings.feedbackDescription,
+                isClickable = true,
+                onClick = { showFeedbackDialog = true }
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
             // GitHub Card
             AboutCard(
                 icon = Icons.Default.Star,
@@ -265,6 +278,15 @@ fun AboutScreen(
     if (showHelpDialog) {
         HelpTutorialDialog(
             onDismiss = { showHelpDialog = false },
+            isDark = isDark
+        )
+    }
+    
+    // Feedback Dialog
+    if (showFeedbackDialog) {
+        FeedbackDialog(
+            onDismiss = { showFeedbackDialog = false },
+            strings = strings,
             isDark = isDark
         )
     }
@@ -839,6 +861,170 @@ fun HelpDetailItem(
                     style = MaterialTheme.typography.bodySmall,
                     color = if (isDark) DarkOnBackground.copy(alpha = 0.7f) else LightOnBackground.copy(alpha = 0.7f)
                 )
+            }
+        }
+    }
+}
+
+@Composable
+fun FeedbackDialog(
+    onDismiss: () -> Unit,
+    strings: AppStrings,
+    isDark: Boolean
+) {
+    val context = LocalContext.current
+    var problemText by remember { mutableStateOf("") }
+    var contactText by remember { mutableStateOf("") }
+    
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            dismissOnBackPress = true,
+            dismissOnClickOutside = true,
+            usePlatformDefaultWidth = false
+        )
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth(0.92f)
+                .wrapContentHeight(),
+            colors = CardDefaults.cardColors(
+                containerColor = if (isDark) DarkSurface else LightSurface
+            ),
+            shape = RoundedCornerShape(20.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp)
+            ) {
+                // Title
+                Text(
+                    strings.feedback,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isDark) DarkOnBackground else LightOnBackground
+                )
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // Problem Description
+                Text(
+                    strings.problemDescription,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = if (isDark) DarkOnBackground else LightOnBackground
+                )
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                OutlinedTextField(
+                    value = problemText,
+                    onValueChange = { problemText = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 100.dp),
+                    placeholder = {
+                        Text(
+                            strings.problemDescriptionHint,
+                            color = if (isDark) DarkOnBackground.copy(alpha = 0.4f) else LightOnBackground.copy(alpha = 0.4f)
+                        )
+                    },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = if (isDark) DarkPrimary else LightPrimary,
+                        unfocusedBorderColor = if (isDark) DarkOnBackground.copy(alpha = 0.3f) else LightOnBackground.copy(alpha = 0.3f),
+                        focusedTextColor = if (isDark) DarkOnBackground else LightOnBackground,
+                        unfocusedTextColor = if (isDark) DarkOnBackground else LightOnBackground
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                )
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // Contact Info
+                Text(
+                    strings.contactInfo,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = if (isDark) DarkOnBackground else LightOnBackground
+                )
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                OutlinedTextField(
+                    value = contactText,
+                    onValueChange = { contactText = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = {
+                        Text(
+                            strings.contactInfoHint,
+                            color = if (isDark) DarkOnBackground.copy(alpha = 0.4f) else LightOnBackground.copy(alpha = 0.4f)
+                        )
+                    },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = if (isDark) DarkPrimary else LightPrimary,
+                        unfocusedBorderColor = if (isDark) DarkOnBackground.copy(alpha = 0.3f) else LightOnBackground.copy(alpha = 0.3f),
+                        focusedTextColor = if (isDark) DarkOnBackground else LightOnBackground,
+                        unfocusedTextColor = if (isDark) DarkOnBackground else LightOnBackground
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                )
+                
+                Spacer(modifier = Modifier.height(20.dp))
+                
+                // Buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    // Cancel Button
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = if (isDark) DarkOnBackground else LightOnBackground
+                        )
+                    ) {
+                        Text(strings.cancel)
+                    }
+                    
+                    // Send Button
+                    Button(
+                        onClick = {
+                            if (problemText.isNotBlank()) {
+                                val emailIntent = Intent(Intent.ACTION_SENDTO).apply {
+                                    data = Uri.parse("mailto:rickymiao63@163.com")
+                                    putExtra(Intent.EXTRA_SUBJECT, "[AccountKeeper Feedback]")
+                                    putExtra(Intent.EXTRA_TEXT, buildString {
+                                        append("问题描述：\n")
+                                        append(problemText)
+                                        append("\n\n")
+                                        if (contactText.isNotBlank()) {
+                                            append("联系方式：")
+                                            append(contactText)
+                                        }
+                                    })
+                                }
+                                try {
+                                    context.startActivity(Intent.createChooser(emailIntent, strings.sendFeedback))
+                                } catch (e: Exception) {
+                                    e.printStackTrace()
+                                }
+                                onDismiss()
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (isDark) DarkPrimary else LightPrimary
+                        ),
+                        enabled = problemText.isNotBlank()
+                    ) {
+                        Text(strings.sendFeedback, color = Color.White)
+                    }
+                }
             }
         }
     }
