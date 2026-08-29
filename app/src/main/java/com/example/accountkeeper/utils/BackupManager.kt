@@ -5,6 +5,7 @@ import android.net.Uri
 import com.example.accountkeeper.data.model.Asset
 import com.example.accountkeeper.data.model.Attachment
 import com.example.accountkeeper.data.model.AttachmentConverter
+import com.example.accountkeeper.data.model.Budget
 import com.example.accountkeeper.data.model.Transaction
 import com.example.accountkeeper.data.model.TransactionType
 import kotlinx.serialization.Serializable
@@ -24,6 +25,8 @@ import java.util.zip.ZipOutputStream
 data class ZipBackupData(
     val transactions: List<TransactionData>,
     val assets: List<AssetData>,
+    val assetTypes: List<AssetTypeData> = emptyList(),
+    val budgets: List<BudgetData> = emptyList(),
     val version: Int = 1
 )
 
@@ -50,8 +53,16 @@ data class AssetData(
     val isCompleted: Boolean,
     val attachments: List<Attachment>,
     val createdAt: Long,
-    val updatedAt: Long
+    val updatedAt: Long,
+    @Deprecated("AssetType removed", level = DeprecationLevel.HIDDEN)
+    val assetTypeId: Long = 2L
 )
+
+@Serializable
+data class AssetTypeData(val id: Long, val name: String, val createdAt: Long, val updatedAt: Long)
+
+@Serializable
+data class BudgetData(val monthKey: String, val categoryName: String? = null, val amount: Double, val createdAt: Long, val updatedAt: Long)
 
 /**
  * 增量备份数据结构
@@ -67,7 +78,10 @@ data class DeltaBackupData(
     val addedAssets: List<AssetData>,                // 新增的资产
     val modifiedAssets: List<AssetData>,             // 修改的资产
     val deletedAssetIds: List<Long>,                 // 删除的资产ID
-    val version: Int = 1
+    val version: Int = 1,
+    val metadataChanged: Boolean = false,
+    val assetTypes: List<AssetTypeData> = emptyList(),
+    val budgets: List<BudgetData> = emptyList(),
 )
 
 /**
@@ -95,6 +109,8 @@ data class DeltaBackupInfo(
 data class ZipImportResult(
     val transactions: List<TransactionData>,
     val assets: List<AssetData>,
+    val assetTypes: List<AssetTypeData> = emptyList(),
+    val budgets: List<BudgetData> = emptyList(),
     val attachmentFiles: Map<String, File>, // attachmentId -> temp file
     val success: Boolean,
     val errorMessage: String? = null
@@ -106,6 +122,8 @@ data class ZipImportResult(
 data class DeltaImportResult(
     val transactions: List<TransactionData>,
     val assets: List<AssetData>,
+    val assetTypes: List<AssetTypeData> = emptyList(),
+    val budgets: List<BudgetData> = emptyList(),
     val attachmentFiles: Map<String, File>,
     val targetStep: Int,                // 恢复到的步骤号
     val success: Boolean,
@@ -170,6 +188,25 @@ class BackupManager(private val context: Context) {
         if (files.isNullOrEmpty()) return null
 
         return files.maxByOrNull { it.lastModified() }
+    }
+
+    private fun hasZipMagic(file: File): Boolean {
+        return try {
+            file.inputStream().use { input ->
+                val header = ByteArray(4)
+                var offset = 0
+                while (offset < header.size) {
+                    val read = input.read(header, offset, header.size - offset)
+                    if (read < 0) break
+                    offset += read
+                }
+                offset == 4 && header[0] == 'P'.code.toByte() && header[1] == 'K'.code.toByte() &&
+                    (header[2] == 3.toByte() || header[2] == 5.toByte()) &&
+                    (header[3] == 4.toByte() || header[3] == 6.toByte() || header[3] == 8.toByte())
+            }
+        } catch (e: Exception) {
+            false
+        }
     }
 
     /**
@@ -441,11 +478,13 @@ class BackupManager(private val context: Context) {
         transactions: List<Transaction>,
         assets: List<Asset>,
         categoryMap: Map<Long, String>,
+        budgets: List<Budget> = emptyList(),
         maxKeep: Int = 15,
         isAuto: Boolean = true,
         customName: String? = null
     ): File? {
         return try {
+        var entryCount = 0
             val zipFile = File(backupDir, createZipBackupFileName(isAuto, customName))
             
             ZipOutputStream(zipFile.outputStream()).use { zipOut ->
@@ -484,6 +523,7 @@ class BackupManager(private val context: Context) {
                         )
                     },
                     assets = assetsData,
+                    budgets = budgets.map { BudgetData(it.monthKey, it.categoryId?.let(categoryMap::get), it.amount, it.createdAt, it.updatedAt) },
                     version = 1
                 )
                 
@@ -588,6 +628,15 @@ class BackupManager(private val context: Context) {
                 )
             }
             
+            if (!hasZipMagic(file)) {
+                return ZipImportResult(
+                    transactions = emptyList(),
+                    assets = emptyList(),
+                    attachmentFiles = emptyMap(),
+                    success = false,
+                    errorMessage = "Invalid or empty ZIP file"
+                )
+            }
             file.inputStream().use { inputStream ->
                 readZipBackupFromStream(inputStream)
             }
@@ -611,6 +660,8 @@ class BackupManager(private val context: Context) {
             
             val transactions = mutableListOf<TransactionData>()
             val assets = mutableListOf<AssetData>()
+            val assetTypes = mutableListOf<AssetTypeData>()
+            val budgets = mutableListOf<BudgetData>()
             val attachmentFiles = mutableMapOf<String, File>()
             
             // 创建临时目录存放解压的附件
@@ -620,13 +671,17 @@ class BackupManager(private val context: Context) {
             
             ZipInputStream(inputStream).use { zipIn ->
                 var entry: ZipEntry? = zipIn.nextEntry
+                var entryCount = 0
                 while (entry != null) {
+                    entryCount++
                     when {
                         entry.name == "data.json" -> {
                             val content = zipIn.readBytes().toString(Charsets.UTF_8)
                             val backupData = json.decodeFromString<ZipBackupData>(content)
                             transactions.addAll(backupData.transactions)
                             assets.addAll(backupData.assets)
+                            assetTypes.addAll(backupData.assetTypes)
+                            budgets.addAll(backupData.budgets)
                         }
                         entry.name == "transactions.csv" -> {
                             // 也支持旧格式：从 CSV 解析交易记录
@@ -653,11 +708,22 @@ class BackupManager(private val context: Context) {
                     zipIn.closeEntry()
                     entry = zipIn.nextEntry
                 }
+                if (entryCount == 0) {
+                    return ZipImportResult(
+                        transactions = emptyList(),
+                        assets = emptyList(),
+                        attachmentFiles = emptyMap(),
+                        success = false,
+                        errorMessage = "Invalid or empty ZIP file"
+                    )
+                }
             }
             
             ZipImportResult(
                 transactions = transactions,
                 assets = assets,
+                assetTypes = assetTypes,
+                budgets = budgets,
                 attachmentFiles = attachmentFiles,
                 success = true
             )
@@ -899,13 +965,15 @@ class BackupManager(private val context: Context) {
         uri: Uri,
         transactions: List<Transaction>,
         assets: List<Asset>,
-        categoryMap: Map<Long, String>
+        categoryMap: Map<Long, String>,
+        budgets: List<Budget> = emptyList()
     ): Boolean {
         return try {
             val tempZip = writeZipBackup(
                 transactions = transactions,
                 assets = assets,
                 categoryMap = categoryMap,
+                budgets = budgets,
                 isAuto = false
             ) ?: return false
             
@@ -932,7 +1000,8 @@ class BackupManager(private val context: Context) {
     fun createBaseBackup(
         transactions: List<Transaction>,
         assets: List<Asset>,
-        categoryMap: Map<Long, String>
+        categoryMap: Map<Long, String>,
+        budgets: List<Budget> = emptyList()
     ): String? {
         return try {
             val baseBackupId = "base_${System.currentTimeMillis()}"
@@ -968,6 +1037,7 @@ class BackupManager(private val context: Context) {
                             updatedAt = asset.updatedAt
                         )
                     },
+                    budgets = budgets.map { BudgetData(it.monthKey, it.categoryId?.let(categoryMap::get), it.amount, it.createdAt, it.updatedAt) },
                     version = 1
                 )
                 
@@ -1020,13 +1090,15 @@ class BackupManager(private val context: Context) {
         currentTransactions: List<Transaction>,
         currentAssets: List<Asset>,
         categoryMap: Map<Long, String>,
+        budgets: List<Budget> = emptyList(),
+        previousBudgets: List<Budget> = emptyList(),
         maxKeep: Int = 50
     ): Boolean {
         return try {
             val chainIndex = getBackupChainIndex()
             if (chainIndex == null) {
                 // 没有基准备份，先创建一个
-                createBaseBackup(currentTransactions, currentAssets, categoryMap)
+                createBaseBackup(currentTransactions, currentAssets, categoryMap, budgets)
                 return true
             }
             
@@ -1124,8 +1196,10 @@ class BackupManager(private val context: Context) {
                 .map { it.id }
             
             // 如果没有变更，不创建增量备份
+            val metadataChanged = budgets != previousBudgets
+
             if (addedTransactions.isEmpty() && modifiedTransactions.isEmpty() && deletedTransactionIds.isEmpty() &&
-                addedAssets.isEmpty() && modifiedAssets.isEmpty() && deletedAssetIds.isEmpty()) {
+                addedAssets.isEmpty() && modifiedAssets.isEmpty() && deletedAssetIds.isEmpty() && !metadataChanged) {
                 return true
             }
             
@@ -1143,7 +1217,9 @@ class BackupManager(private val context: Context) {
                 deletedTransactionIds = deletedTransactionIds,
                 addedAssets = addedAssets,
                 modifiedAssets = modifiedAssets,
-                deletedAssetIds = deletedAssetIds
+                deletedAssetIds = deletedAssetIds,
+                metadataChanged = metadataChanged,
+                budgets = if (metadataChanged) budgets.map { BudgetData(it.monthKey, it.categoryId?.let(categoryMap::get), it.amount, it.createdAt, it.updatedAt) } else emptyList()
             )
             
             // 写入增量备份文件
@@ -1155,9 +1231,9 @@ class BackupManager(private val context: Context) {
                 deltaBackups = chainIndex.deltaBackups + DeltaBackupInfo(
                     fileName = fileName,
                     stepNumber = stepNumber,
-                    timestamp = timestamp,
+                timestamp = timestamp,
                     changeCount = addedTransactions.size + modifiedTransactions.size + deletedTransactionIds.size +
-                                  addedAssets.size + modifiedAssets.size + deletedAssetIds.size
+                                  addedAssets.size + modifiedAssets.size + deletedAssetIds.size + if (metadataChanged) 1 else 0
                 )
             )
             saveBackupChainIndex(updatedChain)
@@ -1251,6 +1327,7 @@ class BackupManager(private val context: Context) {
             val transactions = result.transactions.toMutableList()
             val assets = result.assets.toMutableList()
             val attachmentFiles = result.attachmentFiles.toMutableMap()
+            val budgets = result.budgets.toMutableList()
             
             // 确定要应用到的步骤
             val actualTargetStep = if (targetStep == -1) {
@@ -1286,11 +1363,16 @@ class BackupManager(private val context: Context) {
                 // 应用新增
                 transactions.addAll(deltaBackup.addedTransactions)
                 assets.addAll(deltaBackup.addedAssets)
+                if (deltaBackup.metadataChanged) {
+                    budgets.clear()
+                    budgets.addAll(deltaBackup.budgets)
+                }
             }
             
             DeltaImportResult(
                 transactions = transactions,
                 assets = assets,
+                budgets = budgets,
                 attachmentFiles = attachmentFiles,
                 targetStep = actualTargetStep,
                 success = true

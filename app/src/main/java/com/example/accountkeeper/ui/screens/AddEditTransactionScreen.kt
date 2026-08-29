@@ -51,15 +51,20 @@ import java.util.*
 fun AddEditTransactionScreen(
     transactionId: Long = -1L,
     onNavigateBack: () -> Unit,
+    onTransactionSaved: () -> Unit = {},
     viewModel: TransactionViewModel = hiltViewModel(),
-    categoryViewModel: CategoryViewModel = hiltViewModel()
+    categoryViewModel: CategoryViewModel = hiltViewModel(),
+    budgetViewModel: com.example.accountkeeper.ui.viewmodel.BudgetViewModel = hiltViewModel()
 ) {
     val strings = LocalAppStrings.current
     var amountText by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
     var isExpense by remember { mutableStateOf(true) }
     var selectedCategoryId by remember { mutableStateOf<Long?>(null) }
-    var transactionDate by remember { mutableStateOf(System.currentTimeMillis()) }
+     var transactionDate by remember { mutableStateOf(System.currentTimeMillis()) }
+     var originalExpenseAmount by remember { mutableStateOf<Double?>(null) }
+     var originalExpenseMonth by remember { mutableStateOf<String?>(null) }
+     var originalExpenseCategoryId by remember { mutableStateOf<Long?>(null) }
     var showDatePicker by remember { mutableStateOf(false) }
 
     val categories by categoryViewModel.categories.collectAsState()
@@ -69,6 +74,33 @@ fun AddEditTransactionScreen(
     val scope = rememberCoroutineScope()
     val isEditMode = transactionId != -1L
     val currency = LocalCurrencySymbol.current
+    val budgetMonth = remember(transactionDate) { com.example.accountkeeper.ui.viewmodel.BudgetViewModel.monthKey(transactionDate) }
+    val budgetRange = remember(budgetMonth) { com.example.accountkeeper.ui.viewmodel.BudgetViewModel.monthRange(budgetMonth) }
+    val categoryExpenseFlow = remember(selectedCategoryId, budgetRange) { selectedCategoryId?.let { budgetViewModel.expenseFor(it, budgetRange.first, budgetRange.second) } } ?: kotlinx.coroutines.flow.flowOf(0.0)
+    val monthlyBudgetFlow = remember(budgetMonth) { budgetViewModel.budgetFor(budgetMonth, null) }
+    val monthlySpentFlow = remember(budgetMonth) { budgetViewModel.expenseForMonth(budgetMonth) }
+    val categoryBudgetFlow = remember(budgetMonth, selectedCategoryId) { budgetViewModel.budgetFor(budgetMonth, selectedCategoryId) }
+    val monthlyBudget by monthlyBudgetFlow.collectAsState()
+    val monthlySpent by monthlySpentFlow.collectAsState()
+    val categoryBudget by categoryBudgetFlow.collectAsState()
+    val categorySpent by categoryExpenseFlow.collectAsState(initial = 0.0)
+    val enteredAmount = amountText.toDoubleOrNull()?.let { CurrencyUtils.convertToBase(it, currency) } ?: 0.0
+    val projectedMonthlySpent = com.example.accountkeeper.utils.projectedExpenseForEdit(
+        currentMonthExpense = monthlySpent,
+        oldAmount = originalExpenseAmount,
+        oldMonth = originalExpenseMonth,
+        newAmount = if (isExpense) enteredAmount else 0.0,
+        newMonth = budgetMonth
+    )
+    val projectedCategorySpent = com.example.accountkeeper.utils.projectedCategoryExpenseForEdit(
+        currentCategoryExpense = categorySpent,
+        oldAmount = originalExpenseAmount,
+        oldCategoryId = originalExpenseCategoryId,
+        oldMonth = originalExpenseMonth,
+        newAmount = if (isExpense) enteredAmount else 0.0,
+        newCategoryId = if (isExpense) selectedCategoryId else null,
+        newMonth = budgetMonth
+    )
 
     LaunchedEffect(transactionId) {
         if (isEditMode) {
@@ -77,6 +109,11 @@ fun AddEditTransactionScreen(
                 amountText = CurrencyUtils.convertToDisplay(tx.amount, currency).toString()
                 note = tx.note
                 isExpense = tx.type == TransactionType.EXPENSE
+                if (tx.type == TransactionType.EXPENSE) {
+                    originalExpenseAmount = tx.amount
+                    originalExpenseMonth = com.example.accountkeeper.ui.viewmodel.BudgetViewModel.monthKey(tx.date)
+                    originalExpenseCategoryId = tx.categoryId
+                }
                 selectedCategoryId = tx.categoryId
                 transactionDate = tx.date
             }
@@ -188,7 +225,17 @@ fun AddEditTransactionScreen(
                 modifier = Modifier.fillMaxWidth()
             )
 
-            // Note Input with Premium Design
+            // Budget hint for expense transactions
+            if (isExpense) {
+                TransactionBudgetHint(
+                    strings = strings,
+                    currency = currency,
+                    monthlyBudget = monthlyBudget,
+                    monthlySpent = projectedMonthlySpent,
+                    categoryBudget = categoryBudget,
+                    categorySpent = projectedCategorySpent
+                )
+            }
             PremiumNoteInput(
                 note = note,
                 onNoteChange = { note = it },
@@ -212,12 +259,9 @@ fun AddEditTransactionScreen(
                             date = transactionDate,
                             categoryId = selectedCategoryId
                         )
-                        if (isEditMode) {
-                            viewModel.updateTransaction(transaction)
-                        } else {
-                            viewModel.addTransaction(transaction)
+                        scope.launch {
+                            if (viewModel.saveTransaction(transaction, isEditMode)) onTransactionSaved()
                         }
-                        onNavigateBack()
                     }
                 },
                 strings = strings,

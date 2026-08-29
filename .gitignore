@@ -1,18 +1,43 @@
+# Gradle and generated build files
+.gradle/
+.gradle-tools/
+.kotlin/
+build/
+**/build/
+
+# Android Studio and IDE files
+.idea/
 *.iml
-.gradle
-/local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
-.DS_Store
-/build
-/captures
-.externalNativeBuild
-.cxx
+
+# Android local/native build files
 local.properties
-cashbook_record_20260224_122312.csv
-微信支付账单流水文件(20260101-20260224)_20260224121918.xlsx
-支付宝交易明细(20251210-20260310).csv
+.externalNativeBuild/
+.cxx/
+captures/
+.tooling/
+
+# Generated packages and reports
+*.apk
+*.aab
+*.apks
+*.dm
+*.mapping
+
+# Signing keys and private service configuration
+*.jks
+*.keystore
+keystore.properties
+google-services.json
+firebase*.json
+
+# Local tool configuration
+opencode.json
+
+# Personal financial data and imported statements
+*.csv
+*.xlsx
+*.xls
+
+# OS files
+.DS_Store
+Thumbs.db

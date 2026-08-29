@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material3.*
@@ -87,11 +88,8 @@ fun AssetsScreen(
     val categories = assetCategories
 
     val netAssets by viewModel.netAssets.collectAsState()
-    val totalAssets by viewModel.totalAssets.collectAsState()
     val totalLiabilities by viewModel.totalLiabilities.collectAsState()
-    val transactionBalance by viewModel.transactionBalance.collectAsState()
     val positiveAssetAmount by viewModel.positiveAssetAmount.collectAsState()
-    val negativeAssetAmount by viewModel.negativeAssetAmount.collectAsState()
 
     var selectionMode by remember { mutableStateOf(false) }
     val selectedIds = remember { mutableStateListOf<Long>() }
@@ -126,12 +124,13 @@ fun AssetsScreen(
             filtered = filtered.filter { asset ->
                 val categoryName = categories.find { it.id == asset.categoryId }?.name ?: ""
                 val statusName = when (asset.status) {
-                    AssetStatus.NONE -> "未选择 none"
-                    AssetStatus.OWNED -> "确定拥有 owned"
-                    AssetStatus.NOT_OWNED -> "确定没有 not owned"
-                    AssetStatus.IN_PROGRESS -> "进行中 in progress"
-                    AssetStatus.TEMPORARILY_WITH_ME -> "暂时在自己手里 temporarily with me"
-                    AssetStatus.TEMPORARILY_WITH_OTHERS -> "暂时在别人手里 temporarily with others"
+                    AssetStatus.NONE -> strings.none
+                    AssetStatus.OWNED -> strings.owned
+                    AssetStatus.NOT_OWNED -> strings.notOwned
+                    AssetStatus.LOST -> strings.lost
+                    AssetStatus.IN_PROGRESS -> strings.inProgress
+                    AssetStatus.TEMPORARILY_WITH_ME -> strings.temporarilyWithMe
+                    AssetStatus.TEMPORARILY_WITH_OTHERS -> strings.temporarilyWithOthers
                 }
                 asset.note.lowercase().contains(query) ||
                 asset.targetPerson.lowercase().contains(query) ||
@@ -189,15 +188,6 @@ fun AssetsScreen(
             }
         }
         
-        // 筛选后的负资产金额
-        val filteredNegativeAmount = displayAssets.filter { it.categoryId in negativeCategoryIds }.sumOf { asset ->
-            when {
-                asset.status == AssetStatus.OWNED -> asset.amount
-                asset.status == AssetStatus.IN_PROGRESS && !asset.isCompleted -> asset.amount
-                else -> 0.0
-            }
-        }
-        
         // 筛选后的总负债
         val filteredTotalLiabilities = displayAssets.filter { 
             it.categoryId in negativeCategoryIds && 
@@ -205,33 +195,16 @@ fun AssetsScreen(
             !it.isCompleted 
         }.sumOf { it.amount }
         
-        // 筛选后的资产总额（不含交易结余，因为交易结余无法按资产分类筛选）
-        val filteredTotalAssets = filteredPositiveAmount + filteredNegativeAmount
-        
-        // 筛选后的净资产
-        val filteredNetAssets = filteredTotalAssets - filteredNegativeAmount
-        
-        Triple(filteredPositiveAmount, filteredNegativeAmount, filteredTotalLiabilities)
+        filteredPositiveAmount to filteredTotalLiabilities
     }
 
     // 根据筛选条件决定显示的数据
     val displayPositiveAssetAmount = if (hasActiveFilter) filteredStats.first else positiveAssetAmount
-    val displayNegativeAssetAmount = if (hasActiveFilter) filteredStats.second else negativeAssetAmount
-    val displayTotalLiabilities = if (hasActiveFilter) filteredStats.third else totalLiabilities
-    // 交易结余无法按资产筛选，始终显示全局值
-    val displayTransactionBalance = transactionBalance
-    // 总资产 = 正资产 + 负资产 + 交易结余（无筛选时直接使用 ViewModel 计算的值）
-    val displayTotalAssets = if (hasActiveFilter) {
-        displayPositiveAssetAmount + displayNegativeAssetAmount  // 筛选时不计入交易结余
-    } else {
-        totalAssets  // 直接使用 ViewModel 已正确计算的总资产
-    }
-    // 净资产 = 正资产 + 综合（交易结余） - 负债（进行中）
-    // 无筛选时直接使用 ViewModel 计算的值
+    val displayTotalLiabilities = if (hasActiveFilter) filteredStats.second else totalLiabilities
     val displayNetAssets = if (hasActiveFilter) {
-        displayPositiveAssetAmount - displayTotalLiabilities  // 筛选时不计入交易结余
+        displayPositiveAssetAmount - displayTotalLiabilities
     } else {
-        netAssets  // 直接使用 ViewModel 已正确计算的净资产
+        netAssets
     }
     
     // 分类筛选时的详细状态统计
@@ -265,11 +238,6 @@ fun AssetsScreen(
             CategoryStats(0.0, 0.0, 0.0)
         }
     }
-
-    // Group assets by date
-    val groupedAssets = displayAssets.groupBy {
-        SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(it.date))
-    }.toSortedMap(reverseOrder())
 
     Scaffold(
         topBar = {
@@ -597,74 +565,10 @@ fun AssetsScreen(
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         
-                        // 第一行：总资产、交易结余（筛选时不显示交易结余）
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceEvenly
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(
-                                    strings.totalAssets,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Color.White.copy(alpha = 0.7f)
-                                )
-                                Text(
-                                    "$currency${String.format(Locale.US, "%.2f", displayTotalAssets)}",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF5BD9CA)
-                                )
-                            }
-                            // 只有在没有筛选条件时才显示交易结余
-                            if (!hasActiveFilter) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text(
-                                        strings.balanceOverall,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = Color.White.copy(alpha = 0.7f)
-                                    )
-                                    Text(
-                                        "$currency${String.format(Locale.US, "%.2f", displayTransactionBalance)}",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color(0xFF7DD3FC)
-                                    )
-                                }
-                            }
-                        }
-                        
-                        Spacer(modifier = Modifier.height(12.dp))
-                        
-                        // 第二行：正资产、总负债
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceEvenly
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(
-                                    strings.positiveAsset,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Color.White.copy(alpha = 0.7f)
-                                )
-                                Text(
-                                    "$currency${String.format(Locale.US, "%.2f", displayPositiveAssetAmount)}",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF4ADE80)
-                                )
-                            }
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(
-                                    strings.totalLiabilities,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Color.White.copy(alpha = 0.7f)
-                                )
-                                Text(
-                                    "$currency${String.format(Locale.US, "%.2f", displayTotalLiabilities)}",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFFFF6B6B)
-                                )
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                                AssetOverviewMetric(strings.asset, displayPositiveAssetAmount, currency, Color(0xFF5BD9CA))
+                                AssetOverviewMetric(strings.totalLiabilities, displayTotalLiabilities, currency, Color(0xFFFF6B6B))
                             }
                         }
                     }
@@ -686,7 +590,8 @@ fun AssetsScreen(
                     )
                 }
             } else {
-                groupedAssets.forEach { (dateString, assetList) ->
+                val datedGroups = displayAssets.sortedByDescending { it.date }.groupBy { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(it.date)) }
+                datedGroups.forEach { (dateString, datedAssets) ->
                     // Date Header
                     Surface(
                         color = Color.Transparent,
@@ -703,12 +608,12 @@ fun AssetsScreen(
                     }
 
                     // Asset Items
-                    assetList.forEach { asset ->
+                    datedAssets.forEach { asset ->
                         val category = categories.find { it.id == asset.categoryId }
                         val categoryName = category?.name ?: strings.other
                         val isPositiveCategory = category?.isPositiveAsset ?: true
                         val isSelected = selectedIds.contains(asset.id)
-                        
+
                         AssetItem(
                             asset = asset,
                             categoryName = categoryName,
@@ -1032,6 +937,7 @@ fun AssetItem(
         AssetStatus.NONE -> MaterialTheme.colorScheme.onSurfaceVariant
         AssetStatus.OWNED -> Color(0xFF4CAF50)  // Green - confirmed owned
         AssetStatus.NOT_OWNED -> Color(0xFF9E9E9E)  // Gray - confirmed not owned
+        AssetStatus.LOST -> Color(0xFFE53935)  // Red - lost
         AssetStatus.IN_PROGRESS -> Color(0xFFFFC107)  // Yellow - in progress
         AssetStatus.TEMPORARILY_WITH_ME -> Color(0xFFFFC107)  // Legacy - yellow
         AssetStatus.TEMPORARILY_WITH_OTHERS -> Color(0xFFFFC107)  // Legacy - yellow
@@ -1239,7 +1145,9 @@ fun AssetItem(
                     val statusLabel = when (asset.status) {
                         AssetStatus.NONE -> null
                         AssetStatus.OWNED -> strings.owned
-                        AssetStatus.NOT_OWNED -> strings.notOwned
+                    AssetStatus.NOT_OWNED -> strings.notOwned
+                    AssetStatus.LOST -> strings.lost
+                        AssetStatus.LOST -> strings.lost
                         AssetStatus.IN_PROGRESS -> strings.inProgress
                         AssetStatus.TEMPORARILY_WITH_ME -> strings.temporarilyWithMe
                         AssetStatus.TEMPORARILY_WITH_OTHERS -> strings.temporarilyWithOthers
@@ -1456,6 +1364,7 @@ fun AssetItem(
                             AssetStatus.NONE -> null
                             AssetStatus.OWNED -> strings.owned
                             AssetStatus.NOT_OWNED -> strings.notOwned
+                            AssetStatus.LOST -> strings.lost
                             AssetStatus.IN_PROGRESS -> strings.inProgress
                             AssetStatus.TEMPORARILY_WITH_ME -> strings.temporarilyWithMe
                             AssetStatus.TEMPORARILY_WITH_OTHERS -> strings.temporarilyWithOthers
@@ -1515,6 +1424,19 @@ fun AssetItem(
                     Text(strings.cancel)
                 }
             }
+        )
+    }
+}
+
+@Composable
+private fun AssetOverviewMetric(label: String, amount: Double, currency: String, color: Color) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.widthIn(min = 112.dp)) {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.7f))
+        Text(
+            "$currency${String.format(Locale.US, "%.2f", amount)}",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+            color = color
         )
     }
 }

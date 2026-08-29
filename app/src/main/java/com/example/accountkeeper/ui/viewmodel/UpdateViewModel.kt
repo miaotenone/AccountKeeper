@@ -11,6 +11,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.accountkeeper.utils.UpdateDownloadService
 import com.example.accountkeeper.utils.UpdateInfo
 import com.example.accountkeeper.utils.UpdateManager
+import com.example.accountkeeper.ui.theme.getAppStrings
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -70,7 +71,7 @@ class UpdateViewModel @Inject constructor(
                     _downloadProgress.value = 100
                 }
                 UpdateDownloadService.ACTION_DOWNLOAD_ERROR -> {
-                    val message = intent.getStringExtra(UpdateDownloadService.EXTRA_ERROR_MESSAGE) ?: "下载失败"
+                    val message = intent.getStringExtra(UpdateDownloadService.EXTRA_ERROR_MESSAGE) ?: getApplication<Application>().getAppStrings().downloadFailed
                     _updateState.value = UpdateState.Error(message, updateInfo?.downloadUrl ?: "")
                 }
             }
@@ -119,7 +120,7 @@ class UpdateViewModel @Inject constructor(
                     }
                 }
             } catch (e: Exception) {
-                _updateState.value = UpdateState.Error(e.message ?: "检查更新失败")
+                _updateState.value = UpdateState.Error(e.message ?: getApplication<Application>().getAppStrings().checkUpdateFailed)
             }
         }
     }

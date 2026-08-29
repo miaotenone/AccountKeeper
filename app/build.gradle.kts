@@ -41,10 +41,12 @@ android {
     buildFeatures {
         compose = true
     }
-}
-
-kotlin {
-    jvmToolchain(11)
+    applicationVariants.all {
+        outputs.all {
+            val output = this as com.android.build.gradle.internal.api.BaseVariantOutputImpl
+            outputFileName = "AccountKeeper-v${versionName}-${buildType.name}.apk"
+        }
+    }
 }
 
 dependencies {
@@ -63,6 +65,7 @@ dependencies {
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+    androidTestImplementation("androidx.room:room-testing:${libs.versions.room.get()}")
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 
@@ -91,7 +94,7 @@ dependencies {
     // Apache POI for Excel parsing
     implementation("org.apache.poi:poi:5.2.5")
     implementation("org.apache.poi:poi-ooxml:5.2.5")
-    
+
     // WorkManager for scheduled backup
     implementation(libs.work.runtime)
     implementation(libs.hilt.work)

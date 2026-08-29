@@ -231,10 +231,10 @@ fun ImportExportScreen(
                     }
                 }
             }
-            snackbarHostState.showSnackbar(if (successCount > 0) "成功融合 $successCount 笔数据！" else "合并完毕：但未识别出任何需要补充的新数据")
+            snackbarHostState.showSnackbar(if (successCount > 0) String.format(strings.mergeSuccess, successCount) else strings.mergeNoNewData)
         } catch (e: Exception) {
             e.printStackTrace()
-            snackbarHostState.showSnackbar("合并解析失败: ${e.localizedMessage}")
+            snackbarHostState.showSnackbar(String.format(strings.mergeParseFailed, e?.localizedMessage ?: ""))
         }
     }
 
@@ -258,7 +258,7 @@ fun ImportExportScreen(
                 try {
                     val lines = FileConverter.readLines(context, uri)
                     if (lines.isNullOrEmpty()) {
-                        snackbarHostState.showSnackbar("无法读取文件内容")
+                        snackbarHostState.showSnackbar(strings.cannotReadFile)
                         return@launch
                     }
 
@@ -267,14 +267,14 @@ fun ImportExportScreen(
                         "wechat" -> BillParser.parseWeChatBill(lines)
                         "alipay" -> BillParser.parseAlipayBill(lines)
                         else -> {
-                            snackbarHostState.showSnackbar("无法识别的账单格式")
+                            snackbarHostState.showSnackbar(strings.unrecognizedBillFormat)
                             return@launch
                         }
                     }
                     val parsedTransactions = parseResult.transactions
 
                     if (parsedTransactions.isEmpty()) {
-                        snackbarHostState.showSnackbar("未找到可导入的交易记录")
+                        snackbarHostState.showSnackbar(strings.noTransactionsToImport)
                         return@launch
                     }
 
@@ -325,12 +325,12 @@ fun ImportExportScreen(
                     val savedFile = settingsViewModel.backupManager.saveBillFile(uri, billType)
                     refreshBackupTrigger++
 
-                    val billTypeName = if (billType == "wechat") "微信" else "支付宝"
-                    val excludedInfo = if (parseResult.excludedCount > 0) "（已排除 ${parseResult.excludedCount} 笔退款交易）" else ""
-                    snackbarHostState.showSnackbar("${billTypeName}账单导入成功！共导入 $successCount 笔交易$excludedInfo")
+                    val billTypeName = if (billType == "wechat") strings.wechat else strings.alipay
+                    val excludedInfo = if (parseResult.excludedCount > 0) String.format(strings.excludedRefundInfo, parseResult.excludedCount) else ""
+                    snackbarHostState.showSnackbar(String.format(strings.billImportSuccess, billTypeName, successCount, excludedInfo))
                 } catch (e: Exception) {
                     e.printStackTrace()
-                    snackbarHostState.showSnackbar("导入失败: ${e.localizedMessage}")
+                    snackbarHostState.showSnackbar(String.format(strings.importFailed, e?.localizedMessage ?: ""))
                 }
             }
         }
@@ -638,7 +638,7 @@ fun ImportExportScreen(
                     contentColor = MaterialTheme.colorScheme.error,
                 )
             ) {
-                Text("⚠️ 清空所有交易记录 ⚠️", fontWeight = FontWeight.Bold)
+                Text(strings.clearAllTransactionsButton, fontWeight = FontWeight.Bold)
             }
             Spacer(modifier = Modifier.height(32.dp))
         }
@@ -646,23 +646,23 @@ fun ImportExportScreen(
         if (showClearConfirmDialog) {
             AlertDialog(
                 onDismissRequest = { showClearConfirmDialog = false },
-                title = { Text("危险警告") },
-                text = { Text("清空操作将永久删除包含在当前数据库内的所有记录信息！如果您未妥善备份这些数据将无法找回。您确定要执行此清空操作吗？") },
+                title = { Text(strings.dangerWarning) },
+                text = { Text(strings.clearAllDataWarningMessage) },
                 confirmButton = {
                     Button(
                         onClick = {
                             viewModel.deleteAllTransactions()
                             showClearConfirmDialog = false
-                            scope.launch { snackbarHostState.showSnackbar("已成功清空所有账单记录") }
+                            scope.launch { snackbarHostState.showSnackbar(strings.allRecordsCleared) }
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                     ) {
-                        Text("执意清空")
+                        Text(strings.clearAnyway)
                     }
                 },
                 dismissButton = {
                     FilledTonalButton(onClick = { showClearConfirmDialog = false }) {
-                        Text("取消")
+                        Text(strings.cancel)
                     }
                 }
             )
@@ -878,14 +878,14 @@ fun ImportExportScreen(
         if (showBillFileDialog) {
             AlertDialog(
                 onDismissRequest = { showBillFileDialog = false },
-                title = { Text("第三方账单文件管理") },
+                title = { Text(strings.thirdPartyBillFileManagement) },
                 text = {
                     Column(modifier = Modifier.fillMaxWidth()) {
                         val billFiles = settingsViewModel.backupManager.getAllBillFiles()
                         
                         if (billFiles.isEmpty()) {
                             Text(
-                                "暂无已导入的账单文件",
+                                strings.noImportedBillFiles,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(vertical = 8.dp)
@@ -901,9 +901,9 @@ fun ImportExportScreen(
                                     val billType = settingsViewModel.backupManager.detectBillType(file)
                                     val fileSize = settingsViewModel.backupManager.getBillFileSize(file)
                                     val typeLabel = when (billType) {
-                                        "wechat" -> "微信账单"
-                                        "alipay" -> "支付宝账单"
-                                        else -> "未知账单"
+                                        "wechat" -> strings.wechatBill
+                                        "alipay" -> strings.alipayBill
+                                        else -> strings.unknownBill
                                     }
                                     val typeColor = when (billType) {
                                         "wechat" -> androidx.compose.ui.graphics.Color(0xFF07C160)

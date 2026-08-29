@@ -47,6 +47,27 @@ class TransactionRepository @Inject constructor(
         ),
         pagingSourceFactory = { transactionDao.getByCategoryAndTimePaged(categoryId, startTime, endTime) }
     ).flow
+
+    fun getByTimeRangePaged(startDate: Long, endDate: Long): Flow<PagingData<Transaction>> = Pager(
+        config = PagingConfig(
+            pageSize = PAGE_SIZE,
+            prefetchDistance = PAGE_SIZE / 2,
+            enablePlaceholders = false
+        ),
+        pagingSourceFactory = { transactionDao.getByTimeRangePaged(startDate, endDate) }
+    ).flow
+
+    fun getFilteredPaged(startDate: Long, endDate: Long, categoryId: Long?): Flow<PagingData<Transaction>> = Pager(
+        config = PagingConfig(
+            pageSize = PAGE_SIZE,
+            prefetchDistance = PAGE_SIZE / 2,
+            enablePlaceholders = false
+        ),
+        pagingSourceFactory = { transactionDao.getFilteredPaged(startDate, endDate, categoryId) }
+    ).flow
+
+    fun getIncomeBetween(startDate: Long, endDate: Long): Flow<Double> = transactionDao.getIncomeBetween(startDate, endDate)
+    fun getExpenseBetween(startDate: Long, endDate: Long): Flow<Double> = transactionDao.getExpenseBetween(startDate, endDate)
     
     suspend fun getTransactionById(id: Long): Transaction? = transactionDao.getTransactionById(id)
     suspend fun updateTransactionCategory(oldId: Long, newId: Long) = transactionDao.updateTransactionCategory(oldId, newId)

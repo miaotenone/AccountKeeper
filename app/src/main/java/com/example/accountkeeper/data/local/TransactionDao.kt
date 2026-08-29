@@ -65,4 +65,21 @@ interface TransactionDao {
         ORDER BY date DESC
     """)
     fun getByCategoryAndTimePaged(categoryId: Long, startTime: Long, endTime: Long): PagingSource<Int, Transaction>
+
+    @Query("SELECT * FROM transactions WHERE date >= :startDate AND date < :endDate ORDER BY date DESC")
+    fun getByTimeRangePaged(startDate: Long, endDate: Long): PagingSource<Int, Transaction>
+
+    @Query("""
+        SELECT * FROM transactions 
+        WHERE date >= :startDate AND date < :endDate
+        AND (:categoryId IS NULL OR categoryId = :categoryId)
+        ORDER BY date DESC
+    """)
+    fun getFilteredPaged(startDate: Long, endDate: Long, categoryId: Long?): PagingSource<Int, Transaction>
+
+    @Query("SELECT COALESCE(SUM(amount), 0.0) FROM transactions WHERE type = 'INCOME' AND date >= :startDate AND date < :endDate")
+    fun getIncomeBetween(startDate: Long, endDate: Long): Flow<Double>
+
+    @Query("SELECT COALESCE(SUM(amount), 0.0) FROM transactions WHERE type = 'EXPENSE' AND date >= :startDate AND date < :endDate")
+    fun getExpenseBetween(startDate: Long, endDate: Long): Flow<Double>
 }

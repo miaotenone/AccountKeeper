@@ -16,6 +16,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import com.example.accountkeeper.MainActivity
 import com.example.accountkeeper.R
+import com.example.accountkeeper.ui.theme.getAppStrings
 import kotlinx.coroutines.*
 import java.io.File
 import java.net.HttpURLConnection
@@ -90,10 +91,10 @@ class UpdateDownloadService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 NOTIFICATION_CHANNEL_ID,
-                "应用更新下载",
+                getAppStrings().appUpdateDownload,
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "显示应用更新下载进度"
+                description = getAppStrings().showUpdateDownloadProgress
                 setShowBadge(false)
             }
             notificationManager.createNotificationChannel(channel)
@@ -107,7 +108,7 @@ class UpdateDownloadService : Service() {
         downloadProgress = 0
 
         // 启动前台服务
-        val notification = buildNotification(0, "正在下载 v$versionName...", "准备下载...")
+        val notification = buildNotification(0, String.format(getAppStrings().downloadingVersion, versionName), getAppStrings().preparingDownload)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             ServiceCompat.startForeground(
                 this,
@@ -136,13 +137,13 @@ class UpdateDownloadService : Service() {
                     updateNotificationComplete(file.absolutePath)
                     sendCompleteBroadcast(file.absolutePath)
                 } else {
-                    errorMsg = "下载失败：文件保存失败"
+                    errorMsg = getAppStrings().downloadFailedFileSave
                 }
             } catch (e: CancellationException) {
-                errorMsg = "下载已取消"
+                errorMsg = getAppStrings().downloadCancelled
             } catch (e: Exception) {
                 Log.e(TAG, "下载异常", e)
-                errorMsg = "下载失败：${e.javaClass.simpleName}: ${e.message}"
+                errorMsg = String.format(getAppStrings().downloadFailedGeneric, e.javaClass.simpleName, e.message)
             }
             
             // 处理错误
@@ -292,7 +293,7 @@ class UpdateDownloadService : Service() {
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setOngoing(true)
             .setProgress(100, progress, progress == 0 || progress < 0)
-            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "取消", cancelPendingIntent)
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, getAppStrings().cancel, cancelPendingIntent)
             .build()
     }
 
@@ -305,7 +306,7 @@ class UpdateDownloadService : Service() {
             String.format("%.1f MB", downloadedMB)
         }
 
-        val notification = buildNotification(progress, "正在下载更新...", content)
+        val notification = buildNotification(progress, getAppStrings().downloadingUpdate, content)
         notificationManager.notify(NOTIFICATION_ID, notification)
     }
 
@@ -314,8 +315,8 @@ class UpdateDownloadService : Service() {
         val installIntent = updateManager.installApkAndGetIntent(apkFile)
 
         val notification = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
-            .setContentTitle("下载完成")
-            .setContentText("点击安装更新")
+            .setContentTitle(getAppStrings().downloadComplete)
+            .setContentText(getAppStrings().clickToInstallUpdate)
             .setSmallIcon(android.R.drawable.stat_sys_download_done)
             .setOngoing(false)
             .setAutoCancel(true)
@@ -331,7 +332,7 @@ class UpdateDownloadService : Service() {
 
     private fun updateNotificationError(message: String) {
         val notification = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
-            .setContentTitle("下载失败")
+            .setContentTitle(getAppStrings().downloadFailed)
             .setContentText(message)
             .setSmallIcon(android.R.drawable.stat_notify_error)
             .setOngoing(false)

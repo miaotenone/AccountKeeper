@@ -510,282 +510,328 @@ fun HelpTutorialDialog(
                         .verticalScroll(rememberScrollState())
                 ) {
                     // 关于项目
-                    HelpSection(title = "📖 关于项目", isDark = isDark) {
+                    HelpSection(title = strings.helpAboutProject, isDark = isDark) {
                         Text(
-                            "AccountKeeper 是一款简洁易用的个人财务管理应用，帮助您轻松记录和管理日常收支。",
+                            strings.helpAboutDescription1,
                             style = MaterialTheme.typography.bodyMedium,
                             color = if (isDark) DarkOnBackground else LightOnBackground
                         )
                         Text(
-                            "主要功能：收支记账、资产管理、统计分析、账单导入、数据备份等。",
+                            strings.helpAboutDescription2,
                             style = MaterialTheme.typography.bodyMedium,
                             color = if (isDark) DarkOnBackground.copy(alpha = 0.8f) else LightOnBackground.copy(alpha = 0.8f)
                         )
                     }
                     
                     // 首页功能
-                    HelpSection(title = "🏠 首页功能", isDark = isDark) {
+                    HelpSection(title = strings.helpHomeFeatures, isDark = isDark) {
                         HelpDetailItem(
-                            title = "💰 余额卡片",
+                            title = strings.helpBalanceCard,
                             details = listOf(
-                                "显示总余额 = 总收入 - 总支出",
-                                "点击「本月/总资产」切换查看范围",
-                                "本月：仅显示当月数据",
-                                "总资产：显示所有历史数据"
+                                strings.helpBalanceCardDetail1,
+                                strings.helpBalanceCardDetail2,
+                                strings.helpBalanceCardDetail3
                             ),
                             isDark = isDark
                         )
                         HelpDetailItem(
-                            title = "🔍 搜索功能",
+                            title = strings.helpHomeTimeRange,
                             details = listOf(
-                                "点击顶部搜索图标展开搜索栏",
-                                "输入关键词搜索备注或分类名",
-                                "支持模糊匹配，快速定位交易"
+                                strings.helpHomeTimeRangeDetail1,
+                                strings.helpHomeTimeRangeDetail2,
+                                strings.helpHomeTimeRangeDetail3
                             ),
                             isDark = isDark
                         )
                         HelpDetailItem(
-                            title = "📝 交易列表操作",
+                            title = strings.helpHomeFilter,
                             details = listOf(
-                                "点击卡片：进入编辑页面",
-                                "左滑卡片：显示删除按钮",
-                                "长按卡片：进入多选模式",
-                                "多选模式可批量删除"
+                                strings.helpHomeFilterDetail1,
+                                strings.helpHomeFilterDetail2,
+                                strings.helpHomeFilterDetail3
                             ),
                             isDark = isDark
                         )
                         HelpDetailItem(
-                            title = "➕ 添加交易",
+                            title = strings.helpSearchFeature,
                             details = listOf(
-                                "点击右下角 + 按钮",
-                                "输入金额 → 选择类型 → 选择分类",
-                                "可设置日期和备注",
-                                "点击保存完成添加"
+                                strings.helpSearchDetail1,
+                                strings.helpSearchDetail2,
+                                strings.helpSearchDetail3
+                            ),
+                            isDark = isDark
+                        )
+                        HelpDetailItem(
+                            title = strings.helpTransactionListOps,
+                            details = listOf(
+                                strings.helpTxTapDetail,
+                                strings.helpTxSwipeDetail,
+                                strings.helpTxLongPressDetail,
+                                strings.helpTxBatchDelete
+                            ),
+                            isDark = isDark
+                        )
+                        HelpDetailItem(
+                            title = strings.helpAddTransaction,
+                            details = listOf(
+                                strings.helpAddTxDetail1,
+                                strings.helpAddTxDetail2,
+                                strings.helpAddTxDetail3,
+                                strings.helpAddTxDetail4
                             ),
                             isDark = isDark
                         )
                     }
                     
                     // 统计分析
-                    HelpSection(title = "📊 统计分析", isDark = isDark) {
+                    HelpSection(title = strings.helpStatistics, isDark = isDark) {
                         HelpDetailItem(
-                            title = "⏰ 时间范围选择",
+                            title = strings.helpTimeRangeSelection,
                             details = listOf(
-                                "日：查看当天数据",
-                                "周：本周（周一至周日）",
-                                "月：本月（1日至月末）",
-                                "年：本年度数据",
-                                "自定义：选择起止日期"
+                                strings.helpTimeRangeDay,
+                                strings.helpTimeRangeWeek,
+                                strings.helpTimeRangeMonth,
+                                strings.helpTimeRangeYear,
+                                strings.helpTimeRangeCustom
                             ),
                             isDark = isDark
                         )
                         HelpDetailItem(
-                            title = "📈 图表展示",
+                            title = strings.helpChartDisplay,
                             details = listOf(
-                                "折线图：收支趋势变化",
-                                "饼图：各分类占比",
-                                "排行榜：分类金额排序"
+                                strings.helpChartLine,
+                                strings.helpChartPie,
+                                strings.helpChartRanking
                             ),
                             isDark = isDark
                         )
                         HelpDetailItem(
-                            title = "🏆 分类筛选",
+                            title = strings.helpCategoryFilter,
                             details = listOf(
-                                "点击分类排行榜中的分类卡片",
-                                "查看该分类下所有交易明细",
-                                "支持按时间范围筛选"
+                                strings.helpCategoryFilterDetail1,
+                                strings.helpCategoryFilterDetail2,
+                                strings.helpCategoryFilterDetail3
+                            ),
+                            isDark = isDark
+                        )
+                    }
+                    
+                    // 预算管理
+                    HelpSection(title = strings.budget, isDark = isDark) {
+                        HelpDetailItem(
+                            title = strings.helpBudgetPeriods,
+                            details = listOf(
+                                strings.helpBudgetPeriodsDetail1,
+                                strings.helpBudgetPeriodsDetail2,
+                                strings.helpBudgetPeriodsDetail3
                             ),
                             isDark = isDark
                         )
                     }
                     
                     // 资产管理
-                    HelpSection(title = "💵 资产管理", isDark = isDark) {
+                    HelpSection(title = strings.helpAssetManagement, isDark = isDark) {
                         HelpDetailItem(
-                            title = "📊 资产统计",
+                            title = strings.helpAssetStatistics,
                             details = listOf(
-                                "净资产 = 总资产 - 总负债",
-                                "总资产：借出款项（他人欠我）",
-                                "总负债：借入款项（我欠他人）",
-                                "交易余额：记账余额"
+                                strings.helpAssetNetWorth,
+                                strings.helpCurrentAssets,
+                                strings.helpCurrentLiabilities,
+                                strings.helpTransactionBalance
                             ),
                             isDark = isDark
                         )
                         HelpDetailItem(
-                            title = "📝 添加资产记录",
+                            title = strings.helpAddAssetRecord,
                             details = listOf(
-                                "点击 + 添加借贷记录",
-                                "填写金额、对方、日期",
-                                "选择分类（借出/借入）",
-                                "可添加附件作为凭证"
+                                strings.helpAddAssetDetail1,
+                                strings.helpAddAssetDetail2,
+                                strings.helpAddAssetDetail3,
+                                strings.helpAddAssetDetail4
                             ),
                             isDark = isDark
                         )
                         HelpDetailItem(
-                            title = "✅ 状态说明",
+                            title = strings.helpStatusExplanation,
                             details = listOf(
-                                "进行中：借贷尚未结清",
-                                "已完成：已还清结账",
-                                "已取消：作废的记录"
+                                strings.helpStatusInProgress,
+                                strings.helpStatusCompleted,
+                                strings.helpStatusCancelled
+                            ),
+                            isDark = isDark
+                        )
+                        HelpDetailItem(
+                            title = strings.helpAssetAttachment,
+                            details = listOf(
+                                strings.helpAssetAttachmentDetail1,
+                                strings.helpAssetAttachmentDetail2
                             ),
                             isDark = isDark
                         )
                     }
                     
                     // 数据管理
-                    HelpSection(title = "💾 数据管理", isDark = isDark) {
+                    HelpSection(title = strings.helpDataManagement, isDark = isDark) {
                         HelpDetailItem(
-                            title = "📤 导出数据",
+                            title = strings.helpExportData,
                             details = listOf(
-                                "导出 ZIP 格式备份文件",
-                                "包含交易、资产、附件",
-                                "可用于迁移或备份"
+                                strings.helpExportDetail1,
+                                strings.helpExportDetail2,
+                                strings.helpExportDetail3
                             ),
                             isDark = isDark
                         )
                         HelpDetailItem(
-                            title = "📥 导入数据",
+                            title = strings.helpImportData,
                             details = listOf(
-                                "导入 ZIP 备份文件",
-                                "自动合并，重复 ID 跳过",
-                                "缺失分类自动创建"
+                                strings.helpImportDetail1,
+                                strings.helpImportDetail2,
+                                strings.helpImportDetail3
                             ),
                             isDark = isDark
                         )
                         HelpDetailItem(
-                            title = "🧾 微信/支付宝账单导入",
+                            title = strings.helpBillImport,
                             details = listOf(
-                                "从微信/支付宝导出账单",
-                                "支持 Excel(.xlsx) 和 CSV 格式",
-                                "自动识别交易类型和分类",
-                                "退款交易智能处理（已退款项不导入）",
-                                "可在「管理已导入账单」中复原"
+                                strings.helpBillImportDetail1,
+                                strings.helpBillImportDetail2,
+                                strings.helpBillImportDetail3,
+                                strings.helpBillImportDetail4,
+                                strings.helpBillImportDetail5
                             ),
                             isDark = isDark
                         )
                         HelpDetailItem(
-                            title = "📱 如何导出账单",
+                            title = strings.helpHowToExportBill,
                             details = listOf(
-                                "微信：我 → 服务 → 钱包 → 账单 → 常见问题 → 下载账单",
-                                "支付宝：我的 → 账单 → 右上角... → 开具交易流水证明",
-                                "选择「用于个人对账」下载 Excel 格式",
-                                "下载后导入到本应用即可"
+                                strings.helpExportBillWechat,
+                                strings.helpExportBillAlipay,
+                                strings.helpExportBillFormat,
+                                strings.helpExportBillImport
                             ),
                             isDark = isDark
                         )
                         HelpDetailItem(
-                            title = "🔐 自动备份",
+                            title = strings.helpAutoBackup,
                             details = listOf(
-                                "每次增删改自动创建备份",
-                                "可设置保留数量（5-50）",
-                                "超出自动删除最旧备份",
-                                "建议同时定期手动备份"
+                                strings.helpAutoBackupDetail1,
+                                strings.helpAutoBackupDetail2,
+                                strings.helpAutoBackupDetail3,
+                                strings.helpAutoBackupDetail4
+                            ),
+                            isDark = isDark
+                        )
+                        HelpDetailItem(
+                            title = strings.helpBillPreview,
+                            details = listOf(
+                                strings.helpBillPreviewDetail1,
+                                strings.helpBillPreviewDetail2
                             ),
                             isDark = isDark
                         )
                     }
                     
                     // 分类管理
-                    HelpSection(title = "🏷️ 分类管理", isDark = isDark) {
+                    HelpSection(title = strings.helpCategoryManagement, isDark = isDark) {
                         HelpDetailItem(
-                            title = "分类类型",
+                            title = strings.helpCategoryTypes,
                             details = listOf(
-                                "支出分类：餐饮、交通、购物等",
-                                "收入分类：工资、奖金、理财等",
-                                "资产分类：借出、借入"
+                                strings.helpExpenseCategories,
+                                strings.helpIncomeCategories,
+                                strings.helpAssetCategories
                             ),
                             isDark = isDark
                         )
                         HelpDetailItem(
-                            title = "管理操作",
+                            title = strings.helpManagementOps,
                             details = listOf(
-                                "添加：创建自定义分类",
-                                "重命名：修改分类名称",
-                                "删除：仅可删除自定义分类",
-                                "预设分类不可删除"
+                                strings.helpAddCategory,
+                                strings.helpRenameCategory,
+                                strings.helpDeleteCategory,
+                                strings.helpPresetCategoryNoDelete
                             ),
                             isDark = isDark
                         )
                     }
                     
                     // 个性化设置
-                    HelpSection(title = "⚙️ 个性化设置", isDark = isDark) {
+                    HelpSection(title = strings.helpPersonalization, isDark = isDark) {
                         HelpDetailItem(
-                            title = "外观设置",
+                            title = strings.helpAppearanceSettings,
                             details = listOf(
-                                "深色模式：护眼，适合夜间",
-                                "浅色模式：清爽，适合白天",
-                                "语言：中文/English",
-                                "货币：¥ $ € £ ₩ ₹ ₽ ฿"
+                                strings.helpDarkMode,
+                                strings.helpLightMode,
+                                strings.helpLanguage,
+                                strings.helpCurrency
                             ),
                             isDark = isDark
                         )
                         HelpDetailItem(
-                            title = "注意事项",
+                            title = strings.helpNotes,
                             details = listOf(
-                                "语言和货币修改后需重启生效",
-                                "重启前仍使用旧设置"
+                                strings.helpRestartRequired,
+                                strings.helpOldSettingsBeforeRestart
                             ),
                             isDark = isDark
                         )
                     }
                     
                     // 使用技巧
-                    HelpSection(title = "💡 使用技巧", isDark = isDark) {
+                    HelpSection(title = strings.helpTips, isDark = isDark) {
                         HelpDetailItem(
-                            title = "日常记账建议",
+                            title = strings.helpDailyTips,
                             details = listOf(
-                                "消费后立即记录，避免遗忘",
-                                "善用备注记录详细信息",
-                                "定期查看统计，了解消费习惯"
+                                strings.helpDailyTip1,
+                                strings.helpDailyTip2,
+                                strings.helpDailyTip3
                             ),
                             isDark = isDark
                         )
                         HelpDetailItem(
-                            title = "数据安全建议",
+                            title = strings.helpDataSafety,
                             details = listOf(
-                                "开启自动备份功能",
-                                "每周创建一次手动备份",
-                                "更换手机前先导出数据"
+                                strings.helpDataSafetyTip1,
+                                strings.helpDataSafetyTip2,
+                                strings.helpDataSafetyTip3
                             ),
                             isDark = isDark
                         )
                         HelpDetailItem(
-                            title = "账单导入技巧",
+                            title = strings.helpBillImportTips,
                             details = listOf(
-                                "每月导入一次微信/支付宝账单",
-                                "导入后检查分类是否正确",
-                                "可手动调整错误的分类"
+                                strings.helpBillImportTip1,
+                                strings.helpBillImportTip2,
+                                strings.helpBillImportTip3
                             ),
                             isDark = isDark
                         )
                     }
                     
                     // 常见问题
-                    HelpSection(title = "❓ 常见问题", isDark = isDark) {
+                    HelpSection(title = strings.helpFAQ, isDark = isDark) {
                         HelpDetailItem(
-                            title = "交易删除后能恢复吗？",
+                            title = strings.helpFAQRecover,
                             details = listOf(
-                                "删除操作不可撤销",
-                                "如有备份可从备份恢复"
+                                strings.helpFAQRecoverDetail1,
+                                strings.helpFAQRecoverDetail2
                             ),
                             isDark = isDark
                         )
                         HelpDetailItem(
-                            title = "账单导入部分交易未导入？",
+                            title = strings.helpFAQPartialImport,
                             details = listOf(
-                                "ID 重复的交易会跳过",
-                                "已退款的原交易会被排除",
-                                "金额为0的交易不导入"
+                                strings.helpFAQPartialImportDetail1,
+                                strings.helpFAQPartialImportDetail2,
+                                strings.helpFAQPartialImportDetail3
                             ),
                             isDark = isDark
                         )
                         HelpDetailItem(
-                            title = "如何同步到其他设备？",
+                            title = strings.helpFAQSync,
                             details = listOf(
-                                "导出 ZIP 备份文件",
-                                "在新设备导入该文件",
-                                "数据自动合并"
+                                strings.helpFAQSyncDetail1,
+                                strings.helpFAQSyncDetail2,
+                                strings.helpFAQSyncDetail3
                             ),
                             isDark = isDark
                         )

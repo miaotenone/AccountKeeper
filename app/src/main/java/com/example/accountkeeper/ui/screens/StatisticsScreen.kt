@@ -515,7 +515,7 @@ fun PremiumTotalCard(
                     when (statType) {
                         StatType.EXPENSE -> strings.totalExpense
                         StatType.INCOME -> strings.totalIncome
-                        StatType.BALANCE -> "${strings.balanceOverall}结余"
+                        StatType.BALANCE -> strings.balanceOverall
                     },
                     style = MaterialTheme.typography.titleMedium,
                     color = Color.White.copy(alpha = 0.9f)

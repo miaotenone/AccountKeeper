@@ -402,6 +402,7 @@ fun UpdateAvailableContent(
     currentVersion: String,
     isDark: Boolean
 ) {
+    val strings = LocalAppStrings.current
     Column(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -475,7 +476,7 @@ fun UpdateAvailableContent(
                         .verticalScroll(rememberScrollState())
                 ) {
                     Text(
-                        "更新内容",
+                        strings.updateContents,
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
                         color = if (isDark) DarkOnBackground else LightOnBackground
@@ -598,8 +599,8 @@ fun PremiumQuickSettingsCard(
                     QuickSettingItem(
                         icon = Icons.Default.DarkMode,
                         label = strings.darkMode,
-                        value = if (strings.language == "界面语言") {
-                            if (isDarkMode) "开" else "关"
+                        value = if (strings.language == strings.languageChineseLabel) {
+                            if (isDarkMode) strings.toggleOn else strings.toggleOff
                         } else {
                             if (isDarkMode) "On" else "Off"
                         },
@@ -609,7 +610,7 @@ fun PremiumQuickSettingsCard(
                     QuickSettingItem(
                         icon = Icons.Default.Language,
                         label = strings.language,
-                        value = if (language == "zh") "中文" else "English",
+                        value = if (language == "zh") strings.chinese else "English",
                         color = Color.White.copy(alpha = 0.85f),
                         onClick = onToggleLanguage
                     )

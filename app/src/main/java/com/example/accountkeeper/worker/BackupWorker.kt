@@ -8,6 +8,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.example.accountkeeper.data.repository.AssetRepository
+import com.example.accountkeeper.data.repository.BudgetRepository
 import com.example.accountkeeper.data.repository.CategoryRepository
 import com.example.accountkeeper.data.repository.SettingsRepository
 import com.example.accountkeeper.data.repository.TransactionRepository
@@ -30,7 +31,8 @@ class BackupWorker @AssistedInject constructor(
     private val settingsRepository: SettingsRepository,
     private val transactionRepository: TransactionRepository,
     private val assetRepository: AssetRepository,
-    private val categoryRepository: CategoryRepository
+    private val categoryRepository: CategoryRepository,
+    private val budgetRepository: BudgetRepository
 ) : CoroutineWorker(context, workerParams) {
 
     companion object {
@@ -77,6 +79,7 @@ class BackupWorker @AssistedInject constructor(
             val assets = assetRepository.getAllAssets().first()
             val categories = categoryRepository.getAllCategories().first()
             val categoryMap = categories.associate { it.id to it.name }
+            val budgets = budgetRepository.getAll().first()
             
             // 执行备份
             withContext(Dispatchers.IO) {
@@ -85,6 +88,7 @@ class BackupWorker @AssistedInject constructor(
                     transactions = transactions,
                     assets = assets,
                     categoryMap = categoryMap,
+                    budgets = budgets,
                     maxKeep = settings.backupRetentionLimit,
                     isAuto = true
                 )

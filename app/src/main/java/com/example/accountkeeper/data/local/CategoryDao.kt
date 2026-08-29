@@ -16,6 +16,9 @@ interface CategoryDao {
     @Query("SELECT * FROM categories")
     suspend fun getAllCategoriesList(): List<Category>
 
+    @Query("SELECT * FROM categories WHERE id = :id LIMIT 1")
+    suspend fun getById(id: Long): Category?
+
     @Insert
     suspend fun insertCategory(category: Category)
 

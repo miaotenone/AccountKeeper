@@ -9,6 +9,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -37,6 +39,7 @@ import com.example.accountkeeper.data.model.TransactionType
 import com.example.accountkeeper.ui.theme.*
 import com.example.accountkeeper.ui.theme.LocalAppStrings
 import com.example.accountkeeper.ui.viewmodel.AssetViewModel
+import com.example.accountkeeper.ui.viewmodel.FinancialArchiveViewModel
 import com.example.accountkeeper.ui.viewmodel.CategoryViewModel
 import com.example.accountkeeper.ui.viewmodel.SettingsViewModel
 import com.example.accountkeeper.ui.viewmodel.TransactionViewModel
@@ -59,7 +62,8 @@ fun DataManagementScreen(
     viewModel: TransactionViewModel = hiltViewModel(),
     categoryViewModel: CategoryViewModel = hiltViewModel(),
     settingsViewModel: SettingsViewModel = hiltViewModel(),
-    assetViewModel: AssetViewModel = hiltViewModel()
+    assetViewModel: AssetViewModel = hiltViewModel(),
+    financialArchiveViewModel: FinancialArchiveViewModel = hiltViewModel()
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
@@ -70,6 +74,7 @@ fun DataManagementScreen(
     val assets by assetViewModel.assets.collectAsState()
     val appSettings by settingsViewModel.appSettings.collectAsState()
     val strings = LocalAppStrings.current
+    val archiveBudgets by financialArchiveViewModel.budgets.collectAsState()
 
     var refreshBackupTrigger by remember { mutableStateOf(0) }
     var showManualBackupsDialog by remember { mutableStateOf(false) }
@@ -86,315 +91,12 @@ fun DataManagementScreen(
         contract = ActivityResultContracts.CreateDocument("application/zip")
     ) { uri: Uri? ->
         if (uri != null) {
-            scope.launch(Dispatchers.IO) {
-                try {
-                    val categoryMap = categories.associate { it.id to it.name }
-                    val success = settingsViewModel.backupManager.exportZipToUri(
-                        uri = uri,
-                        transactions = transactions,
-                        assets = assets,
-                        categoryMap = categoryMap
-                    )
-                    
-                    withContext(Dispatchers.Main) {
-                        if (success) {
-                            snackbarHostState.showSnackbar(
-                                if (strings.language == "界面语言") "导出成功！包含 ${transactions.size} 笔交易和 ${assets.size} 条资产记录"
-                                else "Export successful! ${transactions.size} transactions and ${assets.size} assets"
-                            )
-                        } else {
-                            snackbarHostState.showSnackbar(
-                                if (strings.language == "界面语言") "导出失败"
-                                else "Export failed"
-                            )
-                        }
-                    }
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                    withContext(Dispatchers.Main) {
-                        snackbarHostState.showSnackbar(
-                            if (strings.language == "界面语言") "导出失败: ${e.localizedMessage}"
-                            else "Export failed: ${e.localizedMessage}"
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-    val performCsvImport: suspend (() -> java.io.InputStream?) -> Unit = { openStream ->
-        try {
-            var successCount = 0
-            val importNewCategoriesMap = mutableMapOf<Pair<String, TransactionType>, Boolean>()
-
-            fun parseCsvLine(line: String): List<String> {
-                val result = mutableListOf<String>()
-                var current = java.lang.StringBuilder()
-                var inQuotes = false
-                for (char in line) {
-                    if (char == '\"') {
-                        inQuotes = !inQuotes
-                    } else if (char == ',' && !inQuotes) {
-                        result.add(current.toString().replace("\"\"", "\"").trim())
-                        current = java.lang.StringBuilder()
-                    } else {
-                        current.append(char)
-                    }
-                }
-                result.add(current.toString().replace("\"\"", "\"").trim())
-                return result
-            }
-
-            var idIdx = -1
-            var dateIdx = 0
-            var typeIdx = 1
-            var amountIdx = 2
-            var catIdx = 3
-            var noteIdx = 4
-
-            openStream()?.bufferedReader()?.useLines { lines ->
-                val iterator = lines.iterator()
-                if (!iterator.hasNext()) return@useLines
-
-                val headerLine = iterator.next()
-                val headerParts = parseCsvLine(headerLine)
-                if (headerParts.any { it.equals("Date", true) || it.contains("日期") || it.contains("时间") } ||
-                    headerParts.any { it.equals("Amount", true) || it.contains("金额") }) {
-                    idIdx = headerParts.indexOfFirst { it.equals("ID", true) || it.contains("单号") }
-                    dateIdx = headerParts.indexOfFirst { it.equals("Date", true) || it.contains("日期") || it.contains("时间") }.takeIf { it >= 0 } ?: 0
-                    typeIdx = headerParts.indexOfFirst { it.equals("Type", true) || it.contains("类型") || it.contains("收支") }.takeIf { it >= 0 } ?: 1
-                    amountIdx = headerParts.indexOfFirst { it.equals("Amount", true) || it.contains("金额") }.takeIf { it >= 0 } ?: 2
-                    catIdx = headerParts.indexOfFirst { it.equals("Category", true) || it.contains("分类") || it.contains("类别") }.takeIf { it >= 0 } ?: 3
-                    noteIdx = headerParts.indexOfFirst { it.equals("Note", true) || it.contains("备注") || it.contains("说明") || it.contains("商品") }.takeIf { it >= 0 } ?: 4
-                }
-
-                while(iterator.hasNext()) {
-                    val line = iterator.next()
-                    val parts = parseCsvLine(line)
-                    if (parts.size >= 5) {
-                        val typeString = parts.getOrNull(typeIdx) ?: ""
-                        val categoryName = parts.getOrNull(catIdx)?.trim() ?: ""
-
-                        val type = if (typeString.equals("Income", ignoreCase = true) || typeString.contains("收入") || typeString.contains("退款")) TransactionType.INCOME else TransactionType.EXPENSE
-                        val catMatch = categories.find { it.name.equals(categoryName, ignoreCase = true) && it.type == type }
-
-                        if (catMatch == null && categoryName.isNotBlank() && categoryName != "Other" && categoryName != "/") {
-                            importNewCategoriesMap[categoryName to type] = true
-                        }
-                    }
-                }
-            }
-
-            for ((name, type) in importNewCategoriesMap.keys) {
-                categoryViewModel.addCategory(com.example.accountkeeper.data.model.Category(name = name, type = type, isDefault = false))
-            }
-
-            kotlinx.coroutines.delay(500)
-
-            val latestCategories = categoryViewModel.categories.value
-            val latestTransactions = viewModel.transactions.value
-
-            openStream()?.bufferedReader()?.useLines { lines ->
-                val iterator = lines.iterator()
-                if (!iterator.hasNext()) return@useLines
-                iterator.next()
-
-                while(iterator.hasNext()) {
-                    val line = iterator.next()
-                    val parts = parseCsvLine(line)
-                    if (parts.size >= 5) {
-                        val parsedId = if (idIdx >= 0) parts.getOrNull(idIdx)?.toLongOrNull() ?: IdGenerator.generateId() else IdGenerator.generateId()
-
-                        if (latestTransactions.any { it.id == parsedId }) {
-                            continue
-                        }
-
-                        val typeString = parts.getOrNull(typeIdx) ?: ""
-                        val amountString = parts.getOrNull(amountIdx)?.replace(Regex("[^\\d.]"), "") ?: "0"
-                        val amount = amountString.toDoubleOrNull() ?: 0.0
-                        val categoryName = parts.getOrNull(catIdx)?.trim() ?: ""
-                        val note = parts.getOrNull(noteIdx) ?: ""
-                        val dateStr = parts.getOrNull(dateIdx) ?: ""
-
-                        var dateMillis = System.currentTimeMillis()
-                        val formats = listOf("yyyy-MM-dd HH:mm:ss", "yyyy/MM/dd HH:mm:ss", "yyyy-MM-dd", "yyyy/MM/dd")
-                        for (format in formats) {
-                            try {
-                                val parsed = SimpleDateFormat(format, Locale.getDefault()).parse(dateStr)
-                                if (parsed != null) {
-                                    dateMillis = parsed.time
-                                    break
-                                }
-                            } catch (e: Exception) { }
-                        }
-
-                        val type = if (typeString.equals("Income", ignoreCase = true) || typeString.contains("收入") || typeString.contains("退款")) TransactionType.INCOME else TransactionType.EXPENSE
-                        val catMatch = latestCategories.find { it.name.equals(categoryName, ignoreCase = true) && it.type == type }
-
-                        val categoryId = catMatch?.id ?: latestCategories.firstOrNull { it.type == type }?.id
-
-                        if (amount > 0 && categoryId != null) {
-                            val transaction = Transaction(
-                                id = parsedId,
-                                type = type,
-                                amount = amount,
-                                note = note,
-                                date = dateMillis,
-                                categoryId = categoryId
-                            )
-                            viewModel.addTransaction(transaction)
-                            successCount++
-                        }
-                    }
-                }
-            }
-            snackbarHostState.showSnackbar(if (successCount > 0) {
-                                        if (strings.language == "界面语言") "成功融合 $successCount 笔数据！" else "Successfully merged $successCount records!"
-                                    } else {
-                                        if (strings.language == "界面语言") "合并完毕：但未识别出任何需要补充的新数据" else "Merge complete: no new data to add"
-                                    })
-                                } catch (e: Exception) {
-                                    e.printStackTrace()
-                                    snackbarHostState.showSnackbar(if (strings.language == "界面语言") "合并解析失败: ${e.localizedMessage}" else "Merge parsing failed: ${e.localizedMessage}")        }
-    }
-
-    // ZIP 导入处理 - 内联函数避免 return 标签问题
-    suspend fun performZipImport(uri: Uri) {
-        try {
-            val result = settingsViewModel.backupManager.readZipBackup(uri)
-            
-            if (!result.success) {
-                withContext(Dispatchers.Main) {
+            financialArchiveViewModel.export(uri) { success ->
+                scope.launch {
                     snackbarHostState.showSnackbar(
-                        if (strings.language == "界面语言") "导入失败: ${result.errorMessage}"
-                        else "Import failed: ${result.errorMessage}"
+                        if (success) strings.archiveExportSuccess else strings.archiveExportFailed
                     )
                 }
-                return
-            }
-            
-            var txCount = 0
-            var assetCount = 0
-            val importNewCategoriesMap = mutableMapOf<Pair<String, TransactionType>, Boolean>()
-            val importNewAssetCategoriesMap = mutableMapOf<String, Boolean>()
-            
-            // 收集需要创建的新分类
-            for (tx in result.transactions) {
-                val type = if (tx.type.equals("Income", ignoreCase = true)) TransactionType.INCOME else TransactionType.EXPENSE
-                val catMatch = categories.find { it.name.equals(tx.categoryName, ignoreCase = true) && it.type == type }
-                if (catMatch == null && tx.categoryName.isNotBlank() && tx.categoryName != "Other") {
-                    importNewCategoriesMap[tx.categoryName to type] = true
-                }
-            }
-            
-            for (asset in result.assets) {
-                if (asset.categoryName != null && asset.categoryName.isNotBlank()) {
-                    val catMatch = categories.find { it.name.equals(asset.categoryName, ignoreCase = true) }
-                    if (catMatch == null) {
-                        importNewAssetCategoriesMap[asset.categoryName] = true
-                    }
-                }
-            }
-            
-            // 创建新分类
-            for ((name, type) in importNewCategoriesMap.keys) {
-                categoryViewModel.addCategory(com.example.accountkeeper.data.model.Category(name = name, type = type, isDefault = false))
-            }
-            for (name in importNewAssetCategoriesMap.keys) {
-                // 资产分类默认为 EXPENSE 类型
-                categoryViewModel.addCategory(com.example.accountkeeper.data.model.Category(name = name, type = TransactionType.EXPENSE, isDefault = false))
-            }
-            
-            kotlinx.coroutines.delay(500)
-            
-            val latestCategories = categoryViewModel.categories.value
-            val latestTransactions = viewModel.transactions.value
-            val latestAssets = assetViewModel.assets.value
-            
-            // 处理附件文件映射
-            val processedAttachments = mutableMapOf<String, Attachment>()
-            for ((attachmentId, tempFile) in result.attachmentFiles) {
-                val originalFileName = tempFile.name.substringAfter("_", tempFile.name)
-                val newAttachment = settingsViewModel.backupManager.copyAttachmentToInternalStorage(
-                    attachmentId = attachmentId,
-                    tempFile = tempFile,
-                    originalFileName = originalFileName
-                )
-                if (newAttachment != null) {
-                    processedAttachments[attachmentId] = newAttachment
-                }
-            }
-            
-            // 导入交易记录
-            for (tx in result.transactions) {
-                if (latestTransactions.any { it.id == tx.id }) continue
-                
-                val type = if (tx.type.equals("Income", ignoreCase = true)) TransactionType.INCOME else TransactionType.EXPENSE
-                val catMatch = latestCategories.find { it.name.equals(tx.categoryName, ignoreCase = true) && it.type == type }
-                val categoryId = catMatch?.id ?: latestCategories.firstOrNull { it.type == type }?.id
-                
-                if (tx.amount > 0 && categoryId != null) {
-                    val transaction = Transaction(
-                        id = tx.id,
-                        type = type,
-                        amount = tx.amount,
-                        note = tx.note,
-                        date = tx.date,
-                        categoryId = categoryId
-                    )
-                    viewModel.addTransaction(transaction)
-                    txCount++
-                }
-            }
-            
-            // 导入资产记录
-            for (assetData in result.assets) {
-                if (latestAssets.any { it.id == assetData.id }) continue
-                
-                val catMatch = latestCategories.find { it.name.equals(assetData.categoryName, ignoreCase = true) }
-                val categoryId = catMatch?.id
-                
-                // 更新附件路径
-                val updatedAttachments = assetData.attachments.map { att ->
-                    processedAttachments[att.id] ?: att
-                }
-                
-                val asset = Asset(
-                    id = assetData.id,
-                    date = assetData.date,
-                    amount = assetData.amount,
-                    status = try { AssetStatus.valueOf(assetData.status) } catch (e: Exception) { AssetStatus.NONE },
-                    categoryId = categoryId,
-                    targetPerson = assetData.targetPerson,
-                    targetAccount = assetData.targetAccount,
-                    note = assetData.note,
-                    isCompleted = assetData.isCompleted,
-                    attachments = AttachmentConverter.toJson(updatedAttachments),
-                    createdAt = assetData.createdAt,
-                    updatedAt = assetData.updatedAt
-                )
-                assetViewModel.addAsset(asset)
-                assetCount++
-            }
-            
-            // 清理临时文件
-            settingsViewModel.backupManager.cleanupTempFiles()
-            
-            withContext(Dispatchers.Main) {
-                val message = if (strings.language == "界面语言") {
-                    "导入成功！交易记录: $txCount 笔，资产记录: $assetCount 条"
-                } else {
-                    "Import successful! Transactions: $txCount, Assets: $assetCount"
-                }
-                snackbarHostState.showSnackbar(message)
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            withContext(Dispatchers.Main) {
-                snackbarHostState.showSnackbar(
-                    if (strings.language == "界面语言") "导入失败: ${e.localizedMessage}"
-                    else "Import failed: ${e.localizedMessage}"
-                )
             }
         }
     }
@@ -403,8 +105,8 @@ fun DataManagementScreen(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         if (uri != null) {
-            scope.launch(Dispatchers.IO) {
-                performZipImport(uri)
+            financialArchiveViewModel.import(uri) { message ->
+                scope.launch { snackbarHostState.showSnackbar(message) }
             }
         }
     }
@@ -819,14 +521,7 @@ fun DataManagementScreen(
                                 }
                             }
                         }
-                    }
 
-                    HorizontalDivider()
-
-                    // Backup Retention Limit
-                    Column {
-                        Text(strings.backupRetentionLimit, style = MaterialTheme.typography.bodyMedium)
-                        Text(strings.backupThresholdDescription, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Spacer(modifier = Modifier.height(8.dp))
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -1010,6 +705,7 @@ fun DataManagementScreen(
                                     transactions = transactions,
                                     assets = assets,
                                     categoryMap = categoryMap,
+                                    budgets = archiveBudgets,
                                     maxKeep = appSettings.backupRetentionLimit,
                                     isAuto = false,
                                     customName = customBackupName.ifBlank { null }
@@ -1942,6 +1638,106 @@ private fun BackupFileItem(
 }
 
 @Composable
+fun BillFilePreviewDialog(
+    bill: java.io.File,
+    billType: String,
+    onDismiss: () -> Unit
+) {
+    var parsedTransactions by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(bill) {
+        try {
+            val lines = if (bill.extension.equals("xlsx", ignoreCase = true)) {
+                val workbook = org.apache.poi.ss.usermodel.WorkbookFactory.create(bill.inputStream())
+                val lineList = mutableListOf<String>()
+                val sheet = workbook.getSheetAt(0)
+                for (row in sheet) {
+                    val cells = mutableListOf<String>()
+                    for (cell in row) {
+                        val cellValue = when (cell.cellType) {
+                            org.apache.poi.ss.usermodel.CellType.STRING -> cell.stringCellValue ?: ""
+                            org.apache.poi.ss.usermodel.CellType.NUMERIC -> {
+                                val num = cell.numericCellValue
+                                if (num == num.toLong().toDouble()) num.toLong().toString() else num.toString()
+                            }
+                            org.apache.poi.ss.usermodel.CellType.BOOLEAN -> cell.booleanCellValue.toString()
+                            org.apache.poi.ss.usermodel.CellType.FORMULA -> {
+                                try { cell.stringCellValue ?: cell.numericCellValue.toString() } catch (e: Exception) { "" }
+                            }
+                            else -> ""
+                        }
+                        cells.add(cellValue.trim())
+                    }
+                    if (cells.any { it.isNotBlank() }) {
+                        lineList.add(cells.joinToString(","))
+                    }
+                }
+                workbook.close()
+                lineList
+            } else {
+                val bytes = bill.readBytes()
+                val content = try { String(bytes, charset("GBK")) } catch (e: Exception) { String(bytes, Charsets.UTF_8) }
+                content.lines().filter { it.isNotBlank() }
+            }
+
+            val parseResult = when (billType) {
+                "wechat" -> BillParser.parseWeChatBill(lines)
+                "alipay" -> BillParser.parseAlipayBill(lines)
+                else -> null
+            }
+
+            parsedTransactions = parseResult?.transactions?.map { tx ->
+                val dateStr = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date(tx.date))
+                val typeStr = if (tx.type == com.example.accountkeeper.data.model.TransactionType.INCOME) "+" else "-"
+                val note = tx.note.ifBlank { tx.category }
+                "$typeStr${String.format(java.util.Locale.US, "%.2f", tx.amount)}" to "$dateStr $note"
+            } ?: emptyList()
+        } catch (e: Exception) {
+            error = e.message
+        } finally {
+            isLoading = false
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(bill.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) },
+        text = {
+            Box(modifier = Modifier.fillMaxWidth().heightIn(max = 400.dp)) {
+                when {
+                    isLoading -> CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                    error != null -> Text("Error: $error", color = MaterialTheme.colorScheme.error)
+                    parsedTransactions.isEmpty() -> Text("No transactions found", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    else -> {
+                        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(parsedTransactions) { (amount, detail) ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(detail, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                                    Text(
+                                        amount,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (amount.startsWith("+")) Color(0xFF00B5A4) else Color(0xFFE63946)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Close") }
+        }
+    )
+}
+
+@Composable
 fun BillFileDialog(
     onDismiss: () -> Unit,
     backupManager: com.example.accountkeeper.utils.BackupManager,
@@ -1956,6 +1752,7 @@ fun BillFileDialog(
 ) {
     val bills by remember(refreshTrigger) { mutableStateOf(backupManager.getAllBillFiles()) }
     val scope = rememberCoroutineScope()
+    var previewBill by remember { mutableStateOf<Pair<java.io.File, String>?>(null) }
 
     val isChinese = strings.language == "界面语言"
     
@@ -1998,7 +1795,8 @@ fun BillFileDialog(
                                 viewModel = viewModel, 
                                 snackbarHostState = snackbarHostState, 
                                 onRefresh = onRefresh,
-                                strings = strings
+                                strings = strings,
+                                onPreview = { previewBill = it to "wechat" }
                             ) 
                         }
                     }
@@ -2026,7 +1824,8 @@ fun BillFileDialog(
                                 viewModel = viewModel, 
                                 snackbarHostState = snackbarHostState, 
                                 onRefresh = onRefresh,
-                                strings = strings
+                                strings = strings,
+                                onPreview = { previewBill = it to "alipay" }
                             ) 
                         }
                     }
@@ -2054,7 +1853,8 @@ fun BillFileDialog(
                                 viewModel = viewModel, 
                                 snackbarHostState = snackbarHostState, 
                                 onRefresh = onRefresh,
-                                strings = strings
+                                strings = strings,
+                                onPreview = { previewBill = it to backupManager.detectBillType(it) }
                             ) 
                         }
                     }
@@ -2064,6 +1864,14 @@ fun BillFileDialog(
         confirmButton = { TextButton(onClick = onDismiss) { Text(strings.close) } },
         shape = RoundedCornerShape(20.dp)
     )
+
+    previewBill?.let { preview ->
+        BillFilePreviewDialog(
+            bill = preview.first,
+            billType = preview.second,
+            onDismiss = { previewBill = null }
+        )
+    }
 }
 
 @Composable
@@ -2078,10 +1886,11 @@ fun BillFileItem(
     viewModel: TransactionViewModel,
     snackbarHostState: SnackbarHostState,
     onRefresh: () -> Unit,
-    strings: AppStrings
+    strings: AppStrings,
+    onPreview: (java.io.File) -> Unit = {}
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().clickable { onPreview(bill) },
         shape = RoundedCornerShape(8.dp)
     ) {
         Row(

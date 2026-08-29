@@ -9,6 +9,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -28,6 +29,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -102,6 +104,7 @@ fun AddEditAssetScreen(
     // Attachments state
     val context = LocalContext.current
     var attachments by remember { mutableStateOf<List<Attachment>>(emptyList()) }
+    var previewAttachment by remember { mutableStateOf<Attachment?>(null) }
     
     // File picker launcher
     val filePickerLauncher = rememberLauncherForActivityResult(
@@ -145,6 +148,7 @@ fun AddEditAssetScreen(
         AssetStatus.NONE -> MaterialTheme.colorScheme.onSurfaceVariant
         AssetStatus.OWNED -> Color(0xFF4CAF50)
         AssetStatus.NOT_OWNED -> Color(0xFF9E9E9E)
+        AssetStatus.LOST -> Color(0xFFE53935)
         AssetStatus.IN_PROGRESS -> Color(0xFFFFC107)
         AssetStatus.TEMPORARILY_WITH_ME -> Color(0xFFFFC107)
         AssetStatus.TEMPORARILY_WITH_OTHERS -> Color(0xFFFFC107)
@@ -154,6 +158,7 @@ fun AddEditAssetScreen(
         AssetStatus.NONE -> strings.none
         AssetStatus.OWNED -> strings.owned
         AssetStatus.NOT_OWNED -> strings.notOwned
+        AssetStatus.LOST -> strings.lost
         AssetStatus.IN_PROGRESS -> strings.inProgress
         AssetStatus.TEMPORARILY_WITH_ME -> strings.temporarilyWithMe
         AssetStatus.TEMPORARILY_WITH_OTHERS -> strings.temporarilyWithOthers
@@ -162,6 +167,7 @@ fun AddEditAssetScreen(
     // Flow status for top right display
     val flowStatus: String? = when (selectedStatus) {
         AssetStatus.OWNED, AssetStatus.NOT_OWNED -> strings.assetFlowCompleted
+        AssetStatus.LOST -> strings.lost
         AssetStatus.IN_PROGRESS -> strings.assetFlowInProgress
         AssetStatus.TEMPORARILY_WITH_ME, AssetStatus.TEMPORARILY_WITH_OTHERS -> strings.assetFlowInProgress
         AssetStatus.NONE -> null
@@ -169,6 +175,7 @@ fun AddEditAssetScreen(
 
     val flowStatusColor = when (selectedStatus) {
         AssetStatus.OWNED, AssetStatus.NOT_OWNED -> Color(0xFF4CAF50)
+        AssetStatus.LOST -> Color(0xFFE53935)
         AssetStatus.IN_PROGRESS -> Color(0xFFFF9800)
         AssetStatus.TEMPORARILY_WITH_ME, AssetStatus.TEMPORARILY_WITH_OTHERS -> Color(0xFFFF9800)
         AssetStatus.NONE -> Color.Transparent
@@ -349,7 +356,7 @@ fun AddEditAssetScreen(
                         DropdownMenuItem(
                             text = { 
                                 Text(
-                                    "请先在设置中添加资产分类",
+                                    strings.addAssetCategoryFirst,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 ) 
                             },
@@ -495,7 +502,8 @@ fun AddEditAssetScreen(
                                     attachment = attachment,
                                     onRemove = {
                                         attachments = attachments.filter { it.id != attachment.id }
-                                    }
+                                    },
+                                    onClick = { previewAttachment = attachment }
                                 )
                             }
                         }
@@ -510,7 +518,7 @@ fun AddEditAssetScreen(
                 onClick = {
                     val amountValue = amount.toDoubleOrNull()
                     if (amountValue == null || amountValue <= 0) {
-                        amountError = "请输入有效金额"
+                        amountError = strings.enterValidAmount
                         return@PremiumAssetSaveButton
                     }
                     if (selectedCategoryId == null) {
@@ -627,6 +635,15 @@ fun AddEditAssetScreen(
                                 showStatusPicker = false
                             }
                         )
+                        StatusOption(
+                            label = strings.lost,
+                            color = Color(0xFFE53935),
+                            isSelected = selectedStatus == AssetStatus.LOST,
+                            onClick = {
+                                selectedStatus = AssetStatus.LOST
+                                showStatusPicker = false
+                            }
+                        )
                     }
                 },
                 confirmButton = {
@@ -634,6 +651,14 @@ fun AddEditAssetScreen(
                         Text(strings.ok)
                     }
                 }
+            )
+        }
+
+        // Attachment Preview Dialog
+        previewAttachment?.let { attachment ->
+            AttachmentPreviewDialog(
+                attachment = attachment,
+                onDismiss = { previewAttachment = null }
             )
         }
     }
@@ -768,7 +793,8 @@ fun SettingsRow(
 @Composable
 fun AttachmentItem(
     attachment: Attachment,
-    onRemove: () -> Unit
+    onRemove: () -> Unit,
+    onClick: () -> Unit = {}
 ) {
     val icon = when (attachment.fileType) {
         AttachmentType.IMAGE -> Icons.Default.Image
@@ -779,7 +805,7 @@ fun AttachmentItem(
     val fileSizeText = formatFileSize(attachment.fileSize)
     
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().clickable { onClick() },
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
     ) {
@@ -880,6 +906,40 @@ fun PremiumAssetStatusSelector(
     onStatusSelected: (AssetStatus) -> Unit,
     strings: AppStrings
 ) {
+    val statusOption = if (isPositiveCategory) AssetStatus.OWNED to strings.owned else AssetStatus.NOT_OWNED to strings.notOwned
+    val statusGradient = if (isPositiveCategory) {
+        if (isSystemInDarkTheme()) DarkGradientOwned else LightGradientOwned
+    } else {
+        if (isSystemInDarkTheme()) DarkGradientNotOwned else LightGradientNotOwned
+    }
+    val noneGradient = listOf(
+        MaterialTheme.colorScheme.onSurfaceVariant,
+        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+    )
+    val progressGradient = if (isSystemInDarkTheme()) DarkGradientInProgress else LightGradientInProgress
+    val lostGradient = listOf(Color(0xFFB71C1C), Color(0xFFE53935))
+
+    @Composable
+    fun RowScope.StatusSegment(status: AssetStatus, label: String, gradient: List<Color>) {
+        val selected = selectedStatus == status
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight()
+                .then(if (selected) Modifier.background(Brush.horizontalGradient(gradient)) else Modifier)
+                .clickable { onStatusSelected(status) },
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                label,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                color = if (selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1
+            )
+        }
+    }
+
     Card(
         shape = RoundedCornerShape(24.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
@@ -891,85 +951,10 @@ fun PremiumAssetStatusSelector(
                 .clip(RoundedCornerShape(24.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant)
         ) {
-            // None option
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .then(
-                        if (selectedStatus == AssetStatus.NONE) {
-                            Modifier.background(
-                                Brush.horizontalGradient(
-                                    listOf(
-                                        MaterialTheme.colorScheme.onSurfaceVariant,
-                                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                                    )
-                                )
-                            )
-                        } else Modifier
-                    )
-                    .clickable { onStatusSelected(AssetStatus.NONE) },
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    strings.`none`,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = if (selectedStatus == AssetStatus.NONE) FontWeight.Bold else FontWeight.Medium,
-                    color = if (selectedStatus == AssetStatus.NONE) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            
-            // Owned/NotOwned option based on category type
-            val statusOption = if (isPositiveCategory) AssetStatus.OWNED to strings.owned else AssetStatus.NOT_OWNED to strings.notOwned
-            val statusGradient = if (isPositiveCategory) {
-                if (isSystemInDarkTheme()) DarkGradientOwned else LightGradientOwned
-            } else {
-                if (isSystemInDarkTheme()) DarkGradientNotOwned else LightGradientNotOwned
-            }
-            
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .then(
-                        if (selectedStatus == statusOption.first) {
-                            Modifier.background(Brush.horizontalGradient(statusGradient))
-                        } else Modifier
-                    )
-                    .clickable { onStatusSelected(statusOption.first) },
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    statusOption.second,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = if (selectedStatus == statusOption.first) FontWeight.Bold else FontWeight.Medium,
-                    color = if (selectedStatus == statusOption.first) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            
-            // In Progress option
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .then(
-                        if (selectedStatus == AssetStatus.IN_PROGRESS) {
-                            Modifier.background(
-                                if (isSystemInDarkTheme()) Brush.horizontalGradient(DarkGradientInProgress)
-                                else Brush.horizontalGradient(LightGradientInProgress)
-                            )
-                        } else Modifier
-                    )
-                    .clickable { onStatusSelected(AssetStatus.IN_PROGRESS) },
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    strings.inProgress,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = if (selectedStatus == AssetStatus.IN_PROGRESS) FontWeight.Bold else FontWeight.Medium,
-                    color = if (selectedStatus == AssetStatus.IN_PROGRESS) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            StatusSegment(AssetStatus.NONE, strings.none, noneGradient)
+            StatusSegment(statusOption.first, statusOption.second, statusGradient)
+            StatusSegment(AssetStatus.IN_PROGRESS, strings.inProgress, progressGradient)
+            StatusSegment(AssetStatus.LOST, strings.lost, lostGradient)
         }
     }
 }
@@ -1126,4 +1111,70 @@ fun PremiumAssetSaveButton(
             fontWeight = FontWeight.Bold
         )
     }
+}
+
+@Composable
+fun AttachmentPreviewDialog(
+    attachment: Attachment,
+    onDismiss: () -> Unit
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var fileContent by remember { mutableStateOf<String?>(null) }
+    var imageBitmap by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+
+    LaunchedEffect(attachment.filePath) {
+        try {
+            val file = java.io.File(attachment.filePath)
+            when (attachment.fileType) {
+                AttachmentType.IMAGE -> {
+                    val bitmap = android.graphics.BitmapFactory.decodeFile(attachment.filePath)
+                    imageBitmap = bitmap?.asImageBitmap()
+                }
+                AttachmentType.EXCEL, AttachmentType.CSV -> {
+                    val text = file.readText(Charsets.UTF_8)
+                    fileContent = text.take(5000)
+                }
+                else -> {
+                    val text = file.readText(Charsets.UTF_8)
+                    fileContent = text.take(5000)
+                }
+            }
+        } catch (e: Exception) {
+            fileContent = "Error: ${e.message}"
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(attachment.fileName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) },
+        text = {
+            Box(modifier = Modifier.fillMaxWidth().heightIn(max = 400.dp)) {
+                when {
+                    imageBitmap != null -> {
+                        androidx.compose.foundation.Image(
+                            bitmap = imageBitmap!!,
+                            contentDescription = attachment.fileName,
+                            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)),
+                            contentScale = androidx.compose.ui.layout.ContentScale.Fit
+                        )
+                    }
+                    fileContent != null -> {
+                        androidx.compose.foundation.rememberScrollState().let { scrollState ->
+                            Text(
+                                text = fileContent!!,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.fillMaxWidth().verticalScroll(scrollState)
+                            )
+                        }
+                    }
+                    else -> {
+                        CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Close") }
+        }
+    )
 }
