@@ -97,6 +97,19 @@ class SettingsRepository @Inject constructor(
         }
     }
 
+    suspend fun restore(settings: AppSettings) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.IS_DARK_MODE] = settings.isDarkMode
+            preferences[PreferencesKeys.LANGUAGE] = settings.language
+            preferences[PreferencesKeys.CURRENCY_SYMBOL] = settings.currencySymbol
+            preferences[PreferencesKeys.AUTO_BACKUP] = settings.isAutoBackupEnabled
+            preferences[PreferencesKeys.BACKUP_LIMIT] = settings.backupRetentionLimit
+            preferences[PreferencesKeys.SWIPE_DELETE_CONFIRM] = settings.swipeDeleteRequiresConfirm
+            preferences[PreferencesKeys.SCHEDULED_BACKUP] = settings.isScheduledBackupEnabled
+            preferences[PreferencesKeys.SCHEDULED_BACKUP_INTERVAL] = settings.scheduledBackupInterval
+        }
+    }
+
     suspend fun updateScheduledBackupInterval(intervalHours: Int) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.SCHEDULED_BACKUP_INTERVAL] = intervalHours

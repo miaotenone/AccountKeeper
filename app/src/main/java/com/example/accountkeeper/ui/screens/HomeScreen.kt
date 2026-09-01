@@ -230,13 +230,13 @@ fun HomeScreen(
                             } else {
                                 Column {
                                     Text(
-                                        "AccountKeeper",
+                                        strings.appName,
                                         style = MaterialTheme.typography.headlineSmall,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onSurface
                                     )
                                     Text(
-                                        "Manage your finances",
+                                        strings.appSubtitle,
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )

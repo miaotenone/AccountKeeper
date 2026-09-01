@@ -25,5 +25,6 @@ data class Transaction(
     val date: Long,
     val categoryId: Long?,
     val note: String,
-    val source: TransactionSource = TransactionSource.MANUAL
+    val source: TransactionSource = TransactionSource.MANUAL,
+    val attachments: String = ""
 )

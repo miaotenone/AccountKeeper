@@ -30,6 +30,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.accountkeeper.ui.theme.LocalAppStrings
 import com.example.accountkeeper.ui.viewmodel.FinancialArchiveViewModel
 import kotlinx.coroutines.launch
 
@@ -41,10 +42,11 @@ fun FinancialArchiveScreen(
 ) {
     val snackbarHost = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    val strings = LocalAppStrings.current
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
         uri ?: return@rememberLauncherForActivityResult
         viewModel.export(uri) { success ->
-            scope.launch { snackbarHost.showSnackbar(if (success) "Financial archive exported" else "Export failed") }
+            scope.launch { snackbarHost.showSnackbar(if (success) strings.archiveExportSuccess else strings.archiveExportFailed) }
         }
     }
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -55,8 +57,8 @@ fun FinancialArchiveScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Financial archive") },
-                navigationIcon = { IconButton(onClick = onNavigateBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } }
+                title = { Text(strings.financialArchive) },
+                navigationIcon = { IconButton(onClick = onNavigateBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, strings.back) } }
             )
         },
         snackbarHost = { SnackbarHost(snackbarHost) }
@@ -67,23 +69,23 @@ fun FinancialArchiveScreen(
         ) {
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Export financial archive", style = MaterialTheme.typography.titleMedium)
-                    Text("Includes transactions, assets, attachments, asset types, and budgets.")
+                    Text(strings.exportAll, style = MaterialTheme.typography.titleMedium)
+                    Text(strings.financialArchiveDescription)
                     Button(onClick = { exportLauncher.launch("AccountKeeper_Financial_Archive.zip") }) {
                         Icon(Icons.Default.Download, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
-                        Text("Export ZIP")
+                        Text(strings.exportAll)
                     }
                 }
             }
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Import financial archive", style = MaterialTheme.typography.titleMedium)
-                    Text("Existing transaction and asset IDs are kept. Asset types match by name; matching budgets are replaced.")
+                    Text(strings.uploadBackup, style = MaterialTheme.typography.titleMedium)
+                    Text(strings.infoLimitation)
                     Button(onClick = { importLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed")) }) {
                         Icon(Icons.Default.Upload, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
-                        Text("Import ZIP")
+                        Text(strings.uploadBackup)
                     }
                 }
             }

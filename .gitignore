@@ -4,10 +4,29 @@
 .kotlin/
 build/
 **/build/
+.idea/caches/
+.idea/libraries/
+.idea/modules.xml
+.idea/navEditor.xml
+.idea/assetWizardSettings.xml
+.idea/deploymentTargetDropDown.xml
+.idea/androidTestResultsUserPreferences.xml
+*.log
+*.tmp
 
 # Android Studio and IDE files
 .idea/
 *.iml
+.idea/**/workspace.xml
+.idea/**/tasks.xml
+.idea/**/shelf/
+.idea/**/usage.statistics.xml
+*.ipr
+*.iws
+*.orig
+.vscode/
+*.log
+*.hprof
 
 # Android local/native build files
 local.properties
@@ -15,6 +34,8 @@ local.properties
 .cxx/
 captures/
 .tooling/
+out/
+app/release/
 
 # Generated packages and reports
 *.apk
@@ -22,6 +43,10 @@ captures/
 *.apks
 *.dm
 *.mapping
+*.class
+*.dex
+*.tmp
+*.swp
 
 # Signing keys and private service configuration
 *.jks

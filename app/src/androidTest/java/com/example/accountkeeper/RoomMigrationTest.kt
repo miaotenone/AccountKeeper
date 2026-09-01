@@ -49,7 +49,15 @@ class RoomMigrationTest {
         AppDatabase.MIGRATION_9_10,
         AppDatabase.MIGRATION_10_11,
         AppDatabase.MIGRATION_11_12,
-        AppDatabase.MIGRATION_12_13
+        AppDatabase.MIGRATION_12_13,
+        AppDatabase.MIGRATION_13_14,
+        AppDatabase.MIGRATION_14_15,
+        AppDatabase.MIGRATION_15_16,
+        AppDatabase.MIGRATION_16_17,
+        AppDatabase.MIGRATION_17_18,
+        AppDatabase.MIGRATION_18_19,
+        AppDatabase.MIGRATION_19_20,
+        AppDatabase.MIGRATION_20_21
     )
 
     private fun createVersion1Schema(db: SupportSQLiteDatabase) {
@@ -150,7 +158,7 @@ class RoomMigrationTest {
     }
 
     @Test
-    fun migrateAll_from1To11() {
+    fun migrateAll_from1To21() {
         val db = openDbAtVersion(1) { createVersion1Schema(it) }
         runMigrations(db, allMigrations())
         assertNotNull(db)
@@ -299,11 +307,14 @@ class RoomMigrationTest {
     }
 
     @Test
-    fun fullMigration_from1To12_preservesSchema() {
+    fun fullMigration_from1To21_preservesSchema() {
         val db = openDbAtVersion(1) { createVersion1Schema(it) }
         runMigrations(db, allMigrations())
 
-        val expectedTables = listOf("transactions", "categories", "assets", "budgets", "budget_months")
+        val expectedTables = listOf(
+            "transactions", "categories", "assets", "budgets", "budget_months",
+            "budget_approval_requests", "attachments", "asset_categories", "bill_files"
+        )
         for (table in expectedTables) {
             val cursor = db.query("SELECT name FROM sqlite_master WHERE type='table' AND name='$table'")
             assertTrue("Table $table should exist", cursor.count == 1)
@@ -317,7 +328,12 @@ class RoomMigrationTest {
 
         val expectedIndexes = listOf(
             "index_transactions_categoryId",
-            "index_assets_categoryId",
+            "index_assets_assetCategoryId",
+            "index_assets_sourceApprovalId",
+            "index_attachments_ownerType_ownerId",
+            "index_attachments_sha256",
+            "index_asset_categories_rootType",
+            "index_bill_files_ownerType",
             "index_budgets_monthKey_categoryId",
             "index_budgets_categoryId"
         )
@@ -326,6 +342,33 @@ class RoomMigrationTest {
             assertTrue("Index $index should exist", cursor.count == 1)
             cursor.close()
         }
+
+        val attachmentIndexCursor = db.query("PRAGMA index_list('attachments')")
+        var foundShaIndex = false
+        while (attachmentIndexCursor.moveToNext()) {
+            if (attachmentIndexCursor.getString(attachmentIndexCursor.getColumnIndexOrThrow("name")) == "index_attachments_sha256") {
+                assertEquals("Attachment sha256 index should allow one file to be linked to multiple owners", 0, attachmentIndexCursor.getInt(attachmentIndexCursor.getColumnIndexOrThrow("unique")))
+                foundShaIndex = true
+            }
+        }
+        attachmentIndexCursor.close()
+        assertTrue(foundShaIndex)
+
+        val assetForeignKeys = db.query("PRAGMA foreign_key_list('assets')")
+        val transactionColumns = db.query("PRAGMA table_info('transactions')")
+        val transactionColumnNames = mutableSetOf<String>()
+        while (transactionColumns.moveToNext()) {
+            transactionColumnNames += transactionColumns.getString(transactionColumns.getColumnIndexOrThrow("name"))
+        }
+        transactionColumns.close()
+        assertTrue("transactions table should keep legacy attachment JSON", transactionColumnNames.contains("attachments"))
+
+        val assetForeignKeyColumns = mutableListOf<String>()
+        while (assetForeignKeys.moveToNext()) {
+            assetForeignKeyColumns += assetForeignKeys.getString(assetForeignKeys.getColumnIndexOrThrow("from"))
+        }
+        assetForeignKeys.close()
+        assertEquals(listOf("assetCategoryId"), assetForeignKeyColumns)
 
         val expectedTriggers = listOf(
             "budgets_total_insert_guard",
@@ -344,6 +387,71 @@ class RoomMigrationTest {
 
         db.close()
     }
+
+    @Test
+    fun migration20To21_addsTransactionAttachmentColumn() {
+        val db = openDbAtVersion(1) { createVersion1Schema(it) }
+        runMigrations(db, allMigrations().dropLast(1))
+
+        AppDatabase.MIGRATION_20_21.migrate(db)
+
+        val transactionColumns = db.query("PRAGMA table_info('transactions')")
+        val transactionColumnNames = mutableSetOf<String>()
+        while (transactionColumns.moveToNext()) {
+            transactionColumnNames += transactionColumns.getString(transactionColumns.getColumnIndexOrThrow("name"))
+        }
+        transactionColumns.close()
+        assertTrue("transactions table should keep legacy attachment JSON", transactionColumnNames.contains("attachments"))
+        db.close()
+    }
+
+    @Test
+    fun migrationFrom15To21_preservesLegacyAssetAndApprovalAttachments() {
+        val db = openDbAtVersion(1) { createVersion1Schema(it) }
+        val migrations = allMigrations()
+        runMigrations(db, migrations.take(14))
+
+        val legacyAttachments = "[{\"id\":\"legacy-attachment\",\"fileName\":\"receipt.pdf\",\"filePath\":\"/files/receipt.pdf\",\"fileType\":\"PDF\",\"fileSize\":12,\"mimeType\":\"application/pdf\"}]"
+        db.execSQL("INSERT INTO asset_categories (name, rootType, parentCategoryId, isDefault, createdAt, updatedAt) VALUES ('Equipment', 'PHYSICAL', NULL, 0, 1, 1)")
+        db.execSQL("INSERT INTO assets (id, date, amount, status, categoryId, name, specification, quantity, purchaseDate, sourceApprovalId, targetPerson, targetAccount, note, isCompleted, attachments, createdAt, updatedAt, assetRootType, supplier, location, userOrDepartment, warranty, serviceStartDate, serviceEndDate, renewalCycle, accessUrl) VALUES (900, 1, 20.0, 'OWNED', NULL, '', '', 1.0, NULL, NULL, '', '', '', 0, ?, 1, 1, 'PHYSICAL', '', '', '', '', NULL, NULL, '', '')", arrayOf(legacyAttachments))
+        db.execSQL("INSERT INTO budget_approval_requests (type, monthKey, periodType, categoryId, assetCategoryId, amount, purchaseDate, reason, reasonDetail, itemName, specification, quantity, attachments, status, decisionNote, createdAt, updatedAt, decidedAt) VALUES ('PURCHASE_BUDGET', '2026-08', 'MONTHLY', NULL, NULL, 20.0, 1, '', '', '', '', 1.0, ?, 'PENDING', '', 1, 1, NULL)", arrayOf(legacyAttachments))
+
+        runMigrations(db, migrations.drop(14))
+
+        val assetCursor = db.query("SELECT attachments, assetCategoryId FROM assets WHERE id = 900")
+        assertTrue(assetCursor.moveToFirst())
+        assertEquals(legacyAttachments, assetCursor.getString(0))
+        assertTrue(assetCursor.isNull(1))
+        assetCursor.close()
+
+        val approvalCursor = db.query("SELECT attachments FROM budget_approval_requests")
+        assertTrue(approvalCursor.moveToFirst())
+        assertEquals(legacyAttachments, approvalCursor.getString(0))
+        approvalCursor.close()
+
+        val attachmentTableCursor = db.query("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'attachments'")
+        assertTrue(attachmentTableCursor.moveToFirst())
+        attachmentTableCursor.close()
+
+        val migratedAttachments = db.query("SELECT ownerType, ownerId, fileName FROM attachments ORDER BY ownerType")
+        assertEquals(2, migratedAttachments.count)
+        assertTrue(migratedAttachments.moveToFirst())
+        assertEquals("APPROVAL", migratedAttachments.getString(0))
+        assertEquals("receipt.pdf", migratedAttachments.getString(2))
+        assertTrue(migratedAttachments.moveToNext())
+        assertEquals("ASSET", migratedAttachments.getString(0))
+        assertEquals(900L, migratedAttachments.getLong(1))
+        migratedAttachments.close()
+
+        db.execSQL("INSERT INTO attachments (id, ownerType, ownerId, fileName, filePath, mimeType, fileSize, sha256, createdAt) VALUES ('same-hash-asset', 'ASSET', 1, 'copy.pdf', '/files/copy.pdf', 'application/pdf', 12, 'same-hash', 1)")
+        db.execSQL("INSERT INTO attachments (id, ownerType, ownerId, fileName, filePath, mimeType, fileSize, sha256, createdAt) VALUES ('same-hash-approval', 'APPROVAL', 1, 'copy.pdf', '/files/copy.pdf', 'application/pdf', 12, 'same-hash', 1)")
+        val duplicateHashCursor = db.query("SELECT COUNT(*) FROM attachments WHERE sha256 = 'same-hash'")
+        assertTrue(duplicateHashCursor.moveToFirst())
+        assertEquals(2, duplicateHashCursor.getInt(0))
+        duplicateHashCursor.close()
+        db.close()
+    }
+
 
     @Test
     fun migrate5to6_oldAssets_getVirtualAssetTypeId() {
@@ -416,6 +524,23 @@ class RoomMigrationTest {
             assertTrue("Budget amount should be non-negative, got $amount", amount >= 0.0)
         }
         cursor.close()
+        db.close()
+    }
+
+    @Test
+    fun migration20To21_allowsMultipleAssetsWithNullSourceApprovalId() {
+        val db = openDbAtVersion(1) { createVersion1Schema(it) }
+        runMigrations(db, allMigrations().dropLast(1))
+
+        AppDatabase.MIGRATION_20_21.migrate(db)
+
+        db.execSQL(
+            "INSERT INTO `assets` (`id`, `date`, `amount`, `status`, `categoryId`, `name`, `specification`, `quantity`, `purchaseDate`, `sourceApprovalId`, `targetPerson`, `targetAccount`, `note`, `isCompleted`, `attachments`, `createdAt`, `updatedAt`, `assetRootType`, `supplier`, `location`, `userOrDepartment`, `warranty`, `serviceStartDate`, `serviceEndDate`, `renewalCycle`, `accessUrl`) VALUES (901, 1, 10.0, 'OWNED', NULL, '', '', 1.0, NULL, NULL, '', '', '', 0, '', 1, 1, 'PHYSICAL', '', '', '', '', NULL, NULL, '', ''), (902, 1, 20.0, 'OWNED', NULL, '', '', 1.0, NULL, NULL, '', '', '', 0, '', 1, 1, 'PHYSICAL', '', '', '', '', NULL, NULL, '', '')"
+        )
+        val countCursor = db.query("SELECT COUNT(*) FROM assets WHERE sourceApprovalId IS NULL")
+        assertTrue(countCursor.moveToFirst())
+        assertEquals(2, countCursor.getInt(0))
+        countCursor.close()
         db.close()
     }
 }

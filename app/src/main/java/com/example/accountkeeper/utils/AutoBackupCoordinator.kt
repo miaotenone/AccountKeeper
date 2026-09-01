@@ -8,6 +8,10 @@ import com.example.accountkeeper.data.model.Budget
 import com.example.accountkeeper.data.model.Transaction
 import com.example.accountkeeper.data.model.TransactionType
 import com.example.accountkeeper.data.repository.AssetRepository
+import com.example.accountkeeper.data.repository.AssetCategoryRepository
+import com.example.accountkeeper.data.repository.AttachmentRepository
+import com.example.accountkeeper.data.repository.BillFileRepository
+import com.example.accountkeeper.data.repository.BudgetApprovalRepository
 import com.example.accountkeeper.data.repository.BudgetRepository
 import com.example.accountkeeper.data.repository.CategoryRepository
 import com.example.accountkeeper.data.repository.SettingsRepository
@@ -23,11 +27,42 @@ class AutoBackupCoordinator @Inject constructor(
     application: Application,
     private val transactionRepository: TransactionRepository,
     private val assetRepository: AssetRepository,
+    private val assetCategoryRepository: AssetCategoryRepository,
     private val categoryRepository: CategoryRepository,
     private val budgetRepository: BudgetRepository,
+    private val billFileRepository: BillFileRepository,
+    private val attachmentRepository: AttachmentRepository,
+    private val budgetApprovalRepository: BudgetApprovalRepository,
     private val settingsRepository: SettingsRepository
 ) {
     private val backupManager = BackupManager(application)
+
+    suspend fun resetChainFromCurrentData() {
+        val transactions = transactionRepository.getAllTransactions().first()
+        val assets = assetRepository.getAllAssets().first()
+        val categories = categoryRepository.getAllCategories().first()
+        val assetCategories = assetCategoryRepository.getAll().first()
+        val approvals = budgetApprovalRepository.getAll().first()
+        val attachments = attachmentRepository.getAll().first()
+        val budgets = budgetRepository.getAll().first()
+        val billFiles = billFileRepository.getAll().first()
+        val settings = settingsRepository.settingsFlow.first()
+        withContext(Dispatchers.IO) {
+            backupManager.deleteBackupChain()
+            backupManager.createBaseBackup(
+                transactions = transactions,
+                assets = assets,
+                categoryMap = categories.associate { it.id to it.name },
+                budgets = budgets,
+                billFiles = billFiles,
+                assetCategoryMap = assetCategories.associate { it.id to it.name },
+                assetCategories = assetCategories,
+                approvals = approvals,
+                attachments = attachments,
+                settings = settings.toArchiveData()
+            )
+        }
+    }
 
     suspend fun backupAfterDataChange() {
         val settings = settingsRepository.settingsFlow.first()
@@ -37,17 +72,21 @@ class AutoBackupCoordinator @Inject constructor(
         val assets = assetRepository.getAllAssets().first()
         val categories = categoryRepository.getAllCategories().first()
         val categoryMap = categories.associate { it.id to it.name }
+        val assetCategories = assetCategoryRepository.getAll().first()
+        val approvals = budgetApprovalRepository.getAll().first()
+        val attachments = attachmentRepository.getAll().first()
         val budgets = budgetRepository.getAll().first()
+        val billFiles = billFileRepository.getAll().first()
 
         withContext(Dispatchers.IO) {
             if (!backupManager.hasBackupChain()) {
-                backupManager.createBaseBackup(transactions, assets, categoryMap, budgets)
+                backupManager.createBaseBackup(transactions, assets, categoryMap, budgets, billFiles, assetCategories.associate { it.id to it.name }, assetCategories, approvals, attachments, settings.toArchiveData())
                 return@withContext
             }
 
             val latest = backupManager.restoreToStep(-1)
             if (!latest.success) {
-                backupManager.createBaseBackup(transactions, assets, categoryMap, budgets)
+                backupManager.createBaseBackup(transactions, assets, categoryMap, budgets, billFiles, assetCategories.associate { it.id to it.name }, assetCategories, approvals, attachments, settings.toArchiveData())
                 return@withContext
             }
 
@@ -58,7 +97,8 @@ class AutoBackupCoordinator @Inject constructor(
                     amount = data.amount,
                     date = data.date,
                     categoryId = categories.firstOrNull { it.name == data.categoryName }?.id,
-                    note = data.note
+                    note = data.note,
+                    attachments = AttachmentConverter.toJson(data.attachments)
                 )
             }
             val previousAssets = latest.assets.map { data ->
@@ -67,14 +107,30 @@ class AutoBackupCoordinator @Inject constructor(
                     date = data.date,
                     amount = data.amount,
                     status = runCatching { AssetStatus.valueOf(data.status) }.getOrDefault(AssetStatus.NONE),
-                    categoryId = categories.firstOrNull { it.name == data.categoryName }?.id,
+                    assetCategoryId = data.assetCategoryId,
+                    categoryId = null,
+                    name = data.name,
+                    specification = data.specification,
+                    quantity = data.quantity,
+                    purchaseDate = data.purchaseDate,
+                    sourceApprovalId = data.sourceApprovalId,
+                    transactionId = data.transactionId,
                     targetPerson = data.targetPerson,
                     targetAccount = data.targetAccount,
                     note = data.note,
                     isCompleted = data.isCompleted,
                     attachments = AttachmentConverter.toJson(data.attachments),
                     createdAt = data.createdAt,
-                    updatedAt = data.updatedAt
+                    updatedAt = data.updatedAt,
+                    assetRootType = data.assetRootType,
+                    supplier = data.supplier,
+                    location = data.location,
+                    userOrDepartment = data.userOrDepartment,
+                    warranty = data.warranty,
+                    serviceStartDate = data.serviceStartDate,
+                    serviceEndDate = data.serviceEndDate,
+                    renewalCycle = data.renewalCycle,
+                    accessUrl = data.accessUrl
                 )
             }
             val previousBudgets = latest.budgets.map { data ->
@@ -97,8 +153,29 @@ class AutoBackupCoordinator @Inject constructor(
                 categoryMap = categoryMap,
                 budgets = budgets,
                 previousBudgets = previousBudgets,
-                maxKeep = settings.backupRetentionLimit
+                maxKeep = settings.backupRetentionLimit,
+                billFiles = billFiles,
+                previousBillFiles = latest.billFiles,
+                assetCategoryMap = assetCategories.associate { it.id to it.name },
+                assetCategories = assetCategories,
+                previousAssetCategories = latest.assetCategories,
+                approvals = approvals,
+                previousApprovals = latest.approvals,
+                attachments = attachments,
+                previousAttachments = latest.attachments,
+                settings = settings.toArchiveData()
             )
         }
     }
+
+    private fun com.example.accountkeeper.data.repository.AppSettings.toArchiveData() = SettingsData(
+        isDarkMode = isDarkMode,
+        language = language,
+        currencySymbol = currencySymbol,
+        isAutoBackupEnabled = isAutoBackupEnabled,
+        backupRetentionLimit = backupRetentionLimit,
+        swipeDeleteRequiresConfirm = swipeDeleteRequiresConfirm,
+        isScheduledBackupEnabled = isScheduledBackupEnabled,
+        scheduledBackupInterval = scheduledBackupInterval
+    )
 }

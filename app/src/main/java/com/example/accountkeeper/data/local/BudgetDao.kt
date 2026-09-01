@@ -73,6 +73,9 @@ interface BudgetDao {
     @Query("DELETE FROM budgets WHERE categoryId = :categoryId")
     suspend fun deleteByCategory(categoryId: Long)
 
+    @Query("DELETE FROM budgets")
+    suspend fun deleteAllBudgets()
+
     @Query("SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE type = 'EXPENSE' AND date >= :start AND date < :end")
     fun getMonthlyExpense(start: Long, end: Long): Flow<Double>
 

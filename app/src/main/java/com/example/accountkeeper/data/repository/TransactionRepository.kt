@@ -5,11 +5,14 @@ import androidx.paging.PagingConfig
 import androidx.paging.PagingData
 import com.example.accountkeeper.data.local.TransactionDao
 import com.example.accountkeeper.data.model.Transaction
+import com.example.accountkeeper.data.model.AttachmentConverter
+import com.example.accountkeeper.data.model.AttachmentOwnerType
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
 
 class TransactionRepository @Inject constructor(
-    private val transactionDao: TransactionDao
+    private val transactionDao: TransactionDao,
+    private val attachmentRepository: AttachmentRepository
 ) {
     companion object {
         private const val PAGE_SIZE = 30
@@ -70,10 +73,26 @@ class TransactionRepository @Inject constructor(
     fun getExpenseBetween(startDate: Long, endDate: Long): Flow<Double> = transactionDao.getExpenseBetween(startDate, endDate)
     
     suspend fun getTransactionById(id: Long): Transaction? = transactionDao.getTransactionById(id)
+    suspend fun getAvailableExpenseTransactions(categoryId: Long, startDate: Long, endDate: Long): List<Transaction> = transactionDao.getAvailableExpenseTransactions(categoryId, startDate, endDate)
     suspend fun updateTransactionCategory(oldId: Long, newId: Long) = transactionDao.updateTransactionCategory(oldId, newId)
-    suspend fun insertTransaction(transaction: Transaction) = transactionDao.insertTransaction(transaction)
-    suspend fun updateTransaction(transaction: Transaction) = transactionDao.updateTransaction(transaction)
-    suspend fun deleteTransaction(transaction: Transaction) = transactionDao.deleteTransaction(transaction)
-    suspend fun deleteTransactions(transactions: List<Transaction>) = transactionDao.deleteTransactions(transactions)
-    suspend fun deleteAllTransactions() = transactionDao.deleteAllTransactions()
+    suspend fun insertTransaction(transaction: Transaction) {
+        transactionDao.insertTransaction(transaction)
+        attachmentRepository.replaceForOwner(AttachmentOwnerType.TRANSACTION, transaction.id, AttachmentConverter.fromJson(transaction.attachments))
+    }
+    suspend fun updateTransaction(transaction: Transaction) {
+        transactionDao.updateTransaction(transaction)
+        attachmentRepository.replaceForOwner(AttachmentOwnerType.TRANSACTION, transaction.id, AttachmentConverter.fromJson(transaction.attachments))
+    }
+    suspend fun deleteTransaction(transaction: Transaction) {
+        attachmentRepository.deleteForOwner(AttachmentOwnerType.TRANSACTION, transaction.id)
+        transactionDao.deleteTransaction(transaction)
+    }
+    suspend fun deleteTransactions(transactions: List<Transaction>) {
+        transactions.forEach { attachmentRepository.deleteForOwner(AttachmentOwnerType.TRANSACTION, it.id) }
+        transactionDao.deleteTransactions(transactions)
+    }
+    suspend fun deleteAllTransactions() {
+        attachmentRepository.deleteForOwnerType(AttachmentOwnerType.TRANSACTION)
+        transactionDao.deleteAllTransactions()
+    }
 }

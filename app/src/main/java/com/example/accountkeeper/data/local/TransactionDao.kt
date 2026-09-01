@@ -23,6 +23,17 @@ interface TransactionDao {
     @Query("SELECT * FROM transactions WHERE id = :id")
     suspend fun getTransactionById(id: Long): Transaction?
 
+    @Query("""
+        SELECT t.* FROM transactions t
+        LEFT JOIN assets a ON a.transactionId = t.id
+        WHERE t.type = 'EXPENSE'
+          AND t.categoryId = :categoryId
+          AND t.date >= :startDate AND t.date < :endDate
+          AND a.id IS NULL
+        ORDER BY t.date DESC
+    """)
+    suspend fun getAvailableExpenseTransactions(categoryId: Long, startDate: Long, endDate: Long): List<Transaction>
+
     @Query("UPDATE transactions SET categoryId = :newId WHERE categoryId = :oldId")
     suspend fun updateTransactionCategory(oldId: Long, newId: Long)
 
@@ -42,25 +53,25 @@ interface TransactionDao {
     suspend fun deleteTransactions(transactions: List<Transaction>)
 
     @Query("""
-        SELECT t.* FROM transactions t 
-        LEFT JOIN categories c ON t.categoryId = c.id 
+        SELECT t.* FROM transactions t
+        LEFT JOIN categories c ON t.categoryId = c.id
         WHERE t.note LIKE '%' || :query || '%' OR c.name LIKE '%' || :query || '%'
         ORDER BY t.date DESC
     """)
     fun searchTransactions(query: String): Flow<List<Transaction>>
 
     @Query("""
-        SELECT t.* FROM transactions t 
-        LEFT JOIN categories c ON t.categoryId = c.id 
+        SELECT t.* FROM transactions t
+        LEFT JOIN categories c ON t.categoryId = c.id
         WHERE t.note LIKE '%' || :query || '%' OR c.name LIKE '%' || :query || '%'
         ORDER BY t.date DESC
     """)
     fun searchTransactionsPaged(query: String): PagingSource<Int, Transaction>
 
     @Query("""
-        SELECT * FROM transactions 
-        WHERE categoryId = :categoryId 
-        AND date >= :startTime 
+        SELECT * FROM transactions
+        WHERE categoryId = :categoryId
+        AND date >= :startTime
         AND date < :endTime
         ORDER BY date DESC
     """)
@@ -70,7 +81,7 @@ interface TransactionDao {
     fun getByTimeRangePaged(startDate: Long, endDate: Long): PagingSource<Int, Transaction>
 
     @Query("""
-        SELECT * FROM transactions 
+        SELECT * FROM transactions
         WHERE date >= :startDate AND date < :endDate
         AND (:categoryId IS NULL OR categoryId = :categoryId)
         ORDER BY date DESC

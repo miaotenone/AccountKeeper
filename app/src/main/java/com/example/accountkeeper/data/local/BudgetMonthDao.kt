@@ -13,4 +13,7 @@ interface BudgetMonthDao {
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(month: BudgetMonth)
+
+    @Query("DELETE FROM budget_months")
+    suspend fun deleteAll()
 }

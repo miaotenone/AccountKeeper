@@ -53,13 +53,12 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.accountkeeper.LocalCurrencySymbol
 import com.example.accountkeeper.data.model.Asset
+import com.example.accountkeeper.data.model.AssetRootType
 import com.example.accountkeeper.data.model.AssetStatus
-import com.example.accountkeeper.data.model.Category
-import com.example.accountkeeper.data.model.TransactionType
 import com.example.accountkeeper.ui.theme.*
 import com.example.accountkeeper.ui.theme.LocalAppStrings
+import com.example.accountkeeper.ui.viewmodel.AssetCategoryViewModel
 import com.example.accountkeeper.ui.viewmodel.AssetViewModel
-import com.example.accountkeeper.ui.viewmodel.CategoryViewModel
 import com.example.accountkeeper.ui.viewmodel.SettingsViewModel
 import com.example.accountkeeper.ui.screens.SortType
 import java.text.SimpleDateFormat
@@ -72,19 +71,14 @@ fun AssetsScreen(
     onNavigateToAddAsset: () -> Unit,
     onNavigateToEditAsset: (Long) -> Unit,
     viewModel: AssetViewModel = hiltViewModel(),
-    categoryViewModel: CategoryViewModel = hiltViewModel(),
+    assetCategoryViewModel: AssetCategoryViewModel = hiltViewModel(),
     settingsViewModel: SettingsViewModel = hiltViewModel()
 ) {
     val assets by viewModel.assets.collectAsState()
-    val allCategories by categoryViewModel.categories.collectAsState()
+    val assetCategories by assetCategoryViewModel.assetCategories.collectAsState()
     val appSettings by settingsViewModel.appSettings.collectAsState()
     val currency = LocalCurrencySymbol.current
     val strings = LocalAppStrings.current
-    
-    // 只显示资产类型的分类
-    val assetCategories = remember(allCategories) {
-        allCategories.filter { it.type == TransactionType.ASSET }
-    }
     val categories = assetCategories
 
     val netAssets by viewModel.netAssets.collectAsState()
@@ -94,7 +88,9 @@ fun AssetsScreen(
     var selectionMode by remember { mutableStateOf(false) }
     val selectedIds = remember { mutableStateListOf<Long>() }
     var showBatchDeleteDialog by remember { mutableStateOf(false) }
-    
+    var ownedAssetTarget by remember { mutableStateOf<Asset?>(null) }
+    var candidateTransactions by remember { mutableStateOf<List<com.example.accountkeeper.data.model.Transaction>>(emptyList()) }
+
     // Track which card is swiped open (for closing when clicking elsewhere)
     var swipedOpenAssetId by remember { mutableStateOf<Long?>(null) }
 
@@ -105,7 +101,7 @@ fun AssetsScreen(
     val focusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
-    
+
     // Filter and sort state
     var showFilterDialog by remember { mutableStateOf(false) }
     var showSortDialog by remember { mutableStateOf(false) }
@@ -117,12 +113,12 @@ fun AssetsScreen(
     // Filter and sort assets
     val displayAssets = remember(assets, searchQuery, categories, filterStartDate, filterEndDate, filterCategoryId, sortType) {
         var filtered = assets
-        
+
         // Apply search filter
         if (searchQuery.isNotBlank()) {
             val query = searchQuery.lowercase()
             filtered = filtered.filter { asset ->
-                val categoryName = categories.find { it.id == asset.categoryId }?.name ?: ""
+                val categoryName = categories.find { it.id == asset.assetCategoryId }?.name ?: ""
                 val statusName = when (asset.status) {
                     AssetStatus.NONE -> strings.none
                     AssetStatus.OWNED -> strings.owned
@@ -139,7 +135,7 @@ fun AssetsScreen(
                 statusName.lowercase().contains(query)
             }
         }
-        
+
         // Apply time range filter
         if (filterStartDate != null) {
             filtered = filtered.filter { it.date >= filterStartDate!! }
@@ -148,12 +144,12 @@ fun AssetsScreen(
             // filterEndDate 已经在 DatePicker 中设置为当天 23:59:59.999
             filtered = filtered.filter { it.date <= filterEndDate!! }
         }
-        
+
         // Apply category filter
         if (filterCategoryId != null) {
-            filtered = filtered.filter { it.categoryId == filterCategoryId }
+            filtered = filtered.filter { it.assetCategoryId == filterCategoryId }
         }
-        
+
         // Apply sort
         when (sortType) {
             SortType.TIME_DESC -> filtered.sortedByDescending { it.date }
@@ -165,10 +161,10 @@ fun AssetsScreen(
 
     // 是否有筛选条件激活
     val hasActiveFilter = filterStartDate != null || filterEndDate != null || filterCategoryId != null
-    
+
     // 是否有分类筛选（用于简化卡片显示）
     val hasCategoryFilter = filterCategoryId != null
-    
+
     // 获取筛选的分类信息
     val filteredCategory = remember(filterCategoryId, categories) {
         filterCategoryId?.let { id -> categories.find { it.id == id } }
@@ -176,25 +172,25 @@ fun AssetsScreen(
 
     // 计算筛选后的统计数据
     val filteredStats = remember(displayAssets, categories) {
-        val positiveCategoryIds = categories.filter { it.isPositiveAsset }.map { it.id }.toSet()
-        val negativeCategoryIds = categories.filter { !it.isPositiveAsset }.map { it.id }.toSet()
-        
+        val positiveCategoryIds = categories.filter { it.rootType != AssetRootType.VIRTUAL }.map { it.id }.toSet()
+        val negativeCategoryIds = categories.filter { it.rootType == AssetRootType.VIRTUAL }.map { it.id }.toSet()
+
         // 筛选后的正资产金额
-        val filteredPositiveAmount = displayAssets.filter { it.categoryId in positiveCategoryIds }.sumOf { asset ->
+        val filteredPositiveAmount = displayAssets.filter { it.assetCategoryId in positiveCategoryIds }.sumOf { asset ->
             when {
                 asset.status == AssetStatus.OWNED -> asset.amount
                 asset.isCompleted -> asset.amount
                 else -> 0.0
             }
         }
-        
+
         // 筛选后的总负债
-        val filteredTotalLiabilities = displayAssets.filter { 
-            it.categoryId in negativeCategoryIds && 
-            it.status == AssetStatus.IN_PROGRESS && 
-            !it.isCompleted 
+        val filteredTotalLiabilities = displayAssets.filter {
+            it.assetCategoryId in negativeCategoryIds &&
+            it.status == AssetStatus.IN_PROGRESS &&
+            !it.isCompleted
         }.sumOf { it.amount }
-        
+
         filteredPositiveAmount to filteredTotalLiabilities
     }
 
@@ -206,33 +202,33 @@ fun AssetsScreen(
     } else {
         netAssets
     }
-    
+
     // 分类筛选时的详细状态统计
     data class CategoryStats(
         val totalAmount: Double,        // 总金额：该分类所有资产
         val inProgressAmount: Double,   // 进行中状态金额
         val statusAmount: Double        // 正资产：OWNED金额；负资产：NOT_OWNED金额
     )
-    
+
     val categoryFilteredStats = remember(displayAssets, filteredCategory) {
         if (filteredCategory != null) {
-            val categoryAssets = displayAssets.filter { it.categoryId == filteredCategory.id }
-            
+            val categoryAssets = displayAssets.filter { it.assetCategoryId == filteredCategory.id }
+
             // 总金额：该分类所有资产金额全部加起来
             val totalAmount = categoryAssets.sumOf { it.amount }
-            
+
             // 进行中：所有 IN_PROGRESS 状态的金额
             val inProgressAmount = categoryAssets.filter { it.status == AssetStatus.IN_PROGRESS }.sumOf { it.amount }
-            
+
             // 根据分类类型计算状态金额
-            val statusAmount = if (filteredCategory.isPositiveAsset) {
+            val statusAmount = if (filteredCategory.rootType != AssetRootType.VIRTUAL) {
                 // 正资产：OWNED状态金额（确认拥有）
                 categoryAssets.filter { it.status == AssetStatus.OWNED }.sumOf { it.amount }
             } else {
                 // 负资产：NOT_OWNED状态金额（确认没有）
                 categoryAssets.filter { it.status == AssetStatus.NOT_OWNED }.sumOf { it.amount }
             }
-            
+
             CategoryStats(totalAmount, inProgressAmount, statusAmount)
         } else {
             CategoryStats(0.0, 0.0, 0.0)
@@ -373,9 +369,9 @@ fun AssetsScreen(
                                     Icon(
                                         Icons.Default.FilterList,
                                         contentDescription = strings.filter,
-                                        tint = if (filterStartDate != null || filterEndDate != null || filterCategoryId != null) 
-                                            MaterialTheme.colorScheme.primary 
-                                        else 
+                                        tint = if (filterStartDate != null || filterEndDate != null || filterCategoryId != null)
+                                            MaterialTheme.colorScheme.primary
+                                        else
                                             MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
@@ -483,7 +479,7 @@ fun AssetsScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                if (filteredCategory.isPositiveAsset) "(${strings.positiveAsset})" else "(${strings.negativeAsset})",
+                                if (filteredCategory.rootType != AssetRootType.VIRTUAL) "(${strings.positiveAsset})" else "(${strings.negativeAsset})",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = Color.White.copy(alpha = 0.6f)
                             )
@@ -496,7 +492,7 @@ fun AssetsScreen(
                             color = Color.White
                         )
                         Spacer(modifier = Modifier.height(16.dp))
-                        
+
                         // 显示两个状态的统计
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -519,7 +515,7 @@ fun AssetsScreen(
                             // 根据分类类型显示不同状态
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(
-                                    if (filteredCategory.isPositiveAsset) strings.owned else strings.notOwned,
+                                    if (filteredCategory.rootType != AssetRootType.VIRTUAL) strings.owned else strings.notOwned,
                                     style = MaterialTheme.typography.labelSmall,
                                     color = Color.White.copy(alpha = 0.7f)
                                 )
@@ -564,7 +560,7 @@ fun AssetsScreen(
                             color = Color.White
                         )
                         Spacer(modifier = Modifier.height(16.dp))
-                        
+
                         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                                 AssetOverviewMetric(strings.asset, displayPositiveAssetAmount, currency, Color(0xFF5BD9CA))
@@ -609,9 +605,9 @@ fun AssetsScreen(
 
                     // Asset Items
                     datedAssets.forEach { asset ->
-                        val category = categories.find { it.id == asset.categoryId }
+                        val category = categories.find { it.id == asset.assetCategoryId }
                         val categoryName = category?.name ?: strings.other
-                        val isPositiveCategory = category?.isPositiveAsset ?: true
+                        val isPositiveCategory = category?.rootType != AssetRootType.VIRTUAL
                         val isSelected = selectedIds.contains(asset.id)
 
                         AssetItem(
@@ -657,13 +653,18 @@ fun AssetsScreen(
                                 }
                             },
                             onDelete = { viewModel.deleteAsset(asset) },
-                            onToggleStatus = { viewModel.toggleAssetStatus(asset, isPositiveCategory) }
+                            onToggleStatus = { if (asset.status == AssetStatus.IN_PROGRESS && isPositiveCategory) ownedAssetTarget = asset else viewModel.toggleAssetStatus(asset, isPositiveCategory) }
                         )
                     }
                 }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        ownedAssetTarget?.let { asset ->
+            LaunchedEffect(asset.id) { candidateTransactions = viewModel.availableExpenseTransactions(asset) }
+            AlertDialog(onDismissRequest = { ownedAssetTarget = null }, title = { Text("选择真实支出交易") }, text = { if (candidateTransactions.isEmpty()) Text("没有找到同月、同费用分类且未绑定的支出交易") else LazyColumn { items(candidateTransactions) { transaction -> TextButton(onClick = { viewModel.confirmOwned(asset.id, transaction.id); ownedAssetTarget = null }) { Text("${SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(transaction.date))}  ${transaction.amount}") } } } }, confirmButton = {}, dismissButton = { TextButton(onClick = { ownedAssetTarget = null }) { Text(strings.cancel) } })
         }
 
         // Batch delete dialog
@@ -683,12 +684,12 @@ fun AssetsScreen(
                 strings = strings
             )
         }
-        
+
         // Filter dialog
         if (showFilterDialog) {
             var showStartDatePicker by remember { mutableStateOf(false) }
             var showEndDatePicker by remember { mutableStateOf(false) }
-            
+
             if (showStartDatePicker) {
                 val datePickerState = rememberDatePickerState(
                     initialSelectedDateMillis = filterStartDate ?: System.currentTimeMillis()
@@ -721,7 +722,7 @@ fun AssetsScreen(
                     DatePicker(state = datePickerState)
                 }
             }
-            
+
             if (showEndDatePicker) {
                 val datePickerState = rememberDatePickerState(
                     initialSelectedDateMillis = filterEndDate ?: System.currentTimeMillis()
@@ -754,7 +755,7 @@ fun AssetsScreen(
                     DatePicker(state = datePickerState)
                 }
             }
-            
+
             AlertDialog(
                 onDismissRequest = { showFilterDialog = false },
                 title = { Text(strings.filter, fontWeight = FontWeight.Bold) },
@@ -771,8 +772,8 @@ fun AssetsScreen(
                                 modifier = Modifier.weight(1f)
                             ) {
                                 Text(
-                                    filterStartDate?.let { 
-                                        SimpleDateFormat("MM/dd", Locale.getDefault()).format(Date(it)) 
+                                    filterStartDate?.let {
+                                        SimpleDateFormat("MM/dd", Locale.getDefault()).format(Date(it))
                                     } ?: strings.startDate,
                                     maxLines = 1
                                 )
@@ -782,14 +783,14 @@ fun AssetsScreen(
                                 modifier = Modifier.weight(1f)
                             ) {
                                 Text(
-                                    filterEndDate?.let { 
-                                        SimpleDateFormat("MM/dd", Locale.getDefault()).format(Date(it)) 
+                                    filterEndDate?.let {
+                                        SimpleDateFormat("MM/dd", Locale.getDefault()).format(Date(it))
                                     } ?: strings.endDate,
                                     maxLines = 1
                                 )
                             }
                         }
-                        
+
                         // Category filter - 只显示资产类型的分类
                         Text(strings.categoryFilter, style = MaterialTheme.typography.labelLarge)
                         var expanded by remember { mutableStateOf(false) }
@@ -817,16 +818,16 @@ fun AssetsScreen(
                                 )
                                 assetCategories.forEach { category ->
                                     DropdownMenuItem(
-                                        text = { 
+                                        text = {
                                             Row(verticalAlignment = Alignment.CenterVertically) {
                                                 Text(category.name)
                                                 Spacer(modifier = Modifier.width(8.dp))
                                                 Text(
-                                                    if (category.isPositiveAsset) "(${strings.positiveAsset})" else "(${strings.negativeAsset})",
+                                                    if (category.rootType != AssetRootType.VIRTUAL) "(${strings.positiveAsset})" else "(${strings.negativeAsset})",
                                                     style = MaterialTheme.typography.labelSmall,
-                                                    color = if (category.isPositiveAsset) 
-                                                        Color(0xFF4ADE80) 
-                                                    else 
+                                                    color = if (category.rootType != AssetRootType.VIRTUAL)
+                                                        Color(0xFF4ADE80)
+                                                    else
                                                         Color(0xFFFF6B6B)
                                                 )
                                             }
@@ -864,7 +865,7 @@ fun AssetsScreen(
                 }
             )
         }
-        
+
         // Sort dialog
         if (showSortDialog) {
             AlertDialog(
@@ -931,7 +932,7 @@ fun AssetItem(
     onToggleStatus: () -> Unit
 ) {
     val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
-    
+
     // Determine card color based on status
     val statusColor = when (asset.status) {
         AssetStatus.NONE -> MaterialTheme.colorScheme.onSurfaceVariant
@@ -942,12 +943,12 @@ fun AssetItem(
         AssetStatus.TEMPORARILY_WITH_ME -> Color(0xFFFFC107)  // Legacy - yellow
         AssetStatus.TEMPORARILY_WITH_OTHERS -> Color(0xFFFFC107)  // Legacy - yellow
     }
-    
+
     val cardColor = statusColor
 
     var offsetX by remember { mutableStateOf(0f) }
     val maxOffset = 300f
-    
+
     // Track if user is dragging
     var isDragging by remember { mutableStateOf(false) }
     var hasTriggeredAction by remember { mutableStateOf(false) }
@@ -1084,7 +1085,7 @@ fun AssetItem(
                         uncheckedColor = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 )
-                
+
                 // Category icon (clickable for status toggle)
                 Box(
                     modifier = Modifier
@@ -1198,7 +1199,7 @@ fun AssetItem(
                     }
                     else -> strings.markInProgress
                 }
-                
+
                 Box(
                     modifier = Modifier
                         .matchParentSize()
@@ -1227,7 +1228,7 @@ fun AssetItem(
                     }
                 }
             }
-            
+
             // Right side: Delete background (red)
             if (offsetX < 0) {
                 Box(

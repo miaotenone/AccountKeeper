@@ -23,6 +23,7 @@ import com.example.accountkeeper.data.model.Transaction
 import com.example.accountkeeper.data.model.TransactionType
 import com.example.accountkeeper.ui.theme.LocalAppStrings
 import com.example.accountkeeper.ui.viewmodel.CategoryViewModel
+import com.example.accountkeeper.ui.viewmodel.FinancialArchiveViewModel
 import com.example.accountkeeper.ui.viewmodel.SettingsViewModel
 import com.example.accountkeeper.ui.viewmodel.TransactionViewModel
 import com.example.accountkeeper.utils.BillParser
@@ -44,7 +45,8 @@ fun ImportExportScreen(
     onNavigateToAbout: () -> Unit = {},
     viewModel: TransactionViewModel = hiltViewModel(),
     categoryViewModel: CategoryViewModel = hiltViewModel(),
-    settingsViewModel: SettingsViewModel = hiltViewModel()
+    settingsViewModel: SettingsViewModel = hiltViewModel(),
+    financialArchiveViewModel: FinancialArchiveViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -709,8 +711,8 @@ fun ImportExportScreen(
                                             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                                 TextButton(
                                                     onClick = {
-                                                        scope.launch(Dispatchers.IO) {
-                                                            performCsvImport { java.io.FileInputStream(file) }
+                                                        financialArchiveViewModel.restoreManualBackup(file) { message ->
+                                                            scope.launch { snackbarHostState.showSnackbar(message) }
                                                         }
                                                         showManualBackupsDialog = false
                                                     },
@@ -785,8 +787,8 @@ fun ImportExportScreen(
                                                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                                     TextButton(
                                                         onClick = {
-                                                            scope.launch(Dispatchers.IO) {
-                                                                performCsvImport { java.io.FileInputStream(file) }
+                                                            financialArchiveViewModel.restoreManualBackup(file) { message ->
+                                                                scope.launch { snackbarHostState.showSnackbar(message) }
                                                             }
                                                             showManualBackupsDialog = false
                                                         },
@@ -848,17 +850,7 @@ fun ImportExportScreen(
                         onClick = {
                             if (customBackupName.isNotBlank()) {
                                 scope.launch(Dispatchers.IO) {
-                                    val safeCsvSequence = sequence {
-                                        yield("ID,Date,Type,Amount,Category,Note")
-                                        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-                                        for (tx in transactions) {
-                                            val categoryName = categories.find { it.id == tx.categoryId }?.name ?: "Other"
-                                            val typeString = if (tx.type == TransactionType.INCOME) "Income" else "Expense"
-                                            val safeNote = tx.note.replace("\"", "\"\"")
-                                            yield("${tx.id},${dateFormat.format(Date(tx.date))},${typeString},${tx.amount},${categoryName},\"${safeNote}\"")
-                                        }
-                                    }
-                                    settingsViewModel.backupManager.writeNewBackup(safeCsvSequence, appSettings.backupRetentionLimit, isAuto = false, customName = customBackupName)
+                                    financialArchiveViewModel.createManualBackup(customBackupName)
                                     refreshBackupTrigger++
                                     customBackupName = ""
                                     showCustomBackupNameDialog = false
@@ -1001,10 +993,12 @@ fun ImportExportScreen(
                                                     }
                                                     TextButton(
                                                         onClick = {
-                                                            settingsViewModel.backupManager.deleteBillFile(file)
-                                                            refreshBackupTrigger++
-                                                            scope.launch { 
-                                                                snackbarHostState.showSnackbar("账单文件已删除") 
+                                                            scope.launch(Dispatchers.IO) {
+                                                                val deleted = financialArchiveViewModel.deleteBillFile(file)
+                                                                withContext(Dispatchers.Main) {
+                                                                    if (deleted) refreshBackupTrigger++
+                                                                    snackbarHostState.showSnackbar(if (deleted) "账单文件已删除" else "账单文件删除失败")
+                                                                }
                                                             }
                                                         },
                                                         modifier = Modifier.height(32.dp)

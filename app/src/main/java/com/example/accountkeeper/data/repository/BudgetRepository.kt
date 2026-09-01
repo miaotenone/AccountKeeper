@@ -25,6 +25,7 @@ class BudgetRepository @Inject constructor(private val dao: BudgetDao, private v
     suspend fun update(budget: Budget) { requireCategoryIsExpense(budget.categoryId); dao.update(budget) }
     suspend fun delete(budget: Budget) = dao.delete(budget)
     suspend fun deleteByCategory(categoryId: Long) = dao.deleteByCategory(categoryId)
+    suspend fun deleteAllBudgets() = dao.deleteAllBudgets()
     fun getAll(): Flow<List<Budget>> = dao.getAll()
     suspend fun isMonthInitialized(monthKey: String): Boolean = monthDao.exists(monthKey)
     suspend fun markMonthInitialized(monthKey: String) = monthDao.insert(BudgetMonth(monthKey))

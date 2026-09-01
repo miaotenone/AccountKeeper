@@ -1,6 +1,8 @@
 package com.example.accountkeeper.ui.screens
 
 import androidx.compose.animation.*
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -34,6 +36,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.accountkeeper.LocalCurrencySymbol
 import com.example.accountkeeper.data.model.Category
+import com.example.accountkeeper.data.model.Attachment
+import com.example.accountkeeper.data.model.AttachmentConverter
 import com.example.accountkeeper.data.model.Transaction
 import com.example.accountkeeper.data.model.TransactionType
 import com.example.accountkeeper.ui.theme.*
@@ -66,6 +70,9 @@ fun AddEditTransactionScreen(
      var originalExpenseMonth by remember { mutableStateOf<String?>(null) }
      var originalExpenseCategoryId by remember { mutableStateOf<Long?>(null) }
     var showDatePicker by remember { mutableStateOf(false) }
+    var attachments by remember { mutableStateOf(emptyList<Attachment>()) }
+    var previewAttachment by remember { mutableStateOf<Attachment?>(null) }
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     val categories by categoryViewModel.categories.collectAsState()
     val currentType = if (isExpense) TransactionType.EXPENSE else TransactionType.INCOME
@@ -108,6 +115,7 @@ fun AddEditTransactionScreen(
             existingTx?.let { tx ->
                 amountText = CurrencyUtils.convertToDisplay(tx.amount, currency).toString()
                 note = tx.note
+                attachments = AttachmentConverter.fromJson(tx.attachments)
                 isExpense = tx.type == TransactionType.EXPENSE
                 if (tx.type == TransactionType.EXPENSE) {
                     originalExpenseAmount = tx.amount
@@ -120,7 +128,14 @@ fun AddEditTransactionScreen(
         }
     }
 
+    val attachmentPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        uri?.let { copyAttachmentToInternalStorage(context, it)?.let { attachment -> attachments = attachments + attachment } }
+    }
+
     if (showDatePicker) {
+
         val datePickerState = rememberDatePickerState(initialSelectedDateMillis = transactionDate)
         DatePickerDialog(
             onDismissRequest = { showDatePicker = false },
@@ -243,6 +258,15 @@ fun AddEditTransactionScreen(
                 modifier = Modifier.fillMaxWidth()
             )
 
+            AttachmentSection(
+                title = strings.attachments,
+                attachments = attachments,
+                onAddAttachment = { attachmentPicker.launch(arrayOf("*/*")) },
+                onRemoveAttachment = { removed -> attachments = attachments.filterNot { it.id == removed.id } },
+                onPreviewAttachment = { previewAttachment = it },
+                modifier = Modifier.fillMaxWidth()
+            )
+
             Spacer(modifier = Modifier.height(8.dp))
 
             // Save Button with Premium Design
@@ -257,7 +281,8 @@ fun AddEditTransactionScreen(
                             amount = amount,
                             note = note,
                             date = transactionDate,
-                            categoryId = selectedCategoryId
+                            categoryId = selectedCategoryId,
+                            attachments = AttachmentConverter.toJson(attachments)
                         )
                         scope.launch {
                             if (viewModel.saveTransaction(transaction, isEditMode)) onTransactionSaved()
@@ -270,6 +295,10 @@ fun AddEditTransactionScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
         }
+    }
+
+    previewAttachment?.let { attachment ->
+        AttachmentPreviewDialog(attachment = attachment, onDismiss = { previewAttachment = null })
     }
 }
 

@@ -16,7 +16,7 @@ import com.example.accountkeeper.data.repository.BudgetRepository
 import com.example.accountkeeper.data.repository.CategoryRepository
 import com.example.accountkeeper.data.repository.SettingsRepository
 import com.example.accountkeeper.data.repository.TransactionRepository
-import com.example.accountkeeper.utils.BackupManager
+import com.example.accountkeeper.utils.AutoBackupCoordinator
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.util.Calendar
 import javax.inject.Inject
@@ -44,9 +44,9 @@ class TransactionViewModel @Inject constructor(
     private val categoryRepository: CategoryRepository,
     private val budgetRepository: BudgetRepository,
     private val settingsRepository: SettingsRepository,
-    private val assetRepository: AssetRepository
+    private val assetRepository: AssetRepository,
+    private val autoBackupCoordinator: AutoBackupCoordinator
 ) : AndroidViewModel(application) {
-    private val backupManager = BackupManager(application)
 
     // Full transaction list for DataManagement/backup usage
     val transactions: StateFlow<List<Transaction>> = transactionRepository.getAllTransactions()
@@ -135,83 +135,22 @@ class TransactionViewModel @Inject constructor(
     suspend fun getTransactionById(id: Long): Transaction? = transactionRepository.getTransactionById(id)
     fun searchTransactions(query: String): Flow<List<Transaction>> = transactionRepository.searchTransactions(query)
 
-    fun addTransaction(transaction: Transaction) = viewModelScope.launch { transactionRepository.insertTransaction(transaction); triggerAutoBackup() }
-    suspend fun insertTransactionSuspend(transaction: Transaction) = transactionRepository.insertTransaction(transaction)
-    fun updateTransaction(transaction: Transaction) = viewModelScope.launch { transactionRepository.updateTransaction(transaction); triggerAutoBackup() }
-    fun deleteTransaction(transaction: Transaction) = viewModelScope.launch { transactionRepository.deleteTransaction(transaction); triggerAutoBackup() }
-    fun deleteTransactions(transactions: List<Transaction>) = viewModelScope.launch { transactionRepository.deleteTransactions(transactions); triggerAutoBackup() }
-    fun deleteAllTransactions() = viewModelScope.launch { transactionRepository.deleteAllTransactions(); triggerAutoBackup() }
-
-    private suspend fun triggerAutoBackup() {
-        val settings = settingsRepository.settingsFlow.first()
-        if (!settings.isAutoBackupEnabled) return
-
-        val txList = transactionRepository.getAllTransactions().first()
-        val assetList = assetRepository.getAllAssets().first()
-        val catList = categoryRepository.getAllCategories().first()
-        val categoryMap = catList.associate { it.id to it.name }
-        val budgets = budgetRepository.getAll().first()
-
-        withContext(kotlinx.coroutines.Dispatchers.IO) {
-            if (!backupManager.hasBackupChain()) {
-                backupManager.createBaseBackup(txList, assetList, categoryMap, budgets = budgets)
-                return@withContext
-            }
-
-            val latestState = backupManager.restoreToStep(-1)
-            if (!latestState.success) {
-                backupManager.createBaseBackup(txList, assetList, categoryMap, budgets = budgets)
-                return@withContext
-            }
-
-            val previousTransactions = latestState.transactions.map { data ->
-                Transaction(
-                    id = data.id,
-                    date = data.date,
-                    type = if (data.type.equals("Income", ignoreCase = true)) TransactionType.INCOME else TransactionType.EXPENSE,
-                    amount = data.amount,
-                    note = data.note,
-                    categoryId = catList.find { it.name == data.categoryName }?.id ?: 0L
-                )
-            }
-            val previousAssets = latestState.assets.map { data ->
-                Asset(
-                    id = data.id,
-                    date = data.date,
-                    amount = data.amount,
-                    status = try { AssetStatus.valueOf(data.status) } catch (_: Exception) { AssetStatus.NONE },
-                    categoryId = catList.find { it.name == data.categoryName }?.id,
-                    targetPerson = data.targetPerson,
-                    targetAccount = data.targetAccount,
-                    note = data.note,
-                    isCompleted = data.isCompleted,
-                    attachments = AttachmentConverter.toJson(data.attachments),
-                    createdAt = data.createdAt,
-                    updatedAt = data.updatedAt
-                )
-            }
-            val previousBudgets = latestState.budgets.map { data ->
-                Budget(
-                    monthKey = data.monthKey,
-                    categoryId = data.categoryName?.let { name -> catList.firstOrNull { it.name == name }?.id },
-                    amount = data.amount,
-                    createdAt = data.createdAt,
-                    updatedAt = data.updatedAt
-                )
-            }
-
-            backupManager.createDeltaBackup(
-                previousTransactions = previousTransactions,
-                previousAssets = previousAssets,
-                currentTransactions = txList,
-                currentAssets = assetList,
-                categoryMap = categoryMap,
-                budgets = budgets,
-                previousBudgets = previousBudgets,
-                maxKeep = settings.backupRetentionLimit
-            )
-        }
+    fun addTransaction(transaction: Transaction) = launchBackup { transactionRepository.insertTransaction(transaction) }
+    suspend fun insertTransactionSuspend(transaction: Transaction) {
+        transactionRepository.insertTransaction(transaction)
+        triggerAutoBackup()
     }
+    fun updateTransaction(transaction: Transaction) = launchBackup { transactionRepository.updateTransaction(transaction) }
+    fun deleteTransaction(transaction: Transaction) = launchBackup { transactionRepository.deleteTransaction(transaction) }
+    fun deleteTransactions(transactions: List<Transaction>) = launchBackup { transactionRepository.deleteTransactions(transactions) }
+    fun deleteAllTransactions() = launchBackup { transactionRepository.deleteAllTransactions() }
+
+    private fun launchBackup(action: suspend () -> Unit) = viewModelScope.launch {
+        action()
+        triggerAutoBackup()
+    }
+
+    private suspend fun triggerAutoBackup() = autoBackupCoordinator.backupAfterDataChange()
     suspend fun saveTransaction(transaction: Transaction, isEdit: Boolean): Boolean = try {
         if (isEdit) transactionRepository.updateTransaction(transaction) else transactionRepository.insertTransaction(transaction)
         triggerAutoBackup()

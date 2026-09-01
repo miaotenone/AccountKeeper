@@ -8,6 +8,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import com.example.accountkeeper.ui.screens.AboutScreen
+import com.example.accountkeeper.ui.screens.AttachmentOverviewScreen
 import com.example.accountkeeper.ui.screens.AddEditAssetScreen
 import com.example.accountkeeper.ui.screens.AddEditTransactionScreen
 import com.example.accountkeeper.ui.screens.AppSettingsScreen
@@ -16,7 +17,9 @@ import com.example.accountkeeper.ui.screens.BudgetApprovalScreen
 import com.example.accountkeeper.ui.screens.BudgetScreen
 import com.example.accountkeeper.ui.screens.CategorySettingsScreen
 import com.example.accountkeeper.ui.screens.CategoryTransactionsScreen
+import com.example.accountkeeper.ui.screens.DataManagementHubScreen
 import com.example.accountkeeper.ui.screens.DataManagementScreen
+import com.example.accountkeeper.ui.screens.FinancialArchiveScreen
 import com.example.accountkeeper.ui.screens.HomeScreen
 import com.example.accountkeeper.ui.screens.SearchResultScreen
 import com.example.accountkeeper.ui.screens.SettingsScreen
@@ -32,6 +35,8 @@ import kotlinx.serialization.Serializable
 @Serializable data class AddEditAssetRoute(val assetId: Long = -1L)
 @Serializable object SettingsRoute
 @Serializable object DataManagementRoute
+@Serializable object FinancialArchiveRoute
+@Serializable object AttachmentOverviewRoute
 @Serializable object LegacyDataManagementRoute
 @Serializable object AppSettingsRoute
 @Serializable object CategorySettingsRoute
@@ -61,7 +66,10 @@ fun AppNavigation(
         composable<AssetsRoute> { AssetsScreen(onNavigateToAddAsset = { navController.navigate(AddEditAssetRoute()) }, onNavigateToEditAsset = { navController.navigate(AddEditAssetRoute(it)) }) }
         composable<BudgetRoute> { BudgetScreen(onNavigateToCategoryTransactions = { id, name, start, end -> navController.navigate(CategoryTransactionsRoute(id, name, start, end)) }, onNavigateToBudgetApproval = { navController.navigate(BudgetApprovalRoute) }) }
         composable<BudgetApprovalRoute> { BudgetApprovalScreen(onNavigateBack = { navController.popBackStack() }) }
-        composable<SettingsRoute> { SettingsScreen(onNavigateToDataManagement = { navController.navigate(LegacyDataManagementRoute) }, onNavigateToAppSettings = { navController.navigate(AppSettingsRoute) }, onNavigateToCategorySettings = { navController.navigate(CategorySettingsRoute) }, onNavigateToAbout = { navController.navigate(AboutRoute) }) }
+        composable<SettingsRoute> { SettingsScreen(onNavigateToDataManagement = { navController.navigate(DataManagementRoute) }, onNavigateToAppSettings = { navController.navigate(AppSettingsRoute) }, onNavigateToCategorySettings = { navController.navigate(CategorySettingsRoute) }, onNavigateToAbout = { navController.navigate(AboutRoute) }) }
+        composable<DataManagementRoute> { DataManagementHubScreen(onNavigateBack = { navController.popBackStack() }, onNavigateToLegacyManagement = { navController.navigate(LegacyDataManagementRoute) }, onNavigateToFinancialArchive = { navController.navigate(FinancialArchiveRoute) }, onNavigateToAttachments = { navController.navigate(AttachmentOverviewRoute) }) }
+        composable<AttachmentOverviewRoute> { AttachmentOverviewScreen(onNavigateBack = { navController.popBackStack() }) }
+        composable<FinancialArchiveRoute> { FinancialArchiveScreen(onNavigateBack = { navController.popBackStack() }) }
         composable<LegacyDataManagementRoute> { DataManagementScreen(onNavigateBack = { navController.popBackStack() }) }
         composable<AppSettingsRoute> { AppSettingsScreen(onNavigateBack = { navController.popBackStack() }) }
         composable<AddEditTransactionRoute> { entry ->

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Archive
+import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.FolderZip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -31,6 +32,7 @@ fun DataManagementHubScreen(
     onNavigateBack: () -> Unit,
     onNavigateToLegacyManagement: () -> Unit,
     onNavigateToFinancialArchive: () -> Unit
+    , onNavigateToAttachments: () -> Unit
 ) {
     val strings = LocalAppStrings.current
     Scaffold(
@@ -62,12 +64,23 @@ fun DataManagementHubScreen(
             }
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Financial archive", style = MaterialTheme.typography.titleMedium)
-                    Text("Export or import a ZIP containing transactions, assets, attachments, asset types, and budgets.")
+                    Text(strings.financialArchive, style = MaterialTheme.typography.titleMedium)
+                    Text(strings.financialArchiveDescription)
                     Button(onClick = onNavigateToFinancialArchive) {
                         Icon(Icons.Default.FolderZip, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
-                        Text("Open archive")
+                        Text(strings.openArchive)
+                    }
+                }
+            }
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(strings.attachments, style = MaterialTheme.typography.titleMedium)
+                    Text(strings.attachmentOverviewDescription)
+                    Button(onClick = onNavigateToAttachments) {
+                        Icon(Icons.Default.AttachFile, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(strings.attachments)
                     }
                 }
             }

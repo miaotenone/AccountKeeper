@@ -7,8 +7,21 @@ import com.example.accountkeeper.utils.BackupManager
 import com.example.accountkeeper.utils.ZipBackupData
 import com.example.accountkeeper.utils.AssetData
 import com.example.accountkeeper.utils.AssetTypeData
+import com.example.accountkeeper.utils.BillFileData
 import com.example.accountkeeper.utils.BudgetData
 import com.example.accountkeeper.utils.TransactionData
+import com.example.accountkeeper.utils.ApprovalData
+import com.example.accountkeeper.utils.AssetCategoryData
+import com.example.accountkeeper.utils.AttachmentData
+import com.example.accountkeeper.data.model.Asset
+import com.example.accountkeeper.data.model.AssetStatus
+import com.example.accountkeeper.data.model.Transaction
+import com.example.accountkeeper.data.model.TransactionType
+import com.example.accountkeeper.data.model.Attachment
+import com.example.accountkeeper.data.model.AttachmentConverter
+import com.example.accountkeeper.data.model.AttachmentType
+import com.example.accountkeeper.data.model.AttachmentEntity
+import com.example.accountkeeper.data.model.AttachmentOwnerType
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.junit.Assert.*
@@ -17,6 +30,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
 import java.util.zip.ZipEntry
+import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
 
 @RunWith(AndroidJUnit4::class)
@@ -53,6 +67,91 @@ class ZipRoundtripTest {
             }
         }
         return tempFile
+    }
+
+    private fun assetData(
+        id: Long, date: Long = 1700000000000, amount: Double, categoryName: String?,
+        assetTypeId: Long, targetPerson: String, targetAccount: String, note: String
+    ) = AssetData(
+        id = id, date = date, amount = amount, status = "OWNED", categoryName = categoryName,
+        targetPerson = targetPerson, targetAccount = targetAccount, note = note,
+        isCompleted = false, attachments = emptyList(), createdAt = 1700000000000,
+        updatedAt = 1700000000000, assetTypeId = assetTypeId
+    )
+
+    @Test
+    fun automaticBackupChain_keepsCurrentBaseAndReverseDeltas() {
+        backupManager.clearAllDeltaBackups()
+        val first = listOf(Transaction(1, TransactionType.EXPENSE, 10.0, 1, null, "before"))
+        val second = listOf(Transaction(1, TransactionType.EXPENSE, 20.0, 2, null, "after"))
+        val third = listOf(Transaction(1, TransactionType.EXPENSE, 30.0, 3, null, "latest"))
+        val categories = emptyMap<Long, String>()
+
+        assertNotNull(backupManager.createBaseBackup(first, emptyList(), categories))
+        assertTrue(backupManager.createDeltaBackup(first, emptyList(), second, emptyList(), categories, maxKeep = 2))
+        assertTrue(backupManager.createDeltaBackup(second, emptyList(), third, emptyList(), categories, maxKeep = 1))
+
+        val latest = backupManager.restoreToStep(0)
+        assertTrue(latest.success)
+        assertEquals("latest", latest.transactions.single().note)
+
+        val previous = backupManager.restoreToStep(1)
+        assertTrue(previous.success)
+        assertEquals("after", previous.transactions.single().note)
+        assertEquals(1, backupManager.getDeltaBackupSteps().size)
+    }
+
+    @Test
+    fun automaticBackup_deltaStepRestoresHistoricalAttachmentFiles() {
+        backupManager.clearAllDeltaBackups()
+        val categories = emptyMap<Long, String>()
+        val first = listOf(Transaction(1, TransactionType.EXPENSE, 10.0, 1, null, "before"))
+        val second = listOf(Transaction(1, TransactionType.EXPENSE, 20.0, 2, null, "after"))
+        val attachmentFile = File(context.cacheDir, "delta_attach_${System.currentTimeMillis()}.txt").apply { writeText("historical payload") }
+        val previousAttachment = AttachmentData(
+            id = "asset-1-receipt",
+            ownerType = AttachmentOwnerType.ASSET.name,
+            ownerId = 1,
+            fileName = attachmentFile.name,
+            archiveFileName = "asset-1-receipt_${attachmentFile.name}",
+            mimeType = "text/plain",
+            fileSize = attachmentFile.length(),
+            sha256 = backupManager.getFileSha256(attachmentFile),
+            createdAt = 1,
+            filePath = attachmentFile.absolutePath
+        )
+        val previousAttachmentEntity = AttachmentEntity(
+            id = previousAttachment.id,
+            ownerType = AttachmentOwnerType.ASSET,
+            ownerId = 1,
+            fileName = attachmentFile.name,
+            filePath = attachmentFile.absolutePath,
+            mimeType = "text/plain",
+            fileSize = attachmentFile.length(),
+            sha256 = previousAttachment.sha256,
+            createdAt = 1
+        )
+
+        assertNotNull(backupManager.createBaseBackup(first, emptyList(), categories))
+        assertTrue(
+            backupManager.createDeltaBackup(
+                previousTransactions = first,
+                previousAssets = emptyList(),
+                currentTransactions = second,
+                currentAssets = emptyList(),
+                categoryMap = categories,
+                previousAttachments = listOf(previousAttachment),
+                attachments = listOf(previousAttachmentEntity)
+            )
+        )
+
+        val previous = backupManager.restoreToStep(1)
+        assertTrue(previous.success)
+        assertEquals("before", previous.transactions.single().note)
+        assertEquals("manifest attachment count", 1, previous.attachments.size)
+        assertTrue(previous.attachmentFiles.containsKey("asset-1-receipt"))
+        assertTrue(previous.attachmentFiles["asset-1-receipt"]!!.exists())
+        assertTrue(backupManager.getFileSha256(previous.attachmentFiles["asset-1-receipt"]!!) == previousAttachment.sha256)
     }
 
     @Test
@@ -101,7 +200,7 @@ class ZipRoundtripTest {
         val original = ZipBackupData(
             transactions = emptyList(),
             assets = listOf(
-                AssetData(1, 1700000000000, 100000.0, "OWNED", "House", 1L, "Me", "My House", "Home", false, emptyList(), 1700000000000, 1700000000000)
+                assetData(id = 1, amount = 100000.0, categoryName = "House", assetTypeId = 1L, targetPerson = "Me", targetAccount = "My House", note = "Home")
             ),
             assetTypes = listOf(
                 AssetTypeData(1, "Real Estate", 1700000000000, 1700000000000),
@@ -152,7 +251,7 @@ class ZipRoundtripTest {
                 TransactionData(1, 1700000000000, "Income", 5000.0, "Salary", "Monthly salary")
             ),
             assets = listOf(
-                AssetData(1, 1700000000000, 100000.0, "OWNED", "House", 1L, "Me", "My House", "Home", false, emptyList(), 1700000000000, 1700000000000)
+                assetData(id = 1, amount = 100000.0, categoryName = "House", assetTypeId = 1L, targetPerson = "Me", targetAccount = "My House", note = "Home")
             ),
             assetTypes = listOf(
                 AssetTypeData(1, "Real Estate", 1700000000000, 1700000000000)
@@ -174,7 +273,128 @@ class ZipRoundtripTest {
     }
 
     @Test
+    fun archiveManifest_preservesCategoriesApprovalsAndAttachments() {
+        val original = ZipBackupData(
+            assetCategories = listOf(AssetCategoryData(10, "Hardware", "PHYSICAL", null, true, 1, 2), AssetCategoryData(11, "Laptop", "PHYSICAL", 10, false, 3, 4)),
+            approvals = listOf(ApprovalData(id = 7, type = "PURCHASE_BUDGET", categoryName = "Office", assetCategoryId = 11, amount = 3000.0, purchaseDate = 1, reason = "Need", itemName = "ThinkPad", specification = "14-inch", quantity = 1.0, attachments = "[]", status = "PENDING", decisionNote = "", createdAt = 1, updatedAt = 2)),
+            attachments = listOf(AttachmentData("approval-7", "APPROVAL", 7, "quote.pdf", "approval-7_quote.pdf", "application/pdf", 10, "hash", 5)),
+            version = 2
+        )
+        val result = backupManager.readZipBackupFromFile(createTestZipFile(original, "extended_manifest"))
+        assertTrue(result.success)
+        assertEquals(2, result.assetCategories.size)
+        assertEquals(10L, result.assetCategories[1].parentCategoryId)
+        assertEquals("ThinkPad", result.approvals.single().itemName)
+        assertEquals("APPROVAL", result.attachments.single().ownerType)
+    }
+
+    @Test
+    fun billFiles_areExtractedWithMetadata() {
+        val archiveName = "bill-1_receipt.pdf"
+        val data = ZipBackupData(
+            billFiles = listOf(BillFileData(
+                id = "bill-1",
+                fileName = "receipt.pdf",
+                archiveFileName = archiveName,
+                mimeType = "application/pdf",
+                fileSize = 7L,
+                sha256 = "deadbeef",
+                createdAt = 1700000000000
+            )),
+            version = 1
+        )
+        val zipFile = createRawZipFile(
+            listOf(
+                "data.json" to json.encodeToString(data).toByteArray(Charsets.UTF_8),
+                "bills/$archiveName" to "payload".toByteArray()
+            ),
+            "bill_files"
+        )
+        val result = backupManager.readZipBackupFromFile(zipFile)
+
+        assertTrue(result.success)
+        assertEquals(1, result.billFiles.size)
+        assertEquals(archiveName, result.billFiles.single().archiveFileName)
+        assertTrue(result.billArchiveFiles[archiveName]!!.exists())
+    }
+
+    @Test
+    fun attachmentFiles_withUnderscoreIdsAreMappedFromManifest() {
+        val archiveName = "ASSET_12_quote-1_quote.pdf"
+        val data = ZipBackupData(
+            attachments = listOf(
+                AttachmentData(
+                    id = "ASSET_12_quote-1",
+                    ownerType = "ASSET",
+                    ownerId = 12,
+                    fileName = "quote.pdf",
+                    archiveFileName = archiveName,
+                    mimeType = "application/pdf",
+                    fileSize = 7,
+                    sha256 = "hash",
+                    createdAt = 1
+                )
+            ),
+            version = 2
+        )
+        val zipFile = createRawZipFile(
+            listOf(
+                "data.json" to json.encodeToString(data).toByteArray(Charsets.UTF_8),
+                "attachments/$archiveName" to "payload".toByteArray()
+            ),
+            "attachment_underscore_ids"
+        )
+
+        val result = backupManager.readZipBackupFromFile(zipFile)
+
+        assertTrue(result.success)
+        assertTrue(result.attachmentFiles.containsKey("ASSET_12_quote-1"))
+        assertTrue(result.attachmentFiles["ASSET_12_quote-1"]!!.exists())
+    }
+
+    @Test
+    fun transactionAttachments_areIncludedInManifestAndFiles() {
+        val attachmentFile = File(context.cacheDir, "tx_receipt_${System.currentTimeMillis()}.txt").apply { writeText("receipt") }
+        val attachment = Attachment(
+            id = "tx_attach_1",
+            fileName = "receipt.txt",
+            filePath = attachmentFile.absolutePath,
+            fileType = AttachmentType.TEXT,
+            fileSize = attachmentFile.length(),
+            mimeType = "text/plain",
+            createdAt = 1
+        )
+        val transaction = Transaction(
+            id = 77,
+            type = TransactionType.EXPENSE,
+            amount = 12.0,
+            date = 1,
+            categoryId = null,
+            note = "with attachment",
+            attachments = AttachmentConverter.toJson(listOf(attachment))
+        )
+        val zipFile = File(context.cacheDir, "tx_attachment_${System.currentTimeMillis()}.zip")
+
+        assertTrue(
+            backupManager.exportZipToFile(
+                file = zipFile,
+                transactions = listOf(transaction),
+                assets = emptyList(),
+                categoryMap = emptyMap()
+            )
+        )
+
+        val result = backupManager.readZipBackupFromFile(zipFile)
+
+        assertTrue(result.success)
+        assertEquals("with attachment", result.transactions.single().note)
+        assertEquals("receipt.txt", result.transactions.single().attachments.single().fileName)
+        assertTrue(result.attachmentFiles.containsKey("tx_attach_1"))
+    }
+
+    @Test
     fun oldFormat_noAssetTypesField_parsesWithDefaults() {
+
         val oldJson = """
             {
                 "transactions": [{"id":1,"date":1700000000000,"type":"Income","amount":5000.0,"categoryName":"Salary","note":"test"}],
@@ -235,7 +455,7 @@ class ZipRoundtripTest {
                 TransactionData(1, 1700000000000, "Income", 5000.0, "工资", "测试中文")
             ),
             assets = listOf(
-                AssetData(1, 1700000000000, 100000.0, "OWNED", "房子", 1L, "张三", "我的账户", "备注", false, emptyList(), 1700000000000, 1700000000000)
+                assetData(id = 1, amount = 100000.0, categoryName = "房子", assetTypeId = 1L, targetPerson = "张三", targetAccount = "我的账户", note = "备注")
             ),
             assetTypes = listOf(
                 AssetTypeData(1, "实物资产", 1700000000000, 1700000000000)
@@ -260,7 +480,7 @@ class ZipRoundtripTest {
             TransactionData(i, 1700000000000 + i * 86400000, if (i % 2 == 0L) "Income" else "Expense", i * 100.0, "Category$i", "Note$i")
         }
         val assets = (1L..50L).map { i ->
-            AssetData(i, 1700000000000 + i * 86400000, i * 1000.0, "OWNED", "Type${i % 3}", i % 3 + 1, "Person$i", "Account$i", "Asset$i", false, emptyList(), 1700000000000, 1700000000000)
+            assetData(id = i, date = 1700000000000 + i * 86400000, amount = i * 1000.0, categoryName = "Type${i % 3}", assetTypeId = i % 3 + 1, targetPerson = "Person$i", targetAccount = "Account$i", note = "Asset$i")
         }
 
         val original = ZipBackupData(
@@ -365,7 +585,7 @@ class ZipRoundtripTest {
     fun newFormat_withAllFields_roundtripCorrectly() {
         val original = ZipBackupData(
             transactions = listOf(TransactionData(1, 1700000000000, "Expense", 100.0, "Food", "lunch")),
-            assets = listOf(AssetData(1, 1700000000000, 50000.0, "OWNED", "Savings", 1L, "Me", "Bank", "note", false, emptyList(), 1700000000000, 1700000000000)),
+            assets = listOf(assetData(id = 1, amount = 50000.0, categoryName = "Savings", assetTypeId = 1L, targetPerson = "Me", targetAccount = "Bank", note = "note")),
             assetTypes = listOf(AssetTypeData(1, "Real", 1700000000000, 1700000000000)),
             budgets = listOf(BudgetData("2025-06", "Food", 500.0, 1700000000000, 1700000000000)),
             version = 1
@@ -380,5 +600,101 @@ class ZipRoundtripTest {
         assertEquals(1, result.assetTypes.size)
         assertEquals(1, result.budgets.size)
         assertEquals("Food", result.budgets[0].categoryName)
+    }
+
+    @Test
+    fun independentAttachment_roundtripsWithRealFile() {
+        val content = "independent attachment payload"
+        val source = File(context.cacheDir, "independent_${System.currentTimeMillis()}.txt").apply { writeText(content) }
+        val entity = AttachmentEntity(
+            id = "asset-77-receipt",
+            ownerType = AttachmentOwnerType.ASSET,
+            ownerId = 77,
+            fileName = source.name,
+            filePath = source.absolutePath,
+            mimeType = "text/plain",
+            fileSize = source.length(),
+            sha256 = backupManager.getFileSha256(source),
+            createdAt = 10
+        )
+        val zip = File(context.cacheDir, "independent_zip_${System.currentTimeMillis()}.zip")
+        assertTrue(
+            backupManager.exportZipToFile(
+                file = zip,
+                transactions = emptyList(),
+                assets = emptyList(),
+                categoryMap = emptyMap(),
+                attachments = listOf(entity)
+            )
+        )
+        val result = backupManager.readZipBackupFromFile(zip)
+        assertTrue(result.success)
+        assertEquals("asset-77-receipt", result.attachments.single().id)
+        val restored = result.attachmentFiles["asset-77-receipt"]
+        assertNotNull(restored)
+        assertEquals(backupManager.getFileSha256(restored!!), entity.sha256)
+        zip.delete()
+        source.delete()
+    }
+
+    @Test
+    fun duplicatedLegacyAndIndependentAttachment_writesSingleArchiveEntry() {
+        val content = "shared payload"
+        val source = File(context.cacheDir, "shared_${System.currentTimeMillis()}.txt").apply { writeText(content) }
+        val legacy = Attachment(
+            id = "shared-1",
+            fileName = source.name,
+            filePath = source.absolutePath,
+            fileType = AttachmentType.TEXT,
+            fileSize = source.length(),
+            mimeType = "text/plain",
+            createdAt = 1
+        )
+        val asset = Asset(
+            id = 3,
+            date = 1,
+            amount = 10.0,
+            status = AssetStatus.OWNED,
+            name = "Desk",
+            targetPerson = "",
+            targetAccount = "",
+            note = "",
+            attachments = AttachmentConverter.toJson(listOf(legacy))
+        )
+        val entity = AttachmentEntity(
+            id = "shared-1",
+            ownerType = AttachmentOwnerType.ASSET,
+            ownerId = 3,
+            fileName = source.name,
+            filePath = source.absolutePath,
+            mimeType = "text/plain",
+            fileSize = source.length(),
+            sha256 = backupManager.getFileSha256(source),
+            createdAt = 1
+        )
+        val zip = File(context.cacheDir, "duplicate_zip_${System.currentTimeMillis()}.zip")
+        assertTrue(
+            backupManager.exportZipToFile(zip, emptyList(), listOf(asset), emptyMap(), attachments = listOf(entity))
+        )
+        ZipFile(zip).use { zipFile ->
+            val attachmentEntries = zipFile.entries().asSequence().filter { it.name.startsWith("attachments/") }.count()
+            assertEquals(1, attachmentEntries)
+        }
+        zip.delete()
+        source.delete()
+    }
+
+    @Test
+    fun restoreCopies_areTrackedForRollback() {
+        val source = File(context.cacheDir, "rollback_${System.currentTimeMillis()}.txt").apply { writeText("payload") }
+        val created = mutableListOf<File>()
+        val copied = backupManager.copyAttachmentToInternalStorage("rollback-id", source, "rollback.txt", created)
+        assertNotNull(copied)
+        assertTrue(created.contains(File(copied!!.filePath)))
+        val billSource = File(context.cacheDir, "rollback_bill_${System.currentTimeMillis()}.csv").apply { writeText("bill") }
+        val billDest = backupManager.copyBillFileToInternalStorage(billSource, "bill.csv", created)
+        assertNotNull(billDest)
+        assertTrue(created.contains(billDest!!))
+        created.filter { it.exists() }.forEach { it.delete() }
     }
 }

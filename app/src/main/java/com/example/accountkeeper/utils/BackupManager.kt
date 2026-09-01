@@ -18,15 +18,31 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 
+@Serializable
+data class BillFileData(val id: String, val ownerType: String = "BILL", val filePath: String = "", val ownerId: Long? = null, val categoryId: Long? = null, val categoryName: String? = null, val fileName: String, val archiveFileName: String = "", val mimeType: String, val fileSize: Long, val sha256: String, val createdAt: Long)
+@Serializable
+data class AssetCategoryData(val id: Long, val name: String, val rootType: String, val parentCategoryId: Long? = null, val isDefault: Boolean = false, val createdAt: Long, val updatedAt: Long)
+@Serializable
+data class ApprovalData(val id: Long, val type: String, val categoryName: String? = null, val assetCategoryId: Long? = null, val amount: Double, val purchaseDate: Long? = null, val reason: String = "", val itemName: String = "", val specification: String = "", val quantity: Double = 1.0, val attachments: String = "", val status: String, val decisionNote: String = "", val createdAt: Long, val updatedAt: Long, val decidedAt: Long? = null)
+@Serializable
+data class AttachmentData(val id: String, val ownerType: String, val ownerId: Long, val fileName: String, val archiveFileName: String = "", val mimeType: String, val fileSize: Long, val sha256: String, val createdAt: Long, val filePath: String = "")
+@Serializable
+data class SettingsData(val isDarkMode: Boolean, val language: String, val currencySymbol: String, val isAutoBackupEnabled: Boolean, val backupRetentionLimit: Int, val swipeDeleteRequiresConfirm: Boolean, val isScheduledBackupEnabled: Boolean, val scheduledBackupInterval: Int)
+
 /**
  * ZIP 备份数据结构
  */
 @Serializable
 data class ZipBackupData(
-    val transactions: List<TransactionData>,
-    val assets: List<AssetData>,
+    val transactions: List<TransactionData> = emptyList(),
+    val assets: List<AssetData> = emptyList(),
     val assetTypes: List<AssetTypeData> = emptyList(),
     val budgets: List<BudgetData> = emptyList(),
+    val billFiles: List<BillFileData> = emptyList(),
+    val assetCategories: List<AssetCategoryData> = emptyList(),
+    val approvals: List<ApprovalData> = emptyList(),
+    val attachments: List<AttachmentData> = emptyList(),
+    val settings: SettingsData? = null,
     val version: Int = 1
 )
 
@@ -37,7 +53,8 @@ data class TransactionData(
     val type: String,
     val amount: Double,
     val categoryName: String,
-    val note: String
+    val note: String,
+    val attachments: List<Attachment> = emptyList()
 )
 
 @Serializable
@@ -47,6 +64,13 @@ data class AssetData(
     val amount: Double,
     val status: String,
     val categoryName: String?,
+    val name: String = "",
+    val specification: String = "",
+    val quantity: Double = 1.0,
+    val purchaseDate: Long? = null,
+    val sourceApprovalId: Long? = null,
+    val transactionId: Long? = null,
+    val assetCategoryId: Long? = null,
     val targetPerson: String,
     val targetAccount: String,
     val note: String,
@@ -54,7 +78,16 @@ data class AssetData(
     val attachments: List<Attachment>,
     val createdAt: Long,
     val updatedAt: Long,
-    @Deprecated("AssetType removed", level = DeprecationLevel.HIDDEN)
+    val assetRootType: String = "PHYSICAL",
+    val supplier: String = "",
+    val location: String = "",
+    val userOrDepartment: String = "",
+    val warranty: String = "",
+    val serviceStartDate: Long? = null,
+    val serviceEndDate: Long? = null,
+    val renewalCycle: String = "",
+    val accessUrl: String = "",
+    @Deprecated("Legacy field retained for old ZIP compatibility")
     val assetTypeId: Long = 2L
 )
 
@@ -82,6 +115,7 @@ data class DeltaBackupData(
     val metadataChanged: Boolean = false,
     val assetTypes: List<AssetTypeData> = emptyList(),
     val budgets: List<BudgetData> = emptyList(),
+    val attachments: List<AttachmentData> = emptyList(),
 )
 
 /**
@@ -107,11 +141,17 @@ data class DeltaBackupInfo(
  * ZIP 备份导入结果
  */
 data class ZipImportResult(
-    val transactions: List<TransactionData>,
-    val assets: List<AssetData>,
+    val transactions: List<TransactionData> = emptyList(),
+    val assets: List<AssetData> = emptyList(),
     val assetTypes: List<AssetTypeData> = emptyList(),
     val budgets: List<BudgetData> = emptyList(),
-    val attachmentFiles: Map<String, File>, // attachmentId -> temp file
+    val attachmentFiles: Map<String, File>,
+    val billFiles: List<BillFileData> = emptyList(),
+    val billArchiveFiles: Map<String, File> = emptyMap(),
+    val assetCategories: List<AssetCategoryData> = emptyList(),
+    val approvals: List<ApprovalData> = emptyList(),
+    val attachments: List<AttachmentData> = emptyList(),
+    val settings: SettingsData? = null,
     val success: Boolean,
     val errorMessage: String? = null
 )
@@ -120,17 +160,48 @@ data class ZipImportResult(
  * 增量备份导入结果
  */
 data class DeltaImportResult(
-    val transactions: List<TransactionData>,
-    val assets: List<AssetData>,
+    val transactions: List<TransactionData> = emptyList(),
+    val assets: List<AssetData> = emptyList(),
     val assetTypes: List<AssetTypeData> = emptyList(),
     val budgets: List<BudgetData> = emptyList(),
     val attachmentFiles: Map<String, File>,
+    val billFiles: List<BillFileData> = emptyList(),
+    val billArchiveFiles: Map<String, File> = emptyMap(),
+    val assetCategories: List<AssetCategoryData> = emptyList(),
+    val approvals: List<ApprovalData> = emptyList(),
+    val attachments: List<AttachmentData> = emptyList(),
+    val settings: SettingsData? = null,
     val targetStep: Int,                // 恢复到的步骤号
     val success: Boolean,
     val errorMessage: String? = null
 )
 
-class BackupManager(private val context: Context) {
+class BackupManager(private val context: Context) {    fun getFileSha256(file: File): String = java.security.MessageDigest.getInstance("SHA-256").digest(file.readBytes()).joinToString("") { "%02x".format(it) }
+    fun getBillFileMimeType(name: String): String = when (name.substringAfterLast('.', "").lowercase()) {
+        "pdf" -> "application/pdf"
+        "jpg", "jpeg" -> "image/jpeg"
+        "png" -> "image/png"
+        "csv" -> "text/csv"
+        "xls" -> "application/vnd.ms-excel"
+        "xlsx" -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        else -> "application/octet-stream"
+    }
+    fun copyBillFileToInternalStorage(source: File, originalName: String, createdFiles: MutableCollection<File>? = null): File? = runCatching {
+        check(source.isFile)
+        val target = File(billDir, "${System.currentTimeMillis()}_$originalName")
+        source.inputStream().use { input -> target.outputStream().use { output -> input.copyTo(output) } }
+        createdFiles?.add(target)
+        target
+    }.getOrNull()
+    fun createProtectionSnapshotFile(): File = File(context.cacheDir, "protection_${System.currentTimeMillis()}.zip")
+    fun clearProtectionSnapshots() { context.cacheDir.listFiles()?.filter { it.name.startsWith("protection_") }?.forEach { it.delete() } }
+    fun exportZipToFile(file: File, transactions: List<Transaction>, assets: List<Asset>, categoryMap: Map<Long, String>, budgets: List<Budget> = emptyList(), billFiles: List<com.example.accountkeeper.data.model.BillFileEntity> = emptyList(), assetCategoryMap: Map<Long, String> = emptyMap(), assetCategories: List<com.example.accountkeeper.data.model.AssetCategoryEntity> = emptyList(), approvals: List<com.example.accountkeeper.data.model.BudgetApprovalRequest> = emptyList(), attachments: List<com.example.accountkeeper.data.model.AttachmentEntity> = emptyList(), settings: SettingsData? = null): Boolean = runCatching {
+        val result = writeZipBackup(transactions, assets, categoryMap, budgets, isAuto = false, billFiles = billFiles, assetCategoryMap = assetCategoryMap, assetCategories = assetCategories, approvals = approvals, attachments = attachments, settings = settings)
+        check(result != null)
+        result.inputStream().use { input -> file.outputStream().use { output -> input.copyTo(output) } }
+        true
+    }.getOrDefault(false)
+
 
     private val backupDir = File(context.filesDir, "backups").apply {
         if (!exists()) {
@@ -200,7 +271,7 @@ class BackupManager(private val context: Context) {
                     if (read < 0) break
                     offset += read
                 }
-                offset == 4 && header[0] == 'P'.code.toByte() && header[1] == 'K'.code.toByte() &&
+                offset == 4 && header[0] == 80.toByte() && header[1] == 75.toByte() &&
                     (header[2] == 3.toByte() || header[2] == 5.toByte()) &&
                     (header[3] == 4.toByte() || header[3] == 6.toByte() || header[3] == 8.toByte())
             }
@@ -482,6 +553,12 @@ class BackupManager(private val context: Context) {
         maxKeep: Int = 15,
         isAuto: Boolean = true,
         customName: String? = null
+        ,billFiles: List<com.example.accountkeeper.data.model.BillFileEntity> = emptyList(),
+        assetCategoryMap: Map<Long, String> = emptyMap(),
+        assetCategories: List<com.example.accountkeeper.data.model.AssetCategoryEntity> = emptyList(),
+        approvals: List<com.example.accountkeeper.data.model.BudgetApprovalRequest> = emptyList(),
+        attachments: List<com.example.accountkeeper.data.model.AttachmentEntity> = emptyList(),
+        settings: SettingsData? = null
     ): File? {
         return try {
         var entryCount = 0
@@ -508,7 +585,16 @@ class BackupManager(private val context: Context) {
                         isCompleted = asset.isCompleted,
                         attachments = AttachmentConverter.fromJson(asset.attachments),
                         createdAt = asset.createdAt,
-                        updatedAt = asset.updatedAt
+                        updatedAt = asset.updatedAt,
+                        assetRootType = asset.assetRootType,
+                        supplier = asset.supplier,
+                        location = asset.location,
+                        userOrDepartment = asset.userOrDepartment,
+                        warranty = asset.warranty,
+                        serviceStartDate = asset.serviceStartDate,
+                        serviceEndDate = asset.serviceEndDate,
+                        renewalCycle = asset.renewalCycle,
+                        accessUrl = asset.accessUrl
                     )
                 }
                 val backupData = ZipBackupData(
@@ -519,11 +605,17 @@ class BackupManager(private val context: Context) {
                             type = if (tx.type == TransactionType.INCOME) "Income" else "Expense",
                             amount = tx.amount,
                             categoryName = categoryMap[tx.categoryId] ?: "Other",
-                            note = tx.note
+                            note = tx.note,
+                            attachments = AttachmentConverter.fromJson(tx.attachments)
                         )
                     },
                     assets = assetsData,
                     budgets = budgets.map { BudgetData(it.monthKey, it.categoryId?.let(categoryMap::get), it.amount, it.createdAt, it.updatedAt) },
+                    billFiles = billFiles.map { BillFileData(id = it.id, ownerType = it.ownerType, filePath = it.filePath, ownerId = it.ownerId, categoryId = it.categoryId, categoryName = categoryMap[it.categoryId], fileName = it.fileName, archiveFileName = "bills/${it.id}_${it.fileName}", mimeType = it.mimeType, fileSize = it.fileSize, sha256 = it.sha256, createdAt = it.createdAt) },
+                    assetCategories = assetCategories.map { AssetCategoryData(it.id, it.name, it.rootType.name, it.parentCategoryId, it.isDefault, it.createdAt, it.updatedAt) },
+                    approvals = approvals.map { ApprovalData(it.id, it.type.name, categoryMap[it.categoryId], it.assetCategoryId, it.amount, it.purchaseDate, it.reason, it.itemName, it.specification, it.quantity, it.attachments, it.status.name, it.decisionNote, it.createdAt, it.updatedAt, it.decidedAt) },
+                    attachments = attachments.map { AttachmentData(it.id, it.ownerType.name, it.ownerId, it.fileName, "attachments/${it.id}_${it.fileName}", it.mimeType, it.fileSize, it.sha256, it.createdAt, it.filePath) },
+                    settings = settings,
                     version = 1
                 )
                 
@@ -533,6 +625,35 @@ class BackupManager(private val context: Context) {
                 
                 // 3. 写入附件文件
                 val attachmentEntries = mutableSetOf<String>()
+                attachments.forEach { record ->
+                    val file = File(record.filePath)
+                    val entryName = "attachments/${record.id}_${record.fileName}"
+                    if (file.isFile && attachmentEntries.add(entryName)) {
+                        zipOut.putNextEntry(ZipEntry(entryName))
+                        file.inputStream().use { it.copyTo(zipOut) }
+                        zipOut.closeEntry()
+                    }
+                }
+                billFiles.forEach { record ->
+                    val file = File(record.filePath)
+                    val entryName = "bills/${record.id}_${record.fileName}"
+                    if (file.isFile && attachmentEntries.add(entryName)) {
+                        zipOut.putNextEntry(ZipEntry(entryName))
+                        file.inputStream().use { it.copyTo(zipOut) }
+                        zipOut.closeEntry()
+                    }
+                }
+                transactions.forEach { tx ->
+                    AttachmentConverter.fromJson(tx.attachments).forEach { attachment ->
+                        val attachmentFile = File(attachment.filePath)
+                        val entryName = "attachments/${attachment.id}_${attachment.fileName}"
+                        if (attachmentFile.isFile && attachmentEntries.add(entryName)) {
+                            zipOut.putNextEntry(ZipEntry(entryName))
+                            attachmentFile.inputStream().use { it.copyTo(zipOut) }
+                            zipOut.closeEntry()
+                        }
+                    }
+                }
                 for (asset in assets) {
                     val attachmentList = AttachmentConverter.fromJson(asset.attachments)
                     for (attachment in attachmentList) {
@@ -657,74 +778,108 @@ class BackupManager(private val context: Context) {
      */
     private fun readZipBackupFromStream(inputStream: java.io.InputStream): ZipImportResult {
         return try {
-            
             val transactions = mutableListOf<TransactionData>()
             val assets = mutableListOf<AssetData>()
             val assetTypes = mutableListOf<AssetTypeData>()
             val budgets = mutableListOf<BudgetData>()
-            val attachmentFiles = mutableMapOf<String, File>()
-            
-            // 创建临时目录存放解压的附件
-            val tempDir = File(context.cacheDir, "zip_extract_${System.currentTimeMillis()}").apply {
-                mkdirs()
-            }
-            
+            val billFiles = mutableListOf<BillFileData>()
+            val assetCategories = mutableListOf<AssetCategoryData>()
+            val approvals = mutableListOf<ApprovalData>()
+            val attachments = mutableListOf<AttachmentData>()
+            val settings = arrayOfNulls<SettingsData>(1)
+            val extractedAttachments = mutableMapOf<String, File>()
+            val extractedBills = mutableMapOf<String, File>()
+            val tempDir = File(context.cacheDir, "zip_extract_${System.currentTimeMillis()}").apply { mkdirs() }
+
             ZipInputStream(inputStream).use { zipIn ->
-                var entry: ZipEntry? = zipIn.nextEntry
+                var entry = zipIn.nextEntry
                 var entryCount = 0
                 while (entry != null) {
                     entryCount++
                     when {
                         entry.name == "data.json" -> {
-                            val content = zipIn.readBytes().toString(Charsets.UTF_8)
-                            val backupData = json.decodeFromString<ZipBackupData>(content)
+                            val backupData = json.decodeFromString<ZipBackupData>(zipIn.readBytes().toString(Charsets.UTF_8))
                             transactions.addAll(backupData.transactions)
                             assets.addAll(backupData.assets)
                             assetTypes.addAll(backupData.assetTypes)
                             budgets.addAll(backupData.budgets)
-                        }
-                        entry.name == "transactions.csv" -> {
-                            // 也支持旧格式：从 CSV 解析交易记录
-                            val content = zipIn.readBytes().toString(Charsets.UTF_8)
-                            val parsed = parseTransactionsFromCsv(content)
-                            if (parsed.isNotEmpty() && transactions.isEmpty()) {
-                                transactions.addAll(parsed)
-                            }
+                            billFiles.addAll(backupData.billFiles)
+                            assetCategories.addAll(backupData.assetCategories)
+                            approvals.addAll(backupData.approvals)
+                            attachments.addAll(backupData.attachments)
+                            settings[0] = backupData.settings
                         }
                         entry.name.startsWith("attachments/") -> {
-                            // 解压附件到临时目录
-                            val fileName = entry.name.substringAfter("attachments/")
-                            if (fileName.isNotEmpty()) {
-                                val tempFile = File(tempDir, fileName)
-                                tempFile.outputStream().use { output ->
-                                    zipIn.copyTo(output)
-                                }
-                                // 从文件名提取附件ID（格式：{id}_{originalName}）
-                                val attachmentId = fileName.substringBefore("_", fileName)
-                                attachmentFiles[attachmentId] = tempFile
+                            val name = entry.name.removePrefix("attachments/")
+                            if (name.isNotBlank()) {
+                                val file = File(tempDir, name).apply { parentFile?.mkdirs() }
+                                file.outputStream().use { zipIn.copyTo(it) }
+                                extractedAttachments[name] = file
+                                extractedAttachments[name.substringBefore("_")] = file
+                            }
+                        }
+                        entry.name.startsWith("bills/") -> {
+                            val name = entry.name.removePrefix("bills/")
+                            if (name.isNotBlank()) {
+                                val file = File(tempDir, name).apply { parentFile?.mkdirs() }
+                                file.outputStream().use { zipIn.copyTo(it) }
+                                extractedBills[name] = file
+                                extractedBills[entry.name] = file
                             }
                         }
                     }
                     zipIn.closeEntry()
                     entry = zipIn.nextEntry
                 }
-                if (entryCount == 0) {
-                    return ZipImportResult(
-                        transactions = emptyList(),
-                        assets = emptyList(),
-                        attachmentFiles = emptyMap(),
-                        success = false,
-                        errorMessage = "Invalid or empty ZIP file"
-                    )
-                }
+                check(entryCount > 0) { "Invalid or empty ZIP file" }
             }
-            
+            val finalAttachmentFiles = if (attachments.isEmpty()) {
+                val legacy = mutableMapOf<String, File>()
+                extractedAttachments.forEach { (key, file) ->
+                    if (!key.contains("_")) legacy[key] = file
+                }
+                transactions.forEach { tx ->
+                    tx.attachments.forEach { attachment ->
+                        val key = "${attachment.id}_${attachment.fileName}"
+                        extractedAttachments[key]?.let { legacy[attachment.id] = it }
+                    }
+                }
+                assets.forEach { asset ->
+                    asset.attachments.forEach { attachment ->
+                        val key = "${attachment.id}_${attachment.fileName}"
+                        extractedAttachments[key]?.let { legacy[attachment.id] = it }
+                    }
+                }
+                legacy
+            } else {
+                mutableMapOf<String, File>()
+            }
+            attachments.forEach { record ->
+                val archiveName = record.archiveFileName.removePrefix("attachments/")
+                (extractedAttachments[archiveName]
+                    ?: extractedAttachments[archiveName.substringAfterLast("/")]
+                    ?: extractedAttachments[record.id])?.let { finalAttachmentFiles[record.id] = it }
+            }
+            billFiles.forEach { record ->
+                val archiveName = record.archiveFileName.removePrefix("bills/")
+                (extractedBills[record.archiveFileName]
+                    ?: extractedBills[archiveName]
+                    ?: extractedBills[record.id])?.let { extractedBills[record.archiveFileName] = it }
+                extractedBills[archiveName]?.let { extractedBills[record.archiveFileName] = it }
+            }
+
             ZipImportResult(
                 transactions = transactions,
                 assets = assets,
                 assetTypes = assetTypes,
                 budgets = budgets,
-                attachmentFiles = attachmentFiles,
+                attachmentFiles = finalAttachmentFiles.filterValues { it.exists() },
+                billFiles = billFiles,
+                billArchiveFiles = extractedBills.filterValues { it.exists() },
+                assetCategories = assetCategories,
+                approvals = approvals,
+                attachments = attachments,
+                settings = settings[0],
                 success = true
             )
         } catch (e: Exception) {
@@ -738,7 +893,6 @@ class BackupManager(private val context: Context) {
             )
         }
     }
-
     /**
      * 从 CSV 解析交易记录（向后兼容）
      */
@@ -826,7 +980,8 @@ class BackupManager(private val context: Context) {
     fun copyAttachmentToInternalStorage(
         attachmentId: String,
         tempFile: File,
-        originalFileName: String
+        originalFileName: String,
+        createdFiles: MutableCollection<File>? = null
     ): Attachment? {
         return try {
             if (!tempFile.exists()) return null
@@ -841,6 +996,7 @@ class BackupManager(private val context: Context) {
                 }
             }
             
+            createdFiles?.add(destFile)
             val mimeType = when (extension.lowercase()) {
                 "jpg", "jpeg" -> "image/jpeg"
                 "png" -> "image/png"
@@ -967,6 +1123,12 @@ class BackupManager(private val context: Context) {
         assets: List<Asset>,
         categoryMap: Map<Long, String>,
         budgets: List<Budget> = emptyList()
+        ,billFiles: List<com.example.accountkeeper.data.model.BillFileEntity> = emptyList(),
+        assetCategoryMap: Map<Long, String> = emptyMap(),
+        assetCategories: List<com.example.accountkeeper.data.model.AssetCategoryEntity> = emptyList(),
+        approvals: List<com.example.accountkeeper.data.model.BudgetApprovalRequest> = emptyList(),
+        attachments: List<com.example.accountkeeper.data.model.AttachmentEntity> = emptyList(),
+        settings: SettingsData? = null
     ): Boolean {
         return try {
             val tempZip = writeZipBackup(
@@ -974,7 +1136,13 @@ class BackupManager(private val context: Context) {
                 assets = assets,
                 categoryMap = categoryMap,
                 budgets = budgets,
-                isAuto = false
+                isAuto = false,
+                billFiles = billFiles,
+                assetCategoryMap = assetCategoryMap,
+                assetCategories = assetCategories,
+                approvals = approvals,
+                attachments = attachments,
+                    settings = settings,
             ) ?: return false
             
             context.contentResolver.openOutputStream(uri)?.use { output ->
@@ -1002,6 +1170,12 @@ class BackupManager(private val context: Context) {
         assets: List<Asset>,
         categoryMap: Map<Long, String>,
         budgets: List<Budget> = emptyList()
+        ,billFiles: List<com.example.accountkeeper.data.model.BillFileEntity> = emptyList(),
+        assetCategoryMap: Map<Long, String> = emptyMap(),
+        assetCategories: List<com.example.accountkeeper.data.model.AssetCategoryEntity> = emptyList(),
+        approvals: List<com.example.accountkeeper.data.model.BudgetApprovalRequest> = emptyList(),
+        attachments: List<com.example.accountkeeper.data.model.AttachmentEntity> = emptyList(),
+        settings: SettingsData? = null
     ): String? {
         return try {
             val baseBackupId = "base_${System.currentTimeMillis()}"
@@ -1018,7 +1192,8 @@ class BackupManager(private val context: Context) {
                             type = if (tx.type == TransactionType.INCOME) "Income" else "Expense",
                             amount = tx.amount,
                             categoryName = categoryMap[tx.categoryId] ?: "Other",
-                            note = tx.note
+                            note = tx.note,
+                            attachments = AttachmentConverter.fromJson(tx.attachments)
                         )
                     },
                     assets = assets.map { asset ->
@@ -1047,6 +1222,24 @@ class BackupManager(private val context: Context) {
                 
                 // 写入附件
                 val attachmentEntries = mutableSetOf<String>()
+                attachments.forEach { record ->
+                    val file = File(record.filePath)
+                    val entryName = "attachments/${record.id}_${record.fileName}"
+                    if (file.isFile && attachmentEntries.add(entryName)) {
+                        zipOut.putNextEntry(ZipEntry(entryName))
+                        file.inputStream().use { it.copyTo(zipOut) }
+                        zipOut.closeEntry()
+                    }
+                }
+                billFiles.forEach { record ->
+                    val file = File(record.filePath)
+                    val entryName = "bills/${record.id}_${record.fileName}"
+                    if (file.isFile && attachmentEntries.add(entryName)) {
+                        zipOut.putNextEntry(ZipEntry(entryName))
+                        file.inputStream().use { it.copyTo(zipOut) }
+                        zipOut.closeEntry()
+                    }
+                }
                 for (asset in assets) {
                     val attachmentList = AttachmentConverter.fromJson(asset.attachments)
                     for (attachment in attachmentList) {
@@ -1093,6 +1286,16 @@ class BackupManager(private val context: Context) {
         budgets: List<Budget> = emptyList(),
         previousBudgets: List<Budget> = emptyList(),
         maxKeep: Int = 50
+        ,billFiles: List<com.example.accountkeeper.data.model.BillFileEntity> = emptyList(),
+        previousBillFiles: List<BillFileData> = emptyList(),
+        assetCategoryMap: Map<Long, String> = emptyMap(),
+        assetCategories: List<com.example.accountkeeper.data.model.AssetCategoryEntity> = emptyList(),
+        previousAssetCategories: List<AssetCategoryData> = emptyList(),
+        approvals: List<com.example.accountkeeper.data.model.BudgetApprovalRequest> = emptyList(),
+        previousApprovals: List<ApprovalData> = emptyList(),
+        attachments: List<com.example.accountkeeper.data.model.AttachmentEntity> = emptyList(),
+        previousAttachments: List<AttachmentData> = emptyList(),
+        settings: SettingsData? = null
     ): Boolean {
         return try {
             val chainIndex = getBackupChainIndex()
@@ -1118,8 +1321,9 @@ class BackupManager(private val context: Context) {
                         type = if (tx.type == TransactionType.INCOME) "Income" else "Expense",
                         amount = tx.amount,
                         categoryName = categoryMap[tx.categoryId] ?: "Other",
-                        note = tx.note
-                    )
+                        note = tx.note,
+                            attachments = AttachmentConverter.fromJson(tx.attachments)
+                        )
                 }
             
             // 修改的交易
@@ -1136,8 +1340,9 @@ class BackupManager(private val context: Context) {
                         type = if (tx.type == TransactionType.INCOME) "Income" else "Expense",
                         amount = tx.amount,
                         categoryName = categoryMap[tx.categoryId] ?: "Other",
-                        note = tx.note
-                    )
+                        note = tx.note,
+                            attachments = AttachmentConverter.fromJson(tx.attachments)
+                        )
                 }
             
             // 删除的交易ID
@@ -1207,24 +1412,61 @@ class BackupManager(private val context: Context) {
             val timestamp = System.currentTimeMillis()
             val fileName = "delta_${chainIndex.baseBackupId}_step$stepNumber.json"
             
+            val reverseAddedTransactions = previousTransactions.filter { it.id !in currentTxMap }.map { tx ->
+                TransactionData(tx.id, tx.date, if (tx.type == TransactionType.INCOME) "Income" else "Expense", tx.amount, categoryMap[tx.categoryId] ?: "Other", tx.note, AttachmentConverter.fromJson(tx.attachments))
+            }
+            val reverseModifiedTransactions = previousTransactions.filter { tx ->
+                val current = currentTxMap[tx.id]
+                current != null && (current.amount != tx.amount || current.note != tx.note || current.date != tx.date || current.categoryId != tx.categoryId || current.attachments != tx.attachments)
+            }.map { tx ->
+                TransactionData(tx.id, tx.date, if (tx.type == TransactionType.INCOME) "Income" else "Expense", tx.amount, categoryMap[tx.categoryId] ?: "Other", tx.note, AttachmentConverter.fromJson(tx.attachments))
+            }
+            val reverseDeletedTransactionIds = currentTransactions.filter { it.id !in previousTxMap }.map { it.id }
+            val reverseAddedAssets = previousAssets.filter { it.id !in currentAssetMap }.map { asset ->
+                AssetData(asset.id, asset.date, asset.amount, asset.status.name, categoryMap[asset.categoryId], targetPerson = asset.targetPerson, targetAccount = asset.targetAccount, note = asset.note, isCompleted = asset.isCompleted, attachments = AttachmentConverter.fromJson(asset.attachments), createdAt = asset.createdAt, updatedAt = asset.updatedAt)
+            }
+            val reverseModifiedAssets = previousAssets.filter { asset ->
+                val current = currentAssetMap[asset.id]
+                current != null && (current.amount != asset.amount || current.note != asset.note || current.status != asset.status || current.isCompleted != asset.isCompleted || current.updatedAt != asset.updatedAt || current.attachments != asset.attachments)
+            }.map { asset ->
+                AssetData(asset.id, asset.date, asset.amount, asset.status.name, categoryMap[asset.categoryId], targetPerson = asset.targetPerson, targetAccount = asset.targetAccount, note = asset.note, isCompleted = asset.isCompleted, attachments = AttachmentConverter.fromJson(asset.attachments), createdAt = asset.createdAt, updatedAt = asset.updatedAt)
+            }
+            val reverseDeletedAssetIds = currentAssets.filter { it.id !in previousAssetMap }.map { it.id }
             // 创建增量备份数据
             val deltaBackup = DeltaBackupData(
                 baseBackupId = chainIndex.baseBackupId,
                 stepNumber = stepNumber,
                 timestamp = timestamp,
-                addedTransactions = addedTransactions,
-                modifiedTransactions = modifiedTransactions,
-                deletedTransactionIds = deletedTransactionIds,
-                addedAssets = addedAssets,
-                modifiedAssets = modifiedAssets,
-                deletedAssetIds = deletedAssetIds,
+                addedTransactions = reverseAddedTransactions,
+                modifiedTransactions = reverseModifiedTransactions,
+                deletedTransactionIds = reverseDeletedTransactionIds,
+                addedAssets = reverseAddedAssets,
+                modifiedAssets = reverseModifiedAssets,
+                deletedAssetIds = reverseDeletedAssetIds,
                 metadataChanged = metadataChanged,
-                budgets = if (metadataChanged) budgets.map { BudgetData(it.monthKey, it.categoryId?.let(categoryMap::get), it.amount, it.createdAt, it.updatedAt) } else emptyList()
+                budgets = if (metadataChanged) previousBudgets.map { BudgetData(it.monthKey, it.categoryId?.let(categoryMap::get), it.amount, it.createdAt, it.updatedAt) } else emptyList(),
+                attachments = previousAttachments
             )
             
             // 写入增量备份文件
             val deltaFile = File(deltaBackupDir, fileName)
             deltaFile.writeText(json.encodeToString(deltaBackup))
+            val refreshedBase = writeZipBackup(
+                transactions = currentTransactions,
+                assets = currentAssets,
+                categoryMap = categoryMap,
+                budgets = budgets,
+                maxKeep = maxKeep,
+                isAuto = false,
+                billFiles = billFiles,
+                assetCategoryMap = assetCategoryMap,
+                assetCategories = assetCategories,
+                approvals = approvals,
+                attachments = attachments,
+                settings = settings
+            ) ?: return false
+            refreshedBase.copyTo(File(deltaBackupDir, "${chainIndex.baseBackupId}.zip"), overwrite = true)
+            refreshedBase.delete()
             
             // 更新备份链索引
             val updatedChain = chainIndex.copy(
@@ -1232,8 +1474,8 @@ class BackupManager(private val context: Context) {
                     fileName = fileName,
                     stepNumber = stepNumber,
                 timestamp = timestamp,
-                    changeCount = addedTransactions.size + modifiedTransactions.size + deletedTransactionIds.size +
-                                  addedAssets.size + modifiedAssets.size + deletedAssetIds.size + if (metadataChanged) 1 else 0
+                    changeCount = reverseAddedTransactions.size + reverseModifiedTransactions.size + reverseDeletedTransactionIds.size +
+                                  reverseAddedAssets.size + reverseModifiedAssets.size + reverseDeletedAssetIds.size + if (metadataChanged) 1 else 0
                 )
             )
             saveBackupChainIndex(updatedChain)
@@ -1328,6 +1570,7 @@ class BackupManager(private val context: Context) {
             val assets = result.assets.toMutableList()
             val attachmentFiles = result.attachmentFiles.toMutableMap()
             val budgets = result.budgets.toMutableList()
+            val restoredAttachments = result.attachments.toMutableList()
             
             // 确定要应用到的步骤
             val actualTargetStep = if (targetStep == -1) {
@@ -1336,11 +1579,8 @@ class BackupManager(private val context: Context) {
                 targetStep.coerceIn(0, chainIndex.deltaBackups.size)
             }
             
-            // 应用增量备份
-            for (i in 0 until actualTargetStep) {
-                if (i >= chainIndex.deltaBackups.size) break
-                
-                val deltaInfo = chainIndex.deltaBackups[i]
+            // 应用反向增量备份：基准是当前全量，最新的 delta 先回退。
+            for (deltaInfo in chainIndex.deltaBackups.takeLast(actualTargetStep).asReversed()) {
                 val deltaFile = File(deltaBackupDir, deltaInfo.fileName)
                 if (!deltaFile.exists()) continue
                 
@@ -1367,6 +1607,13 @@ class BackupManager(private val context: Context) {
                     budgets.clear()
                     budgets.addAll(deltaBackup.budgets)
                 }
+                if (deltaBackup.attachments.isNotEmpty()) {
+                    restoredAttachments.clear()
+                    restoredAttachments.addAll(deltaBackup.attachments)
+                    deltaBackup.attachments.forEach { record ->
+                        File(record.filePath).takeIf { it.exists() }?.let { attachmentFiles[record.id] = it }
+                    }
+                }
             }
             
             DeltaImportResult(
@@ -1374,6 +1621,7 @@ class BackupManager(private val context: Context) {
                 assets = assets,
                 budgets = budgets,
                 attachmentFiles = attachmentFiles,
+                attachments = restoredAttachments,
                 targetStep = actualTargetStep,
                 success = true
             )

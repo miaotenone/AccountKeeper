@@ -166,20 +166,20 @@ class BudgetViewModel @Inject constructor(
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
     }
 
-    fun submitApproval(request: BudgetApprovalRequest, replacingId: Long? = null) = viewModelScope.launch {
+    fun submitApproval(request: BudgetApprovalRequest, replacingId: Long? = null) = launchBackup {
         if (replacingId == null) approvalRepository.submit(request)
         else approvalRepository.resubmit(request.copy(id = replacingId))
     }
 
-    fun withdrawApproval(id: Long) = viewModelScope.launch { approvalRepository.withdraw(id) }
+    fun withdrawApproval(id: Long) = launchBackup { approvalRepository.withdraw(id) }
 
-    fun approveApproval(id: Long, note: String = "") = viewModelScope.launch {
-        approvalRepository.approve(id, note)
+    fun approveApproval(id: Long, note: String = "") = launchBackup { approvalRepository.approve(id, note) }
+
+    fun rejectApproval(id: Long, note: String = "") = launchBackup { approvalRepository.reject(id, note) }
+
+    private fun launchBackup(action: suspend () -> Unit) = viewModelScope.launch {
+        action()
         autoBackupCoordinator.backupAfterDataChange()
-    }
-
-    fun rejectApproval(id: Long, note: String = "") = viewModelScope.launch {
-        approvalRepository.reject(id, note)
     }
 
     private fun selectMonth(key: String) {
@@ -189,7 +189,6 @@ class BudgetViewModel @Inject constructor(
 
     private fun ensureMonth(key: String) = viewModelScope.launch {
         val initialized = repository.initializeMonthIfNeeded(key, shiftMonth(key, -1))
-        if (initialized) autoBackupCoordinator.backupAfterDataChange()
     }
 
     companion object {

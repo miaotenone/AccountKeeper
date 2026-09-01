@@ -3,12 +3,6 @@ package com.example.accountkeeper.di
 import android.content.Context
 import androidx.room.Room
 import com.example.accountkeeper.data.local.AppDatabase
-import com.example.accountkeeper.data.local.AssetDao
-import com.example.accountkeeper.data.local.BudgetDao
-import com.example.accountkeeper.data.local.BudgetApprovalDao
-import com.example.accountkeeper.data.local.BudgetMonthDao
-import com.example.accountkeeper.data.local.CategoryDao
-import com.example.accountkeeper.data.local.TransactionDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -36,21 +30,31 @@ object DatabaseModule {
                 AppDatabase.MIGRATION_10_11,
                 AppDatabase.MIGRATION_11_12,
                 AppDatabase.MIGRATION_12_13,
-                AppDatabase.MIGRATION_13_14
+                AppDatabase.MIGRATION_13_14,
+                AppDatabase.MIGRATION_14_15,
+                AppDatabase.MIGRATION_15_16,
+                AppDatabase.MIGRATION_16_17,
+                AppDatabase.MIGRATION_17_18,
+                AppDatabase.MIGRATION_18_19,
+                AppDatabase.MIGRATION_19_20,
+                AppDatabase.MIGRATION_20_21,
+                AppDatabase.MIGRATION_21_22
             )
             .addCallback(object : androidx.room.RoomDatabase.Callback() {
                 override fun onCreate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
-                    db.execSQL("CREATE TRIGGER IF NOT EXISTS budgets_total_insert_guard BEFORE INSERT ON budgets WHEN NEW.categoryId IS NULL AND EXISTS (SELECT 1 FROM budgets WHERE monthKey = NEW.monthKey AND categoryId IS NULL) BEGIN SELECT RAISE(ABORT, 'duplicate monthly total budget'); END")
-                    db.execSQL("CREATE TRIGGER IF NOT EXISTS budgets_total_update_guard BEFORE UPDATE OF monthKey, categoryId ON budgets WHEN NEW.categoryId IS NULL AND EXISTS (SELECT 1 FROM budgets WHERE monthKey = NEW.monthKey AND categoryId IS NULL AND id != NEW.id) BEGIN SELECT RAISE(ABORT, 'duplicate monthly total budget'); END")
                     AppDatabase.createBudgetValidationTriggers(db)
+                    AppDatabase.seedDefaultAssetCategories(db)
                 }
             })
             .build()
 
-    @Provides fun provideCategoryDao(database: AppDatabase): CategoryDao = database.categoryDao()
-    @Provides fun provideTransactionDao(database: AppDatabase): TransactionDao = database.transactionDao()
-    @Provides fun provideAssetDao(database: AppDatabase): AssetDao = database.assetDao()
-    @Provides fun provideBudgetDao(database: AppDatabase): BudgetDao = database.budgetDao()
-    @Provides fun provideBudgetMonthDao(database: AppDatabase): BudgetMonthDao = database.budgetMonthDao()
-    @Provides fun provideBudgetApprovalDao(database: AppDatabase): BudgetApprovalDao = database.budgetApprovalDao()
+    @Provides fun provideCategoryDao(database: AppDatabase) = database.categoryDao()
+    @Provides fun provideTransactionDao(database: AppDatabase) = database.transactionDao()
+    @Provides fun provideAssetDao(database: AppDatabase) = database.assetDao()
+    @Provides fun provideAssetCategoryDao(database: AppDatabase) = database.assetCategoryDao()
+    @Provides fun provideBudgetDao(database: AppDatabase) = database.budgetDao()
+    @Provides fun provideBudgetMonthDao(database: AppDatabase) = database.budgetMonthDao()
+    @Provides fun provideBudgetApprovalDao(database: AppDatabase) = database.budgetApprovalDao()
+    @Provides fun provideAttachmentDao(database: AppDatabase) = database.attachmentDao()
+    @Provides fun provideBillFileDao(database: AppDatabase) = database.billFileDao()
 }

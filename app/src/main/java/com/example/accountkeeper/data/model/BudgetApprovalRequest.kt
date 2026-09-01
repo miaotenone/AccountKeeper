@@ -25,24 +25,32 @@ enum class BudgetApprovalStatus {
             parentColumns = ["id"],
             childColumns = ["categoryId"],
             onDelete = ForeignKey.SET_NULL
+        ),
+        ForeignKey(
+            entity = AssetCategoryEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["assetCategoryId"],
+            onDelete = ForeignKey.SET_NULL
         )
     ],
     indices = [
         Index(value = ["status"]),
         Index(value = ["createdAt"]),
-        Index(value = ["monthKey", "periodType"]),
-        Index(value = ["categoryId"])
+        Index(value = ["categoryId"]),
+        Index(value = ["assetCategoryId"])
     ]
 )
 data class BudgetApprovalRequest(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val type: BudgetApprovalType,
-    val monthKey: String,
-    val periodType: String = BudgetPeriodType.MONTHLY.name,
     val categoryId: Long? = null,
+    val assetCategoryId: Long? = null,
     val amount: Double,
     val purchaseDate: Long? = null,
     val reason: String = "",
+    val itemName: String = "",
+    val specification: String = "",
+    val quantity: Double = 1.0,
     val attachments: String = "",
     val status: BudgetApprovalStatus = BudgetApprovalStatus.PENDING,
     val decisionNote: String = "",

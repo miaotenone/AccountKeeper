@@ -43,7 +43,13 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun updateAutoBackup(enabled: Boolean) {
-        viewModelScope.launch { settingsRepository.updateAutoBackup(enabled) }
+        viewModelScope.launch {
+            settingsRepository.updateAutoBackup(enabled)
+            settingsRepository.updateScheduledBackup(enabled)
+            val context = getApplication<Application>()
+            if (enabled) BackupWorker.schedule(context, appSettings.value.scheduledBackupInterval)
+            else BackupWorker.cancel(context)
+        }
     }
 
     fun updateBackupRetentionLimit(limit: Int) {
@@ -57,6 +63,7 @@ class SettingsViewModel @Inject constructor(
     fun updateScheduledBackup(enabled: Boolean) {
         viewModelScope.launch {
             settingsRepository.updateScheduledBackup(enabled)
+            settingsRepository.updateAutoBackup(enabled)
             val context = getApplication<Application>()
             if (enabled) {
                 val interval = appSettings.value.scheduledBackupInterval

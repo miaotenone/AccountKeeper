@@ -20,4 +20,7 @@ interface BudgetApprovalDao {
 
     @Update
     suspend fun update(request: BudgetApprovalRequest)
+
+    @Query("DELETE FROM budget_approval_requests")
+    suspend fun deleteAll()
 }

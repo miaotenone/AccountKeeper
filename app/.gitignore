@@ -1,1 +1,12 @@
 /build
+/captures
+/.cxx
+/.externalNativeBuild
+/out
+/intermediates
+/tmp
+/generated
+*.log
+*.apk
+*.aab
+*.ap_
