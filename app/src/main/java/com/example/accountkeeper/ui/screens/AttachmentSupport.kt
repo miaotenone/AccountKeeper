@@ -5,6 +5,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.pdf.PdfRenderer
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.ParcelFileDescriptor
 import android.provider.OpenableColumns
@@ -38,6 +39,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -89,6 +91,25 @@ fun openAttachmentExternally(context: Context, attachment: Attachment): Result<U
     context.startActivity(Intent.createChooser(intent, attachment.fileName))
 }
 
+fun saveAttachmentToDevice(context: Context, attachment: Attachment): Result<Unit> = runCatching {
+    val file = File(attachment.filePath)
+    check(file.isFile) { "附件文件不存在" }
+    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+    val intent = Intent(Intent.ACTION_VIEW).apply {
+        setDataAndType(uri, attachment.mimeType.ifBlank { "*/*" })
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    // Try to find a save-capable app
+    val saveIntent = Intent(Intent.ACTION_SEND).apply {
+        type = attachment.mimeType.ifBlank { "*/*" }
+        putExtra(Intent.EXTRA_STREAM, uri)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    check(context.packageManager.resolveActivity(saveIntent, 0) != null) { "设备没有可用于保存此文件的应用" }
+    context.startActivity(Intent.createChooser(saveIntent, "保存到"))
+}
+
 @Composable
 fun AttachmentSection(title: String, attachments: List<Attachment>, onAddAttachment: () -> Unit, onRemoveAttachment: (Attachment) -> Unit, onPreviewAttachment: (Attachment) -> Unit, modifier: Modifier = Modifier) {
     Card(modifier, shape = RoundedCornerShape(8.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
@@ -109,6 +130,7 @@ fun AttachmentRow(attachment: Attachment, onClick: () -> Unit, onRemove: (() -> 
     val icon = when (attachment.fileType) {
         AttachmentType.IMAGE -> Icons.Default.Image
         AttachmentType.EXCEL, AttachmentType.CSV -> Icons.Default.TableChart
+        AttachmentType.VIDEO -> Icons.Default.OpenInNew
         else -> Icons.Default.Description
     }
     Card(onClick = onClick, modifier = modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .45f))) {
@@ -130,6 +152,7 @@ private fun Thumbnail(attachment: Attachment, icon: androidx.compose.ui.graphics
         when (attachment.fileType) {
             AttachmentType.IMAGE -> BitmapFactory.decodeFile(attachment.filePath)
             AttachmentType.PDF -> renderPdfFirstPage(File(attachment.filePath))
+            AttachmentType.VIDEO -> extractVideoThumbnail(attachment.filePath)
             else -> null
         }
     }
@@ -145,22 +168,19 @@ fun AttachmentPreviewDialog(attachment: Attachment, onDismiss: () -> Unit) {
     var loading by remember(attachment.filePath) { mutableStateOf(true) }
     var error by remember(attachment.filePath) { mutableStateOf<String?>(null) }
     var bitmap by remember(attachment.filePath) { mutableStateOf<Bitmap?>(null) }
-    var text by remember(attachment.filePath) { mutableStateOf<String?>(null) }
-    var table by remember(attachment.filePath) { mutableStateOf<List<List<String>>?>(null) }
     var externalError by remember(attachment.filePath) { mutableStateOf<String?>(null) }
+    var saveError by remember(attachment.filePath) { mutableStateOf<String?>(null) }
+
+    val isImage = attachment.fileType == AttachmentType.IMAGE
 
     LaunchedEffect(attachment.filePath) {
-        runCatching {
-            val file = File(attachment.filePath)
-            check(file.isFile) { "附件文件不存在" }
-            when (attachment.fileType) {
-                AttachmentType.IMAGE -> bitmap = BitmapFactory.decodeFile(file.absolutePath)
-                AttachmentType.PDF -> bitmap = renderPdfFirstPage(file)
-                AttachmentType.EXCEL, AttachmentType.CSV -> table = extractSpreadsheet(file, attachment.fileType)
-                AttachmentType.DOCUMENT -> text = extractDocument(file)
-                else -> text = file.readText().take(12000)
-            }
-        }.onFailure { error = "无法读取附件：${it.message ?: "文件无效"}" }
+        if (isImage) {
+            runCatching {
+                val file = File(attachment.filePath)
+                check(file.isFile) { "附件文件不存在" }
+                bitmap = BitmapFactory.decodeFile(file.absolutePath)
+            }.onFailure { error = "无法读取附件：${it.message ?: "文件无效"}" }
+        }
         loading = false
     }
 
@@ -169,25 +189,65 @@ fun AttachmentPreviewDialog(attachment: Attachment, onDismiss: () -> Unit) {
         title = { Text(attachment.fileName, maxLines = 1, overflow = TextOverflow.Ellipsis) },
         text = {
             Column(Modifier.fillMaxWidth().heightIn(max = 440.dp)) {
-                when {
-                    loading -> CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally))
-                    error != null -> Text(error!!, Modifier.verticalScroll(rememberScrollState()))
-                    bitmap != null -> Image(bitmap!!.asImageBitmap(), attachment.fileName, Modifier.fillMaxWidth(), contentScale = ContentScale.Fit)
-                    table != null -> SpreadsheetGrid(table!!)
-                    text != null -> Text(text!!, Modifier.verticalScroll(rememberScrollState()))
+                if (isImage) {
+                    when {
+                        loading -> CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally))
+                        error != null -> Text(error!!, Modifier.verticalScroll(rememberScrollState()))
+                        bitmap != null -> Image(bitmap!!.asImageBitmap(), attachment.fileName, Modifier.fillMaxWidth(), contentScale = ContentScale.Fit)
+                    }
+                } else {
+                    // Non-image: show file info
+                    Column(
+                        modifier = Modifier.padding(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = when (attachment.fileType) {
+                                AttachmentType.PDF -> "PDF 文档"
+                                AttachmentType.VIDEO -> "视频文件"
+                                AttachmentType.EXCEL -> "Excel 表格"
+                                AttachmentType.CSV -> "CSV 文件"
+                                AttachmentType.DOCUMENT -> "文档文件"
+                                AttachmentType.TEXT -> "文本文件"
+                                else -> "文件"
+                            },
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "大小: ${formatFileSize(attachment.fileSize)}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = "类型: ${attachment.mimeType.ifBlank { "未知" }}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
                 externalError?.let { Text(it, Modifier.padding(top = 10.dp), color = MaterialTheme.colorScheme.error) }
+                saveError?.let { Text(it, Modifier.padding(top = 10.dp), color = MaterialTheme.colorScheme.error) }
             }
         },
         confirmButton = {
-            Button(onClick = {
-                externalError = openAttachmentExternally(context, attachment).exceptionOrNull()?.let {
-                    "无法打开附件：${it.message ?: "没有可用应用"}"
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = {
+                    externalError = openAttachmentExternally(context, attachment).exceptionOrNull()?.let {
+                        "无法打开附件：${it.message ?: "没有可用应用"}"
+                    }
+                }) {
+                    Icon(Icons.Default.OpenInNew, null)
+                    Spacer(Modifier.width(6.dp))
+                    Text("打开")
                 }
-            }) {
-                Icon(Icons.Default.OpenInNew, null)
-                Spacer(Modifier.width(6.dp))
-                Text("打开")
+                OutlinedButton(onClick = {
+                    saveError = saveAttachmentToDevice(context, attachment).exceptionOrNull()?.let {
+                        "保存失败：${it.message ?: "未知错误"}"
+                    }
+                }) {
+                    Text("保存")
+                }
             }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("关闭") } }
@@ -224,6 +284,13 @@ private fun renderPdfFirstPage(file: File): Bitmap? = runCatching {
                 }
             }
         }
+    }
+}.getOrNull()
+
+private fun extractVideoThumbnail(filePath: String): Bitmap? = runCatching {
+    MediaMetadataRetriever().use { retriever ->
+        retriever.setDataSource(filePath)
+        retriever.getFrameAtTime(0)
     }
 }.getOrNull()
 

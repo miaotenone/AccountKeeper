@@ -24,6 +24,13 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+sealed class ApprovalSubmitState {
+    data object Idle : ApprovalSubmitState()
+    data object Submitting : ApprovalSubmitState()
+    data class Success(val id: Long) : ApprovalSubmitState()
+    data class Error(val message: String) : ApprovalSubmitState()
+}
+
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class BudgetViewModel @Inject constructor(
@@ -70,6 +77,8 @@ class BudgetViewModel @Inject constructor(
 
     val approvalRequests: StateFlow<List<BudgetApprovalRequest>> = approvalRepository.getAll()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val submitState = MutableStateFlow<ApprovalSubmitState>(ApprovalSubmitState.Idle)
 
     init { ensureMonth(selectedMonth.value) }
 
@@ -166,9 +175,22 @@ class BudgetViewModel @Inject constructor(
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
     }
 
-    fun submitApproval(request: BudgetApprovalRequest, replacingId: Long? = null) = launchBackup {
-        if (replacingId == null) approvalRepository.submit(request)
-        else approvalRepository.resubmit(request.copy(id = replacingId))
+    fun submitApproval(request: BudgetApprovalRequest, replacingId: Long? = null) {
+        submitState.value = ApprovalSubmitState.Submitting
+        viewModelScope.launch {
+            try {
+                val id = if (replacingId == null) {
+                    approvalRepository.submit(request)
+                } else {
+                    approvalRepository.resubmit(request.copy(id = replacingId))
+                    replacingId
+                }
+                autoBackupCoordinator.backupAfterDataChange()
+                submitState.value = ApprovalSubmitState.Success(id)
+            } catch (e: Exception) {
+                submitState.value = ApprovalSubmitState.Error(e.message ?: "提交失败")
+            }
+        }
     }
 
     fun withdrawApproval(id: Long) = launchBackup { approvalRepository.withdraw(id) }

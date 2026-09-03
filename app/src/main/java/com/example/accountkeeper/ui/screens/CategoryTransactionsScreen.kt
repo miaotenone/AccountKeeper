@@ -50,29 +50,11 @@ fun CategoryTransactionsScreen(
     // 分页数据
     val pagedTransactions = viewModel.getByCategoryAndTimePaged(categoryId, startTime, endTime)
         .collectAsLazyPagingItems()
-    
-    // 将分页数据转换为列表（使用 derivedStateOf 确保响应式更新）
-    val categoryTransactions by remember {
-        derivedStateOf {
-            (0 until pagedTransactions.itemCount).mapNotNull { pagedTransactions[it] }
-        }
-    }
 
-    // Group transactions by date
-    val groupedTransactions = categoryTransactions.groupBy {
-        SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(it.date))
-    }.toSortedMap(reverseOrder())
+    val dateFormat = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()) }
 
-    // Calculate totals
-    val totalIncome = CurrencyUtils.convertToDisplay(
-        categoryTransactions.filter { it.type == TransactionType.INCOME }.sumOf { it.amount },
-        currency
-    )
-    val totalExpense = CurrencyUtils.convertToDisplay(
-        categoryTransactions.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount },
-        currency
-    )
-    val transactionCount = categoryTransactions.size
+    // Compute count from loaded items for TopAppBar
+    val transactionCount = pagedTransactions.itemCount
 
     val lazyListState = rememberLazyListState()
 
@@ -111,6 +93,19 @@ fun CategoryTransactionsScreen(
         },
         contentWindowInsets = WindowInsets(0, 0, 0, 0)
     ) { paddingValues ->
+        // Compute stats from loaded items
+        val loadedTransactions = remember(pagedTransactions.itemCount) {
+            (0 until pagedTransactions.itemCount).mapNotNull { pagedTransactions[it] }
+        }
+        val totalIncome = CurrencyUtils.convertToDisplay(
+            loadedTransactions.filter { it.type == TransactionType.INCOME }.sumOf { it.amount },
+            currency
+        )
+        val totalExpense = CurrencyUtils.convertToDisplay(
+            loadedTransactions.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount },
+            currency
+        )
+
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -169,7 +164,7 @@ fun CategoryTransactionsScreen(
             }
 
             // Transaction List
-            if (groupedTransactions.isEmpty()) {
+            if (pagedTransactions.itemCount == 0) {
                 item {
                     Box(
                         modifier = Modifier
@@ -185,26 +180,36 @@ fun CategoryTransactionsScreen(
                     }
                 }
             } else {
-                groupedTransactions.forEach { (dateString, txList) ->
-                    // Date Header
-                    item(key = "header_$dateString") {
+                items(
+                    count = pagedTransactions.itemCount,
+                    key = { pagedTransactions[it]?.id ?: -it.toLong() }
+                ) { index ->
+                    val transaction = pagedTransactions[index] ?: return@items
+
+                    // Detect date boundary
+                    val prevTransaction = if (index > 0) pagedTransactions[index - 1] else null
+                    val currentDateStr = dateFormat.format(Date(transaction.date))
+                    val prevDateStr = prevTransaction?.let { dateFormat.format(Date(it.date)) }
+                    val showDateHeader = prevDateStr == null || currentDateStr != prevDateStr
+
+                    if (showDateHeader) {
+                        val dayTransactions = mutableListOf<com.example.accountkeeper.data.model.Transaction>()
+                        for (i in index until pagedTransactions.itemCount) {
+                            val tx = pagedTransactions[i] ?: break
+                            if (dateFormat.format(Date(tx.date)) != currentDateStr) break
+                            dayTransactions.add(tx)
+                        }
                         DateHeaderCompact(
-                            date = dateString,
-                            txList = txList,
+                            date = currentDateStr,
+                            txList = dayTransactions,
                             currency = currency
                         )
                     }
 
-                    // Transaction Items
-                    items(
-                        items = txList,
-                        key = { it.id }
-                    ) { transaction ->
-                        CategoryTransactionItem(
-                            transaction = transaction,
-                            currency = currency
-                        )
-                    }
+                    CategoryTransactionItem(
+                        transaction = transaction,
+                        currency = currency
+                    )
                 }
             }
 

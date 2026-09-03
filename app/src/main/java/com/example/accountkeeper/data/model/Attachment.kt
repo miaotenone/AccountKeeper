@@ -11,6 +11,7 @@ enum class AttachmentType {
     CSV,
     DOCUMENT,
     TEXT,
+    VIDEO,
     OTHER
 }
 
@@ -33,6 +34,7 @@ data class Attachment(
                 "csv" -> AttachmentType.CSV
                 "doc", "docx", "rtf", "odt" -> AttachmentType.DOCUMENT
                 "txt", "md", "log", "json", "xml" -> AttachmentType.TEXT
+                "mp4", "mkv", "avi", "mov", "3gp", "webm" -> AttachmentType.VIDEO
                 else -> AttachmentType.OTHER
             }
         }
@@ -40,6 +42,7 @@ data class Attachment(
         fun getTypeFromMimeType(mimeType: String): AttachmentType {
             return when {
                 mimeType.startsWith("image/") -> AttachmentType.IMAGE
+                mimeType.startsWith("video/") -> AttachmentType.VIDEO
                 mimeType == "application/pdf" -> AttachmentType.PDF
                 mimeType.contains("spreadsheet") || mimeType.contains("excel") -> AttachmentType.EXCEL
                 mimeType.contains("csv") -> AttachmentType.CSV

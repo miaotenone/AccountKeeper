@@ -47,9 +47,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.accountkeeper.LocalCurrencySymbol
 import com.example.accountkeeper.data.model.Transaction
 import com.example.accountkeeper.data.model.TransactionType
+import com.example.accountkeeper.data.model.SortType
 import com.example.accountkeeper.ui.theme.*
 import com.example.accountkeeper.ui.viewmodel.CategoryViewModel
-import com.example.accountkeeper.ui.viewmodel.SortType
 import com.example.accountkeeper.ui.viewmodel.TimeRange
 import com.example.accountkeeper.ui.viewmodel.TransactionViewModel
 import com.example.accountkeeper.ui.viewmodel.SettingsViewModel
@@ -323,22 +323,7 @@ fun HomeScreen(
         },
         contentWindowInsets = WindowInsets(0, 0, 0, 0)
     ) { paddingValues ->
-        val pagedList = remember(pagedTransactions.itemCount) {
-            (0 until pagedTransactions.itemCount).mapNotNull { pagedTransactions[it] }
-        }
-
-        val sortedPagedList = remember(pagedList, sortType) {
-            when (sortType) {
-                SortType.TIME_DESC -> pagedList.sortedByDescending { it.date }
-                SortType.TIME_ASC -> pagedList.sortedBy { it.date }
-                SortType.AMOUNT_DESC -> pagedList.sortedByDescending { it.amount }
-                SortType.AMOUNT_ASC -> pagedList.sortedBy { it.amount }
-            }
-        }
-
-        val groupedPagedTransactions = sortedPagedList.groupBy {
-            SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(it.date))
-        }
+        val dateFormat = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()) }
 
         LazyColumn(
             modifier = Modifier
@@ -417,65 +402,78 @@ fun HomeScreen(
             }
 
             if (isBalanceVisible) {
-                groupedPagedTransactions.forEach { (dateString, txList) ->
-                    item(key = "header_$dateString") {
+                items(
+                    count = pagedTransactions.itemCount,
+                    key = { pagedTransactions[it]?.id ?: -it.toLong() }
+                ) { index ->
+                    val transaction = pagedTransactions[index] ?: return@items
+                    val categoryName = categories.find { it.id == transaction.categoryId }?.name ?: strings.other
+                    val isSelected = selectedIds.contains(transaction.id)
+
+                    // Detect date boundary for header
+                    val prevTransaction = if (index > 0) pagedTransactions[index - 1] else null
+                    val currentDateStr = dateFormat.format(Date(transaction.date))
+                    val prevDateStr = prevTransaction?.let { dateFormat.format(Date(it.date)) }
+                    val showDateHeader = prevDateStr == null || currentDateStr != prevDateStr
+
+                    if (showDateHeader) {
+                        // Collect items for the same date to compute daily totals
+                        val dayTransactions = mutableListOf<Transaction>()
+                        for (i in index until pagedTransactions.itemCount) {
+                            val tx = pagedTransactions[i] ?: break
+                            if (dateFormat.format(Date(tx.date)) != currentDateStr) break
+                            dayTransactions.add(tx)
+                        }
                         DateHeader(
-                            date = dateString,
-                            txList = txList,
+                            date = currentDateStr,
+                            txList = dayTransactions,
                             currency = currency,
                             strings = strings
                         )
                     }
 
-                    items(
-                        items = txList,
-                        key = { it.id }
-                    ) { transaction ->
-                        val categoryName = categories.find { it.id == transaction.categoryId }?.name ?: strings.other
-                        val isSelected = selectedIds.contains(transaction.id)
-                        PremiumTransactionItem(
-                            transaction = transaction,
-                            categoryName = categoryName,
-                            currency = currency,
-                            swipedOpenId = swipedOpenTransactionId,
-                            onSwipeOpen = { swipedOpenTransactionId = transaction.id },
-                            onClick = {
-                                if (swipedOpenTransactionId != null && swipedOpenTransactionId != transaction.id) {
-                                    swipedOpenTransactionId = null
-                                }
-                                if (selectionMode) {
-                                    if (isSelected) {
-                                        selectedIds.remove(transaction.id)
-                                    } else {
-                                        selectedIds.add(transaction.id)
-                                    }
+                    PremiumTransactionItem(
+                        transaction = transaction,
+                        categoryName = categoryName,
+                        currency = currency,
+                        swipedOpenId = swipedOpenTransactionId,
+                        onSwipeOpen = { swipedOpenTransactionId = transaction.id },
+                        onClick = {
+                            if (swipedOpenTransactionId != null && swipedOpenTransactionId != transaction.id) {
+                                swipedOpenTransactionId = null
+                            }
+                            if (selectionMode) {
+                                if (isSelected) {
+                                    selectedIds.remove(transaction.id)
                                 } else {
-                                    onNavigateToEditTransaction(transaction.id)
-                                }
-                            },
-                            onLongClick = {
-                                if (swipedOpenTransactionId != null) {
-                                    swipedOpenTransactionId = null
-                                }
-                                if (selectionMode) {
-                                    if (isSelected) {
-                                        selectedIds.remove(transaction.id)
-                                    } else {
-                                        selectedIds.add(transaction.id)
-                                    }
-                                } else {
-                                    selectionMode = true
                                     selectedIds.add(transaction.id)
                                 }
-                            },
-                            onDelete = {
-                                viewModel.deleteTransaction(transaction)
-                            },
-                            isSelected = isSelected,
-                            inSelectionMode = selectionMode,
-                            swipeDeleteRequiresConfirm = appSettings.swipeDeleteRequiresConfirm
-                        )
-                    }
+                            } else {
+                                onNavigateToEditTransaction(transaction.id)
+                            }
+                        },
+                        onLongClick = {
+                            if (swipedOpenTransactionId != null) {
+                                swipedOpenTransactionId = null
+                            }
+                            if (selectionMode) {
+                                if (isSelected) {
+                                    selectedIds.remove(transaction.id)
+                                } else {
+                                    selectedIds.add(transaction.id)
+                                }
+                            } else {
+                                selectionMode = true
+                                selectedIds.add(transaction.id)
+                            }
+                        },
+                        onDelete = {
+                            viewModel.deleteTransaction(transaction)
+                        },
+                        isSelected = isSelected,
+                        inSelectionMode = selectionMode,
+                        swipeDeleteRequiresConfirm = appSettings.swipeDeleteRequiresConfirm
+                    )
                 }
             } else {
                 item {
@@ -519,8 +517,7 @@ fun HomeScreen(
             BatchDeleteTransactionDialog(
                 count = selectedIds.size,
                 onConfirm = {
-                    val pagedListForDelete = (0 until pagedTransactions.itemCount).mapNotNull { pagedTransactions[it] }
-                    val transactionsToDelete = pagedListForDelete.filter { it.id in selectedIds }
+                    val transactionsToDelete = (0 until pagedTransactions.itemCount).mapNotNull { pagedTransactions[it] }.filter { it.id in selectedIds }
                     viewModel.deleteTransactions(transactionsToDelete)
                     selectionMode = false
                     selectedIds.clear()

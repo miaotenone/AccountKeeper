@@ -9,6 +9,7 @@ import com.example.accountkeeper.data.model.Asset
 import com.example.accountkeeper.data.model.AssetStatus
 import com.example.accountkeeper.data.model.AttachmentConverter
 import com.example.accountkeeper.data.model.Budget
+import com.example.accountkeeper.data.model.SortType
 import com.example.accountkeeper.data.model.Transaction
 import com.example.accountkeeper.data.model.TransactionType
 import com.example.accountkeeper.data.repository.AssetRepository
@@ -34,7 +35,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 enum class TimeRange { MONTH, YEAR, ALL }
-enum class SortType { TIME_DESC, TIME_ASC, AMOUNT_DESC, AMOUNT_ASC }
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
@@ -96,15 +96,16 @@ class TransactionViewModel @Inject constructor(
     }
 
     val pagedTransactions: Flow<PagingData<Transaction>> = combine(
-        selectedTimeRange, filterCategoryId, filterStartDate, filterEndDate
-    ) { _, _, _, _ -> }
+        selectedTimeRange, filterCategoryId, filterStartDate, filterEndDate, sortType
+    ) { _, _, _, _, _ -> }
         .flatMapLatest {
             val (start, end) = getEffectiveBounds()
             val catId = filterCategoryId.value
+            val sort = sortType.value
             if (catId != null) {
-                transactionRepository.getFilteredPaged(start, end, catId)
+                transactionRepository.getFilteredPaged(start, end, catId, sort)
             } else {
-                transactionRepository.getByTimeRangePaged(start, end)
+                transactionRepository.getByTimeRangePaged(start, end, sort)
             }
         }
         .cachedIn(viewModelScope)
@@ -130,7 +131,7 @@ class TransactionViewModel @Inject constructor(
     val totalBalance: StateFlow<Double> = combine(totalIncome, totalExpense) { income, expense -> income - expense }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
 
-    fun searchTransactionsPaged(query: String): Flow<PagingData<Transaction>> = transactionRepository.searchTransactionsPaged(query).cachedIn(viewModelScope)
+    fun searchTransactionsPaged(query: String, sortType: SortType = SortType.TIME_DESC): Flow<PagingData<Transaction>> = transactionRepository.searchTransactionsPaged(query, sortType).cachedIn(viewModelScope)
     fun getByCategoryAndTimePaged(categoryId: Long, startTime: Long, endTime: Long): Flow<PagingData<Transaction>> = transactionRepository.getByCategoryAndTimePaged(categoryId, startTime, endTime).cachedIn(viewModelScope)
     suspend fun getTransactionById(id: Long): Transaction? = transactionRepository.getTransactionById(id)
     fun searchTransactions(query: String): Flow<List<Transaction>> = transactionRepository.searchTransactions(query)

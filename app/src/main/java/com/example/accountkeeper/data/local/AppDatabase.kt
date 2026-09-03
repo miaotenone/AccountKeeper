@@ -19,7 +19,7 @@ import com.example.accountkeeper.data.model.Transaction
 
 @Database(
     entities = [Transaction::class, Category::class, Asset::class, AssetCategoryEntity::class, Budget::class, BudgetMonth::class, BudgetApprovalRequest::class, AttachmentEntity::class, BillFileEntity::class],
-    version = 22,
+    version = 23,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -35,6 +35,11 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun billFileDao(): BillFileDao
 
     companion object {
+        val MIGRATION_22_23 = object : androidx.room.migration.Migration(22, 23) {
+            override fun migrate(database: androidx.sqlite.db.SupportSQLiteDatabase) {
+                database.execSQL("DELETE FROM budget_approval_requests WHERE type = 'BUDGET_ADJUSTMENT'")
+            }
+        }
         val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("CREATE TABLE IF NOT EXISTS transactions_new (id INTEGER NOT NULL, type TEXT NOT NULL, amount REAL NOT NULL, date INTEGER NOT NULL, categoryId INTEGER, note TEXT NOT NULL, source TEXT NOT NULL, PRIMARY KEY(id), FOREIGN KEY(categoryId) REFERENCES categories(id) ON DELETE SET NULL)")

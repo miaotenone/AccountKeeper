@@ -66,7 +66,31 @@ interface TransactionDao {
         WHERE t.note LIKE '%' || :query || '%' OR c.name LIKE '%' || :query || '%'
         ORDER BY t.date DESC
     """)
-    fun searchTransactionsPaged(query: String): PagingSource<Int, Transaction>
+    fun searchTransactionsPagedDesc(query: String): PagingSource<Int, Transaction>
+
+    @Query("""
+        SELECT t.* FROM transactions t
+        LEFT JOIN categories c ON t.categoryId = c.id
+        WHERE t.note LIKE '%' || :query || '%' OR c.name LIKE '%' || :query || '%'
+        ORDER BY t.date ASC
+    """)
+    fun searchTransactionsPagedAsc(query: String): PagingSource<Int, Transaction>
+
+    @Query("""
+        SELECT t.* FROM transactions t
+        LEFT JOIN categories c ON t.categoryId = c.id
+        WHERE t.note LIKE '%' || :query || '%' OR c.name LIKE '%' || :query || '%'
+        ORDER BY t.amount DESC
+    """)
+    fun searchTransactionsPagedAmountDesc(query: String): PagingSource<Int, Transaction>
+
+    @Query("""
+        SELECT t.* FROM transactions t
+        LEFT JOIN categories c ON t.categoryId = c.id
+        WHERE t.note LIKE '%' || :query || '%' OR c.name LIKE '%' || :query || '%'
+        ORDER BY t.amount ASC
+    """)
+    fun searchTransactionsPagedAmountAsc(query: String): PagingSource<Int, Transaction>
 
     @Query("""
         SELECT * FROM transactions
@@ -78,7 +102,16 @@ interface TransactionDao {
     fun getByCategoryAndTimePaged(categoryId: Long, startTime: Long, endTime: Long): PagingSource<Int, Transaction>
 
     @Query("SELECT * FROM transactions WHERE date >= :startDate AND date < :endDate ORDER BY date DESC")
-    fun getByTimeRangePaged(startDate: Long, endDate: Long): PagingSource<Int, Transaction>
+    fun getByTimeRangePagedDesc(startDate: Long, endDate: Long): PagingSource<Int, Transaction>
+
+    @Query("SELECT * FROM transactions WHERE date >= :startDate AND date < :endDate ORDER BY date ASC")
+    fun getByTimeRangePagedAsc(startDate: Long, endDate: Long): PagingSource<Int, Transaction>
+
+    @Query("SELECT * FROM transactions WHERE date >= :startDate AND date < :endDate ORDER BY amount DESC")
+    fun getByTimeRangePagedAmountDesc(startDate: Long, endDate: Long): PagingSource<Int, Transaction>
+
+    @Query("SELECT * FROM transactions WHERE date >= :startDate AND date < :endDate ORDER BY amount ASC")
+    fun getByTimeRangePagedAmountAsc(startDate: Long, endDate: Long): PagingSource<Int, Transaction>
 
     @Query("""
         SELECT * FROM transactions
@@ -86,7 +119,31 @@ interface TransactionDao {
         AND (:categoryId IS NULL OR categoryId = :categoryId)
         ORDER BY date DESC
     """)
-    fun getFilteredPaged(startDate: Long, endDate: Long, categoryId: Long?): PagingSource<Int, Transaction>
+    fun getFilteredPagedDesc(startDate: Long, endDate: Long, categoryId: Long?): PagingSource<Int, Transaction>
+
+    @Query("""
+        SELECT * FROM transactions
+        WHERE date >= :startDate AND date < :endDate
+        AND (:categoryId IS NULL OR categoryId = :categoryId)
+        ORDER BY date ASC
+    """)
+    fun getFilteredPagedAsc(startDate: Long, endDate: Long, categoryId: Long?): PagingSource<Int, Transaction>
+
+    @Query("""
+        SELECT * FROM transactions
+        WHERE date >= :startDate AND date < :endDate
+        AND (:categoryId IS NULL OR categoryId = :categoryId)
+        ORDER BY amount DESC
+    """)
+    fun getFilteredPagedAmountDesc(startDate: Long, endDate: Long, categoryId: Long?): PagingSource<Int, Transaction>
+
+    @Query("""
+        SELECT * FROM transactions
+        WHERE date >= :startDate AND date < :endDate
+        AND (:categoryId IS NULL OR categoryId = :categoryId)
+        ORDER BY amount ASC
+    """)
+    fun getFilteredPagedAmountAsc(startDate: Long, endDate: Long, categoryId: Long?): PagingSource<Int, Transaction>
 
     @Query("SELECT COALESCE(SUM(amount), 0.0) FROM transactions WHERE type = 'INCOME' AND date >= :startDate AND date < :endDate")
     fun getIncomeBetween(startDate: Long, endDate: Long): Flow<Double>

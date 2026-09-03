@@ -55,12 +55,12 @@ import com.example.accountkeeper.LocalCurrencySymbol
 import com.example.accountkeeper.data.model.Asset
 import com.example.accountkeeper.data.model.AssetRootType
 import com.example.accountkeeper.data.model.AssetStatus
+import com.example.accountkeeper.data.model.SortType
 import com.example.accountkeeper.ui.theme.*
 import com.example.accountkeeper.ui.theme.LocalAppStrings
 import com.example.accountkeeper.ui.viewmodel.AssetCategoryViewModel
 import com.example.accountkeeper.ui.viewmodel.AssetViewModel
 import com.example.accountkeeper.ui.viewmodel.SettingsViewModel
-import com.example.accountkeeper.ui.screens.SortType
 import java.text.SimpleDateFormat
 import java.util.*
 import kotlin.math.roundToInt

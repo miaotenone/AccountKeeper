@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -27,6 +28,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenuItem
@@ -48,6 +50,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -55,6 +58,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -78,6 +82,7 @@ import com.example.accountkeeper.ui.theme.AppStrings
 import com.example.accountkeeper.ui.theme.LocalAppStrings
 import com.example.accountkeeper.ui.viewmodel.AssetCategoryViewModel
 import com.example.accountkeeper.ui.viewmodel.AssetViewModel
+import com.example.accountkeeper.ui.viewmodel.ApprovalSubmitState
 import com.example.accountkeeper.ui.viewmodel.BudgetViewModel
 import com.example.accountkeeper.ui.viewmodel.CategoryViewModel
 import java.text.SimpleDateFormat
@@ -105,6 +110,15 @@ fun BudgetApprovalScreen(
     var history by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<BudgetApprovalRequest?>(null) }
     var reviewing by remember { mutableStateOf<BudgetApprovalRequest?>(null) }
+    val submitState by viewModel.submitState.collectAsState()
+
+    // Auto-dismiss form on successful submission
+    LaunchedEffect(submitState) {
+        if (submitState is ApprovalSubmitState.Success) {
+            editing = null
+            viewModel.submitState.value = ApprovalSubmitState.Idle
+        }
+    }
 
     if (editing != null) {
         ApprovalFormScreen(
@@ -113,10 +127,11 @@ fun BudgetApprovalScreen(
             assetCategories = assetCategories,
             strings = strings,
             currency = currency,
-            onDismiss = { editing = null },
+            isSubmitting = submitState is ApprovalSubmitState.Submitting,
+            submitError = (submitState as? ApprovalSubmitState.Error)?.message,
+            onDismiss = { editing = null; viewModel.submitState.value = ApprovalSubmitState.Idle },
             onSubmit = { request ->
                 viewModel.submitApproval(request, editing?.id)
-                editing = null
             }
         )
         return
@@ -324,6 +339,8 @@ private fun ApprovalFormScreen(
     assetCategories: List<AssetCategoryEntity>,
     strings: AppStrings,
     currency: String,
+    isSubmitting: Boolean = false,
+    submitError: String? = null,
     onDismiss: () -> Unit,
     onSubmit: (BudgetApprovalRequest) -> Unit
 ) {
@@ -392,28 +409,6 @@ private fun ApprovalFormScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            item {
-                Text(strings.approvalRequestType, fontWeight = FontWeight.Bold)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(
-                        selected = type == BudgetApprovalType.PURCHASE_BUDGET,
-                        onClick = {
-                            type = BudgetApprovalType.PURCHASE_BUDGET
-                            error = null
-                        },
-                        label = { Text(strings.approvalPurchaseBudget) }
-                    )
-                    FilterChip(
-                        selected = type == BudgetApprovalType.BUDGET_ADJUSTMENT,
-                        onClick = {
-                            type = BudgetApprovalType.BUDGET_ADJUSTMENT
-                            error = null
-                        },
-                        label = { Text(strings.approvalBudgetAdjustment) }
-                    )
-                }
-            }
-
             item {
                 OutlinedTextField(
                     value = amount,
@@ -585,6 +580,17 @@ private fun ApprovalFormScreen(
                 }
             }
 
+            submitError?.let { message ->
+                item {
+                    Text(
+                        message,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+            }
+
             item {
                 Button(
                     onClick = {
@@ -592,10 +598,10 @@ private fun ApprovalFormScreen(
                         val parsedQuantity = quantity.toDoubleOrNull()
                         error = when {
                             parsedAmount == null || parsedAmount <= 0.0 -> strings.approvalInvalidAmount
-                            type == BudgetApprovalType.PURCHASE_BUDGET && categoryId == null -> strings.approvalMissingCategory
-                            type == BudgetApprovalType.PURCHASE_BUDGET && assetCategoryId == null -> strings.approvalMissingAssetCategory
-                            type == BudgetApprovalType.PURCHASE_BUDGET && itemName.isBlank() -> strings.approvalMissingItemName
-                            type == BudgetApprovalType.PURCHASE_BUDGET && (parsedQuantity == null || parsedQuantity <= 0.0) -> strings.approvalInvalidQuantity
+                            categoryId == null -> strings.approvalMissingCategory
+                            assetCategoryId == null -> strings.approvalMissingAssetCategory
+                            itemName.isBlank() -> strings.approvalMissingItemName
+                            (parsedQuantity == null || parsedQuantity <= 0.0) -> strings.approvalInvalidQuantity
                             else -> null
                         }
                         if (error == null && parsedAmount != null) {
@@ -604,8 +610,8 @@ private fun ApprovalFormScreen(
                                 BudgetApprovalRequest(
                                     id = existing?.id ?: 0L,
                                     type = type,
-                                    categoryId = if (type == BudgetApprovalType.PURCHASE_BUDGET) categoryId else null,
-                                    assetCategoryId = if (type == BudgetApprovalType.PURCHASE_BUDGET) assetCategoryId else null,
+                                    categoryId = categoryId,
+                                    assetCategoryId = assetCategoryId,
                                     amount = parsedAmount,
                                     purchaseDate = purchaseDate,
                                     reason = reason.trim(),
@@ -619,8 +625,17 @@ private fun ApprovalFormScreen(
                             )
                         }
                     },
+                    enabled = !isSubmitting,
                     modifier = Modifier.fillMaxWidth()
                 ) {
+                    if (isSubmitting) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                        Spacer(Modifier.width(8.dp))
+                    }
                     Text(strings.approvalSubmit)
                 }
             }

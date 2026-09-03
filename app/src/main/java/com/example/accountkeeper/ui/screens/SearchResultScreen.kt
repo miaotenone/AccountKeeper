@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.accountkeeper.LocalCurrencySymbol
+import com.example.accountkeeper.data.model.SortType
 import com.example.accountkeeper.data.model.TransactionType
 import com.example.accountkeeper.ui.theme.*
 import com.example.accountkeeper.ui.theme.LocalAppStrings
@@ -47,10 +48,6 @@ import java.util.*
 
 enum class FilterType {
     ALL, INCOME, EXPENSE
-}
-
-enum class SortType {
-    TIME_DESC, TIME_ASC, AMOUNT_DESC, AMOUNT_ASC
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -66,19 +63,21 @@ fun SearchResultScreen(
     val currency = LocalCurrencySymbol.current
     val strings = LocalAppStrings.current
 
-    // 分页搜索结果
-    val pagedTransactions = viewModel.searchTransactionsPaged(query).collectAsLazyPagingItems()
-    
-    // 将分页数据转换为列表用于客户端筛选和排序（使用 derivedStateOf 确保响应式更新）
+    // 分页搜索结果 - 根据排序类型选择不同的查询
+    var sortType by remember { mutableStateOf(SortType.TIME_DESC) }
+    val pagedTransactions = remember(sortType) {
+        viewModel.searchTransactionsPaged(query, sortType)
+    }.collectAsLazyPagingItems()
+
+    // 将分页数据转换为列表用于客户端筛选（仅类型和日期范围筛选，排序已在SQL中完成）
     val rawTransactions by remember {
         derivedStateOf {
             (0 until pagedTransactions.itemCount).mapNotNull { pagedTransactions[it] }
         }
     }
 
-    // Filter and sort state
+    // Filter state
     var filterType by remember { mutableStateOf(FilterType.ALL) }
-    var sortType by remember { mutableStateOf(SortType.TIME_DESC) }
     var showFilterDialog by remember { mutableStateOf(false) }
     var showSortDialog by remember { mutableStateOf(false) }
     
@@ -95,8 +94,8 @@ fun SearchResultScreen(
 
     val lazyListState = rememberLazyListState()
 
-    // Apply filters and sort on loaded data
-    val transactions = remember(rawTransactions, filterType, sortType, startDate, endDate) {
+    // Apply type and date range filters on loaded data (sort is in SQL)
+    val transactions = remember(rawTransactions, filterType, startDate, endDate) {
         var filtered = rawTransactions
 
         // Apply type filter
@@ -111,18 +110,11 @@ fun SearchResultScreen(
             filtered = filtered.filter { it.date >= startDate!! }
         }
         if (endDate != null) {
-            // Add one day to include the end date
             val endOfDay = endDate!! + 24 * 60 * 60 * 1000 - 1
             filtered = filtered.filter { it.date <= endOfDay }
         }
 
-        // Apply sort
-        when (sortType) {
-            SortType.TIME_DESC -> filtered.sortedByDescending { it.date }
-            SortType.TIME_ASC -> filtered.sortedBy { it.date }
-            SortType.AMOUNT_DESC -> filtered.sortedByDescending { it.amount }
-            SortType.AMOUNT_ASC -> filtered.sortedBy { it.amount }
-        }
+        filtered
     }
 
     // Group transactions by date

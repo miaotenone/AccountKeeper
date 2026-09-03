@@ -181,9 +181,16 @@ class BackupManager(private val context: Context) {    fun getFileSha256(file: F
         "pdf" -> "application/pdf"
         "jpg", "jpeg" -> "image/jpeg"
         "png" -> "image/png"
+        "gif" -> "image/gif"
         "csv" -> "text/csv"
         "xls" -> "application/vnd.ms-excel"
         "xlsx" -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        "mp4" -> "video/mp4"
+        "mkv" -> "video/x-matroska"
+        "avi" -> "video/x-msvideo"
+        "mov" -> "video/quicktime"
+        "3gp" -> "video/3gpp"
+        "webm" -> "video/webm"
         else -> "application/octet-stream"
     }
     fun copyBillFileToInternalStorage(source: File, originalName: String, createdFiles: MutableCollection<File>? = null): File? = runCatching {
@@ -1005,6 +1012,12 @@ class BackupManager(private val context: Context) {    fun getFileSha256(file: F
                 "xls" -> "application/vnd.ms-excel"
                 "xlsx" -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 "csv" -> "text/csv"
+                "mp4" -> "video/mp4"
+                "mkv" -> "video/x-matroska"
+                "avi" -> "video/x-msvideo"
+                "mov" -> "video/quicktime"
+                "3gp" -> "video/3gpp"
+                "webm" -> "video/webm"
                 else -> "application/octet-stream"
             }
             

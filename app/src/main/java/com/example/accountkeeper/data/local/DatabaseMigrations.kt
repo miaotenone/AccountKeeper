@@ -26,4 +26,10 @@ object DatabaseMigrations {
             database.execSQL("CREATE INDEX `index_budget_approval_requests_assetCategoryId` ON `budget_approval_requests` (`assetCategoryId`)")
         }
     }
+
+    val MIGRATION_22_23 = object : Migration(22, 23) {
+        override fun migrate(database: SupportSQLiteDatabase) {
+            database.execSQL("DELETE FROM budget_approval_requests WHERE type = 'BUDGET_ADJUSTMENT'")
+        }
+    }
 }

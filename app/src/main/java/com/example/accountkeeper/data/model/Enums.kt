@@ -8,6 +8,10 @@ enum class TransactionSource {
     MANUAL, ALIPAY, WECHAT
 }
 
+enum class SortType {
+    TIME_DESC, TIME_ASC, AMOUNT_DESC, AMOUNT_ASC
+}
+
 enum class AssetStatus {
     NONE,            // 未选择（默认）
     OWNED,           // 确定拥有（正资产）

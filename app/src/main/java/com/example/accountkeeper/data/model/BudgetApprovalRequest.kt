@@ -6,7 +6,6 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 
 enum class BudgetApprovalType {
-    BUDGET_ADJUSTMENT,
     PURCHASE_BUDGET
 }
 

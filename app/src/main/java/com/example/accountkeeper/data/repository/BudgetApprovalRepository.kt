@@ -13,11 +13,9 @@ import com.example.accountkeeper.data.model.AssetRootType
 import com.example.accountkeeper.data.model.AssetStatus
 import com.example.accountkeeper.data.model.AttachmentConverter
 import com.example.accountkeeper.data.model.AttachmentOwnerType
-import com.example.accountkeeper.data.model.Budget
 import com.example.accountkeeper.data.model.BudgetApprovalRequest
 import com.example.accountkeeper.data.model.BudgetApprovalStatus
 import com.example.accountkeeper.data.model.BudgetApprovalType
-import com.example.accountkeeper.data.model.BudgetMonth
 import com.example.accountkeeper.data.model.TransactionType
 import javax.inject.Inject
 import kotlinx.coroutines.flow.Flow
@@ -45,17 +43,25 @@ class BudgetApprovalRepository @Inject constructor(
         validate(request)
         val now = System.currentTimeMillis()
         val normalized = request.copy(id = 0, status = BudgetApprovalStatus.PENDING, decisionNote = "", decidedAt = null, createdAt = now, updatedAt = now)
-        val id = approvalDao.insert(normalized)
-        attachmentRepository.replaceForOwner(AttachmentOwnerType.APPROVAL, id, AttachmentConverter.fromJson(normalized.attachments))
-        return id
+        return try {
+            val id = approvalDao.insert(normalized)
+            attachmentRepository.replaceForOwner(AttachmentOwnerType.APPROVAL, id, AttachmentConverter.fromJson(normalized.attachments))
+            id
+        } catch (e: Exception) {
+            throw IllegalStateException("提交采购申请失败: ${e.message}", e)
+        }
     }
 
     suspend fun resubmit(request: BudgetApprovalRequest) {
         val existing = approvalDao.getById(request.id) ?: error("Approval request not found")
         check(existing.status == BudgetApprovalStatus.WITHDRAWN || existing.status == BudgetApprovalStatus.REJECTED)
         validate(request)
-        approvalDao.update(request.copy(status = BudgetApprovalStatus.PENDING, decisionNote = "", decidedAt = null, createdAt = existing.createdAt, updatedAt = System.currentTimeMillis()))
-        attachmentRepository.replaceForOwner(AttachmentOwnerType.APPROVAL, request.id, AttachmentConverter.fromJson(request.attachments))
+        try {
+            approvalDao.update(request.copy(status = BudgetApprovalStatus.PENDING, decisionNote = "", decidedAt = null, createdAt = existing.createdAt, updatedAt = System.currentTimeMillis()))
+            attachmentRepository.replaceForOwner(AttachmentOwnerType.APPROVAL, request.id, AttachmentConverter.fromJson(request.attachments))
+        } catch (e: Exception) {
+            throw IllegalStateException("重新提交采购申请失败: ${e.message}", e)
+        }
     }
 
     suspend fun withdraw(id: Long) {
@@ -73,20 +79,10 @@ class BudgetApprovalRepository @Inject constructor(
             check(existing.status == BudgetApprovalStatus.PENDING)
             val now = System.currentTimeMillis()
             approvalDao.update(existing.copy(status = status, decisionNote = decisionNote.trim(), decidedAt = now, updatedAt = now))
-            when {
-                status == BudgetApprovalStatus.APPROVED && existing.type == BudgetApprovalType.BUDGET_ADJUSTMENT -> applyBudgetChange(existing, now)
-                status == BudgetApprovalStatus.APPROVED && existing.type == BudgetApprovalType.PURCHASE_BUDGET -> createAssetFromPurchase(existing, now)
+            if (status == BudgetApprovalStatus.APPROVED && existing.type == BudgetApprovalType.PURCHASE_BUDGET) {
+                createAssetFromPurchase(existing, now)
             }
         }
-    }
-
-    private suspend fun applyBudgetChange(request: BudgetApprovalRequest, now: Long) {
-        val month = monthKey(request.purchaseDate ?: now)
-        val existing = if (request.categoryId == null) budgetDao.getTotal(month) else budgetDao.getByMonthList(month).firstOrNull { it.categoryId == request.categoryId }
-        val amount = (existing?.amount ?: 0.0) + request.amount
-        val budget = existing?.copy(amount = amount, updatedAt = now) ?: Budget(monthKey = month, categoryId = request.categoryId, amount = amount, createdAt = now, updatedAt = now)
-        if (existing == null) budgetDao.insert(budget) else budgetDao.update(budget)
-        budgetMonthDao.insert(BudgetMonth(month, now))
     }
 
     private suspend fun createAssetFromPurchase(request: BudgetApprovalRequest, now: Long) {

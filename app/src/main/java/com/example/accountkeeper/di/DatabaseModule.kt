@@ -38,7 +38,8 @@ object DatabaseModule {
                 AppDatabase.MIGRATION_18_19,
                 AppDatabase.MIGRATION_19_20,
                 AppDatabase.MIGRATION_20_21,
-                AppDatabase.MIGRATION_21_22
+                AppDatabase.MIGRATION_21_22,
+                AppDatabase.MIGRATION_22_23
             )
             .addCallback(object : androidx.room.RoomDatabase.Callback() {
                 override fun onCreate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
@@ -58,3 +59,4 @@ object DatabaseModule {
     @Provides fun provideAttachmentDao(database: AppDatabase) = database.attachmentDao()
     @Provides fun provideBillFileDao(database: AppDatabase) = database.billFileDao()
 }
+
