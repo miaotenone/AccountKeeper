@@ -125,8 +125,8 @@ fun AssetsScreen(
                     AssetStatus.NOT_OWNED -> strings.notOwned
                     AssetStatus.LOST -> strings.lost
                     AssetStatus.IN_PROGRESS -> strings.inProgress
-                    AssetStatus.TEMPORARILY_WITH_ME -> strings.temporarilyWithMe
-                    AssetStatus.TEMPORARILY_WITH_OTHERS -> strings.temporarilyWithOthers
+                    AssetStatus.TEMPORARILY_WITH_ME -> strings.owned
+                    AssetStatus.TEMPORARILY_WITH_OTHERS -> strings.notOwned
                 }
                 asset.note.lowercase().contains(query) ||
                 asset.targetPerson.lowercase().contains(query) ||
@@ -1150,8 +1150,8 @@ fun AssetItem(
                     AssetStatus.LOST -> strings.lost
                         AssetStatus.LOST -> strings.lost
                         AssetStatus.IN_PROGRESS -> strings.inProgress
-                        AssetStatus.TEMPORARILY_WITH_ME -> strings.temporarilyWithMe
-                        AssetStatus.TEMPORARILY_WITH_OTHERS -> strings.temporarilyWithOthers
+                        AssetStatus.TEMPORARILY_WITH_ME -> strings.owned
+                        AssetStatus.TEMPORARILY_WITH_OTHERS -> strings.notOwned
                     }
                     if (statusLabel != null) {
                         Text(
@@ -1367,8 +1367,8 @@ fun AssetItem(
                             AssetStatus.NOT_OWNED -> strings.notOwned
                             AssetStatus.LOST -> strings.lost
                             AssetStatus.IN_PROGRESS -> strings.inProgress
-                            AssetStatus.TEMPORARILY_WITH_ME -> strings.temporarilyWithMe
-                            AssetStatus.TEMPORARILY_WITH_OTHERS -> strings.temporarilyWithOthers
+                            AssetStatus.TEMPORARILY_WITH_ME -> strings.owned
+                            AssetStatus.TEMPORARILY_WITH_OTHERS -> strings.notOwned
                         }
                         if (statusLabel != null) {
                             Text(

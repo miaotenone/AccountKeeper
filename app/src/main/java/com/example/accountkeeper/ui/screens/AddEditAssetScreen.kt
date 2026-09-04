@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -162,9 +163,11 @@ fun AddEditAssetScreen(
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, strings.back)
                     }
-                }
+                },
+                windowInsets = WindowInsets(0, 0, 0, 0)
             )
-        }
+        },
+        contentWindowInsets = WindowInsets(0, 0, 0, 0)
     ) { padding ->
         LazyColumn(
             modifier = Modifier
@@ -199,7 +202,7 @@ fun AddEditAssetScreen(
                                 expanded = statusExpanded,
                                 onDismissRequest = { statusExpanded = false }
                             ) {
-                                AssetStatus.entries.forEach { option ->
+                                listOf(AssetStatus.NONE, AssetStatus.OWNED, AssetStatus.NOT_OWNED, AssetStatus.IN_PROGRESS).forEach { option ->
                                     DropdownMenuItem(
                                         text = { Text(assetStatusName(option, strings)) },
                                         onClick = {
@@ -530,6 +533,6 @@ private fun assetStatusName(status: AssetStatus, strings: com.example.accountkee
     AssetStatus.NOT_OWNED -> strings.notOwned
     AssetStatus.LOST -> strings.lost
     AssetStatus.IN_PROGRESS -> strings.inProgress
-    AssetStatus.TEMPORARILY_WITH_ME -> strings.temporarilyWithMe
-    AssetStatus.TEMPORARILY_WITH_OTHERS -> strings.temporarilyWithOthers
+    AssetStatus.TEMPORARILY_WITH_ME -> strings.owned
+    AssetStatus.TEMPORARILY_WITH_OTHERS -> strings.notOwned
 }

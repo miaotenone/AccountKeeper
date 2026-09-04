@@ -348,42 +348,6 @@ fun DataManagementScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // ZIP Data Management Section
-            PremiumDataCard(
-                icon = Icons.Default.Description,
-                title = strings.manualDataManagement,
-                description = if (strings.language == "界面语言") "ZIP 全量导入导出（含交易、资产和附件）" else "ZIP Full Import/Export (Transactions, Assets & Attachments)",
-                color = if (isSystemInDarkTheme()) DarkGradientIncome else LightGradientIncome
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Info, contentDescription = "Info", tint = MaterialTheme.colorScheme.primary)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = strings.infoLimitation,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
-                    PremiumButton(
-                        text = strings.uploadBackup,
-                        icon = Icons.Default.CloudUpload,
-                        onClick = { importZipLauncher.launch("*/*") }
-                    )
-
-                    PremiumButton(
-                        text = strings.exportAll,
-                        icon = Icons.Default.CloudDownload,
-                        onClick = {
-                            val dateFormat = SimpleDateFormat("yyyyMMdd", Locale.getDefault())
-                            val fileName = "AccountKeeper_Export_${dateFormat.format(Date())}.zip"
-                            exportZipLauncher.launch(fileName)
-                        }
-                    )
-                }
-            }
-
             // Third-party Bill Import Section
             PremiumDataCard(
                 icon = Icons.Default.ReceiptLong,
@@ -420,6 +384,31 @@ fun DataManagementScreen(
                 }
             }
 
+            // Complete Data Archive Section
+            PremiumDataCard(
+                icon = Icons.Default.FolderZip,
+                title = strings.financialArchive,
+                description = strings.financialArchiveDescription,
+                color = if (isSystemInDarkTheme()) DarkGradientPrimary else LightGradientPrimary
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        strings.financialArchiveDescription,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    PremiumButton(
+                        text = strings.exportAll,
+                        icon = Icons.Default.Upload,
+                        onClick = { exportZipLauncher.launch("accountkeeper-full-archive.zip") }
+                    )
+                    PremiumButton(
+                        text = strings.uploadBackup,
+                        icon = Icons.Default.Download,
+                        onClick = { importZipLauncher.launch("application/zip") }
+                    )
+                }
+            }
             // Local Backup Section
             PremiumDataCard(
                 icon = Icons.Default.Backup,
@@ -481,11 +470,11 @@ fun DataManagementScreen(
                     // Scheduled Backup Interval (only show when enabled)
                     if (appSettings.isScheduledBackupEnabled) {
                         var expandedInterval by remember { mutableStateOf(false) }
-                        val intervalOptions = listOf(6, 12, 24, 48, 72)
+                        val intervalOptions = (1..30).toList()
                         val intervalLabels = if (strings.language == "界面语言") {
-                            mapOf(6 to "每6小时", 12 to "每12小时", 24 to "每天", 48 to "每2天", 72 to "每3天")
+                            (1..30).associateWith { days -> "每${days}天" }
                         } else {
-                            mapOf(6 to "Every 6 hours", 12 to "Every 12 hours", 24 to "Daily", 48 to "Every 2 days", 72 to "Every 3 days")
+                            (1..30).associateWith { days -> "Every $days days" }
                         }
 
                         Column {
@@ -511,11 +500,11 @@ fun DataManagementScreen(
                                     expanded = expandedInterval,
                                     onDismissRequest = { expandedInterval = false }
                                 ) {
-                                    intervalOptions.forEach { hours ->
+                                    intervalOptions.forEach { days ->
                                         DropdownMenuItem(
-                                            text = { Text(intervalLabels[hours] ?: "") },
+                                            text = { Text(intervalLabels[days] ?: "") },
                                             onClick = {
-                                                settingsViewModel.updateScheduledBackupInterval(hours)
+                                                settingsViewModel.updateScheduledBackupInterval(days)
                                                 expandedInterval = false
                                             }
                                         )

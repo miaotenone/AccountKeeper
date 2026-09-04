@@ -37,8 +37,8 @@ class AssetCategoryRepository @Inject constructor(
             }
             if (dao.getChildrenByRootTypeList(rootType).isEmpty()) {
                 val defaultChildName = when (rootType) {
-                    AssetRootType.PHYSICAL -> "Equipment"
-                    AssetRootType.VIRTUAL -> "Digital Service"
+                    AssetRootType.PHYSICAL -> "实物资产"
+                    AssetRootType.VIRTUAL -> "虚拟资产"
                 }
                 dao.insert(
                     AssetCategoryEntity(

@@ -74,13 +74,13 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun updateScheduledBackupInterval(intervalHours: Int) {
+    fun updateScheduledBackupInterval(intervalDays: Int) {
         viewModelScope.launch {
-            settingsRepository.updateScheduledBackupInterval(intervalHours)
+            settingsRepository.updateScheduledBackupInterval(intervalDays)
             // 如果定时备份已启用，重新调度
             if (appSettings.value.isScheduledBackupEnabled) {
                 val context = getApplication<Application>()
-                BackupWorker.schedule(context, intervalHours)
+                BackupWorker.schedule(context, intervalDays)
             }
         }
     }

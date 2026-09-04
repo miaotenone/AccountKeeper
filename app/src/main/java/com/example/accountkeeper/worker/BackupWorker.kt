@@ -25,10 +25,10 @@ class BackupWorker @AssistedInject constructor(
     companion object {
         const val WORK_NAME = "scheduled_backup_work"
 
-        fun schedule(context: Context, intervalHours: Int = 24) {
+        fun schedule(context: Context, intervalDays: Int = 1) {
             val workRequest = PeriodicWorkRequestBuilder<BackupWorker>(
-                intervalHours.toLong(),
-                TimeUnit.HOURS
+                intervalDays.coerceIn(1, 30).toLong(),
+                TimeUnit.DAYS
             )
                 .addTag("backup")
                 .build()

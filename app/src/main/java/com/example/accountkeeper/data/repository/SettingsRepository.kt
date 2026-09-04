@@ -24,7 +24,7 @@ data class AppSettings(
     val backupRetentionLimit: Int = 15,
     val swipeDeleteRequiresConfirm: Boolean = true,  // 左滑是否直接弹出确认对话框
     val isScheduledBackupEnabled: Boolean = false,   // 是否启用定时备份
-    val scheduledBackupInterval: Int = 24            // 定时备份间隔（小时）
+    val scheduledBackupInterval: Int = 1             // 定时备份间隔（天）
 )
 
 @Singleton
@@ -51,7 +51,7 @@ class SettingsRepository @Inject constructor(
             backupRetentionLimit = preferences[PreferencesKeys.BACKUP_LIMIT] ?: 15,
             swipeDeleteRequiresConfirm = preferences[PreferencesKeys.SWIPE_DELETE_CONFIRM] ?: true,
             isScheduledBackupEnabled = preferences[PreferencesKeys.SCHEDULED_BACKUP] ?: false,
-            scheduledBackupInterval = preferences[PreferencesKeys.SCHEDULED_BACKUP_INTERVAL] ?: 24
+            scheduledBackupInterval = normalizeScheduledBackupInterval(preferences[PreferencesKeys.SCHEDULED_BACKUP_INTERVAL])
         )
     }
 
@@ -110,9 +110,18 @@ class SettingsRepository @Inject constructor(
         }
     }
 
-    suspend fun updateScheduledBackupInterval(intervalHours: Int) {
+    suspend fun updateScheduledBackupInterval(intervalDays: Int) {
         context.dataStore.edit { preferences ->
-            preferences[PreferencesKeys.SCHEDULED_BACKUP_INTERVAL] = intervalHours
+            preferences[PreferencesKeys.SCHEDULED_BACKUP_INTERVAL] = intervalDays.coerceIn(1, 30)
+        }
+    }
+
+    private fun normalizeScheduledBackupInterval(rawValue: Int?): Int {
+        val value = rawValue ?: return 1
+        return when {
+            value in 1..30 -> value
+            value % 24 == 0 -> (value / 24).coerceIn(1, 30)
+            else -> value.coerceIn(1, 30)
         }
     }
 }

@@ -3,6 +3,7 @@ package com.example.accountkeeper.ui.screens
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -54,9 +55,11 @@ fun AttachmentOverviewScreen(
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = strings.back)
                     }
-                }
+                },
+                windowInsets = WindowInsets(0, 0, 0, 0)
             )
-        }
+        },
+        contentWindowInsets = WindowInsets(0, 0, 0, 0)
     ) { padding ->
         if (attachments.isEmpty()) {
             Card(modifier = Modifier.fillMaxWidth().padding(padding).padding(16.dp)) {

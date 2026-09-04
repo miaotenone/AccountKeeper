@@ -10,8 +10,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Archive
-import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.FolderZip
+import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -31,8 +31,8 @@ import com.example.accountkeeper.ui.theme.LocalAppStrings
 fun DataManagementHubScreen(
     onNavigateBack: () -> Unit,
     onNavigateToLegacyManagement: () -> Unit,
-    onNavigateToFinancialArchive: () -> Unit
-    , onNavigateToAttachments: () -> Unit
+    onNavigateToFinancialArchive: () -> Unit,
+    onNavigateToAttachments: () -> Unit
 ) {
     val strings = LocalAppStrings.current
     Scaffold(
@@ -48,7 +48,10 @@ fun DataManagementHubScreen(
         }
     ) { padding ->
         Column(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Card(Modifier.fillMaxWidth()) {

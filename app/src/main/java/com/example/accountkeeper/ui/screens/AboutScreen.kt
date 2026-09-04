@@ -27,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -45,7 +46,7 @@ fun AboutScreen(
     updateViewModel: UpdateViewModel = hiltViewModel()
 ) {
     val strings = LocalAppStrings.current
-    val isDark = isSystemInDarkTheme()
+    val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val context = LocalContext.current
     var showHelpDialog by remember { mutableStateOf(false) }
     var showFeedbackDialog by remember { mutableStateOf(false) }
@@ -320,7 +321,7 @@ fun AboutCard(
     isClickable: Boolean = false,
     onClick: () -> Unit = {}
 ) {
-    val isDark = isSystemInDarkTheme()
+    val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val context = LocalContext.current
     
     Card(

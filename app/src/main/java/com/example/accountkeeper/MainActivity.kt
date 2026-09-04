@@ -79,6 +79,7 @@ fun AccountKeeperMainApp() {
     val navController = rememberNavController()
     var homeVisibilityEventId by remember { mutableStateOf(0L) }
     var homeVisibilityVisible by remember { mutableStateOf(false) }
+    var homeRefreshTick by remember { mutableStateOf(0L) }
     val emitHomeVisibility: (Boolean) -> Unit = { visible ->
         homeVisibilityVisible = visible
         homeVisibilityEventId += 1L
@@ -102,9 +103,9 @@ fun AccountKeeperMainApp() {
         "CategoryTransactionsRoute" to AppDestinations.STATISTICS,
         "BudgetApprovalRoute" to AppDestinations.BUDGET,
         "DataManagementRoute" to AppDestinations.SETTINGS,
-        "LegacyDataManagementRoute" to AppDestinations.SETTINGS,
         "AppSettingsRoute" to AppDestinations.SETTINGS,
         "CategorySettingsRoute" to AppDestinations.SETTINGS,
+        "AttachmentOverviewRoute" to AppDestinations.SETTINGS,
         "AboutRoute" to AppDestinations.SETTINGS
     )
     val currentSelected = routeParentMap[simpleRouteName] ?: AppDestinations.entries.find { it.route::class.simpleName == simpleRouteName } ?: AppDestinations.HOME
@@ -150,7 +151,7 @@ fun AccountKeeperMainApp() {
                 navController = navController,
                 homeVisibilityEventId = homeVisibilityEventId,
                 homeVisibilityVisible = homeVisibilityVisible,
-                onTransactionSaved = { emitHomeVisibility(true) }
+                onTransactionSaved = { emitHomeVisibility(true); homeRefreshTick += 1L }
             )
         }
     }

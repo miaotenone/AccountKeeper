@@ -39,6 +39,7 @@ import com.example.accountkeeper.ui.viewmodel.UpdateState
 @Composable
 fun SettingsScreen(
     onNavigateToDataManagement: () -> Unit = {},
+    onNavigateToAttachments: () -> Unit = {},
     onNavigateToAppSettings: () -> Unit = {},
     onNavigateToCategorySettings: () -> Unit = {},
     onNavigateToAbout: () -> Unit = {},
@@ -117,6 +118,12 @@ fun SettingsScreen(
                     title = strings.dataManagement,
                     description = strings.dataManagementDescription,
                     onClick = onNavigateToDataManagement
+                )
+                SettingsItem(
+                    icon = Icons.Default.AttachFile,
+                    title = strings.attachments,
+                    description = strings.attachmentOverviewDescription,
+                    onClick = onNavigateToAttachments
                 )
             }
 

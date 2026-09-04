@@ -66,11 +66,15 @@ fun HomeScreen(
     onNavigateToSearchResult: (String) -> Unit,
     homeVisibilityEventId: Long = 0L,
     homeVisibilityVisible: Boolean = false,
+    refreshTick: Long = 0L,
     viewModel: TransactionViewModel = hiltViewModel(),
     categoryViewModel: CategoryViewModel = hiltViewModel(),
     settingsViewModel: SettingsViewModel = hiltViewModel()
 ) {
     val pagedTransactions = viewModel.pagedTransactions.collectAsLazyPagingItems()
+    LaunchedEffect(refreshTick) {
+        if (refreshTick > 0L) pagedTransactions.refresh()
+    }
     val monthlyIncome by viewModel.monthlyIncome.collectAsState()
     val monthlyExpense by viewModel.monthlyExpense.collectAsState()
     val categories by categoryViewModel.categories.collectAsState()
