@@ -25,6 +25,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.accountkeeper.ui.theme.LocalAppStrings
+import com.example.accountkeeper.ui.components.AppSectionCard
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -54,7 +56,7 @@ fun DataManagementHubScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Card(Modifier.fillMaxWidth()) {
+            AppSectionCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(strings.dataManagement, style = MaterialTheme.typography.titleMedium)
                     Text(strings.dataManagementDescription)
@@ -65,7 +67,7 @@ fun DataManagementHubScreen(
                     }
                 }
             }
-            Card(Modifier.fillMaxWidth()) {
+            AppSectionCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(strings.financialArchive, style = MaterialTheme.typography.titleMedium)
                     Text(strings.financialArchiveDescription)
@@ -76,7 +78,7 @@ fun DataManagementHubScreen(
                     }
                 }
             }
-            Card(Modifier.fillMaxWidth()) {
+            AppSectionCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(strings.attachments, style = MaterialTheme.typography.titleMedium)
                     Text(strings.attachmentOverviewDescription)
@@ -90,3 +92,4 @@ fun DataManagementHubScreen(
         }
     }
 }
+

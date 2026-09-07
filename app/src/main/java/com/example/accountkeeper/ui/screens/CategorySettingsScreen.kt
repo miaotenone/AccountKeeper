@@ -10,6 +10,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -17,18 +19,29 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.accountkeeper.data.model.Category
+import com.example.accountkeeper.data.model.AssetCategoryEntity
+import com.example.accountkeeper.data.model.AssetFieldType
+import com.example.accountkeeper.data.model.AssetFieldDefinition
+import com.example.accountkeeper.data.model.AssetDirection
+import com.example.accountkeeper.data.model.sortedAssetCategories
 import com.example.accountkeeper.data.model.TransactionType
 import com.example.accountkeeper.ui.theme.LocalAppStrings
+import com.example.accountkeeper.ui.components.AppSectionCard
+import com.example.accountkeeper.ui.components.AppEmptyState
+
 import com.example.accountkeeper.ui.viewmodel.CategoryViewModel
+import com.example.accountkeeper.ui.viewmodel.AssetCategoryViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CategorySettingsScreen(
     onNavigateBack: () -> Unit,
-    categoryViewModel: CategoryViewModel = hiltViewModel()
+    categoryViewModel: CategoryViewModel = hiltViewModel(),
+    assetCategoryViewModel: AssetCategoryViewModel = hiltViewModel()
 ) {
     val categories by categoryViewModel.categories.collectAsState()
     val strings = LocalAppStrings.current
+    val assetCategories by assetCategoryViewModel.assetCategories.collectAsState()
     var selectedTab by remember { mutableStateOf(0) }
     
     var showAddDialog by remember { mutableStateOf(false) }
@@ -38,6 +51,14 @@ fun CategorySettingsScreen(
     var categoryNameInput by remember { mutableStateOf("") }
     var nameError by remember { mutableStateOf<String?>(null) }
     var isNewAssetPositive by remember { mutableStateOf(true) }
+    var selectedAssetCategory by remember { mutableStateOf<AssetCategoryEntity?>(null) }
+    var showFieldDialog by remember { mutableStateOf(false) }
+    var fieldName by remember { mutableStateOf("") }
+    var fieldType by remember { mutableStateOf(AssetFieldType.TEXT) }
+    var fieldRequired by remember { mutableStateOf(false) }
+    var fieldOptions by remember { mutableStateOf("") }
+    var editingField by remember { mutableStateOf<AssetFieldDefinition?>(null) }
+    var fieldPendingDelete by remember { mutableStateOf<AssetFieldDefinition?>(null) }
 
     val currentType = when (selectedTab) {
         0 -> TransactionType.EXPENSE
@@ -79,73 +100,64 @@ fun CategorySettingsScreen(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(vertical = 4.dp)
             ) {
-                items(displayCategories, key = { it.id }) { category ->
-                    ListItem(
-                        headlineContent = { Text(category.name) },
-                        supportingContent = {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
+                if (currentType == TransactionType.ASSET) {
+                    items(sortedAssetCategories(assetCategories), key = { it.id }) { assetCategory ->
+                        val isPositive = assetCategory.direction == AssetDirection.POSITIVE
+                        ListItem(
+                            headlineContent = { Text(assetCategory.name) },
+                            supportingContent = {
+                                SuggestionChip(
+                                    onClick = { assetCategoryViewModel.toggleAssetCategoryDirection(assetCategory) },
+                                    label = { Text(if (isPositive) strings.positiveAsset else strings.negativeAsset) },
+                                    colors = SuggestionChipDefaults.suggestionChipColors(
+                                        containerColor = if (isPositive) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer,
+                                        labelColor = if (isPositive) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer
+                                    ),
+                                    modifier = Modifier.height(28.dp)
+                                )
+                            },
+                            trailingContent = {
+                                TextButton(onClick = { selectedAssetCategory = assetCategory; showFieldDialog = true }) {
+                                    Text("编辑字段")
+                                }
+                            }
+                        )
+                        HorizontalDivider(thickness = 0.5.dp)
+                    }
+                } else {
+                    items(displayCategories, key = { it.id }) { category ->
+                        ListItem(
+                            headlineContent = { Text(category.name) },
+                            supportingContent = {
                                 if (category.isDefault) Text(strings.defaultCategory, style = MaterialTheme.typography.bodySmall)
-                                // Show asset type badge for ASSET categories
-                                if (currentType == TransactionType.ASSET) {
-                                    SuggestionChip(
+                            },
+                            trailingContent = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    IconButton(
                                         onClick = {
-                                            // Toggle asset type
-                                            categoryViewModel.updateCategory(
-                                                category.copy(isPositiveAsset = !category.isPositiveAsset)
-                                            )
+                                            categoryNameInput = category.name
+                                            nameError = null
+                                            showRenameDialog = category
                                         },
-                                        label = { 
-                                            Text(
-                                                if (category.isPositiveAsset) strings.positiveAsset 
-                                                else strings.negativeAsset,
-                                                style = MaterialTheme.typography.labelSmall
-                                            ) 
-                                        },
-                                        colors = SuggestionChipDefaults.suggestionChipColors(
-                                            containerColor = if (category.isPositiveAsset) 
-                                                MaterialTheme.colorScheme.primaryContainer 
-                                            else 
-                                                MaterialTheme.colorScheme.errorContainer,
-                                            labelColor = if (category.isPositiveAsset) 
-                                                MaterialTheme.colorScheme.onPrimaryContainer 
-                                            else 
-                                                MaterialTheme.colorScheme.onErrorContainer
-                                        ),
-                                        modifier = Modifier.height(28.dp)
-                                    )
+                                        modifier = Modifier.size(40.dp)
+                                    ) {
+                                        Icon(Icons.Default.Edit, contentDescription = strings.editTransaction, modifier = Modifier.size(20.dp))
+                                    }
+                                    IconButton(
+                                        onClick = { showDeleteDialog = category },
+                                        modifier = Modifier.size(40.dp)
+                                    ) {
+                                        Icon(Icons.Default.Delete, contentDescription = strings.delete, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
+                                    }
                                 }
-                            }
-                        },
-                        trailingContent = {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                IconButton(
-                                    onClick = { 
-                                        categoryNameInput = category.name
-                                        nameError = null
-                                        showRenameDialog = category
-                                    },
-                                    modifier = Modifier.size(40.dp)
-                                ) { 
-                                    Icon(Icons.Default.Edit, contentDescription = strings.editTransaction, modifier = Modifier.size(20.dp)) 
-                                }
-                                IconButton(
-                                    onClick = { showDeleteDialog = category },
-                                    modifier = Modifier.size(40.dp)
-                                ) { 
-                                    Icon(Icons.Default.Delete, contentDescription = strings.delete, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp)) 
-                                }
-                            }
-                        },
-                        modifier = Modifier.padding(vertical = 2.dp)
-                    )
-                    HorizontalDivider(thickness = 0.5.dp)
+                            },
+                            modifier = Modifier.padding(vertical = 2.dp)
+                        )
+                        HorizontalDivider(thickness = 0.5.dp)
+                    }
                 }
             }
         }
-
         if (showAddDialog) {
             AlertDialog(
                 onDismissRequest = { showAddDialog = false },
@@ -203,12 +215,11 @@ fun CategorySettingsScreen(
                         } else if (categories.any { it.name.equals(name, ignoreCase = true) }) {
                             nameError = strings.nameExistsError
                         } else {
-                            categoryViewModel.addCategory(Category(
-                                name = name, 
-                                type = currentType, 
-                                isDefault = false,
-                                isPositiveAsset = if (currentType == TransactionType.ASSET) isNewAssetPositive else true
-                            ))
+                            if (currentType == TransactionType.ASSET) {
+                                assetCategoryViewModel.addCategory(name, if (isNewAssetPositive) AssetDirection.POSITIVE else AssetDirection.NEGATIVE)
+                            } else {
+                                categoryViewModel.addCategory(Category(name = name, type = currentType, isDefault = false, isPositiveAsset = true))
+                            }
                             showAddDialog = false
                             isNewAssetPositive = true // Reset for next use
                         }
@@ -259,6 +270,54 @@ fun CategorySettingsScreen(
             )
         }
 
+        if (showFieldDialog) {
+            selectedAssetCategory?.let { assetCategory ->
+                val fields by assetCategoryViewModel.fieldsFor(assetCategory.id).collectAsState(emptyList())
+                AlertDialog(
+                    onDismissRequest = { showFieldDialog = false },
+                    title = { Text("${assetCategory.name} - 详情字段") },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            fields.forEachIndexed { index, field ->
+                                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text("${field.name} (${field.type.name})${if (field.required) " *" else ""}", modifier = Modifier.weight(1f))
+                                    Row {
+                                        IconButton(enabled = index > 0, onClick = { assetCategoryViewModel.moveField(field, -1) }) { Icon(Icons.Default.ArrowUpward, "上移") }
+                                        IconButton(enabled = index < fields.lastIndex, onClick = { assetCategoryViewModel.moveField(field, 1) }) { Icon(Icons.Default.ArrowDownward, "下移") }
+                                        IconButton(onClick = { editingField = field; fieldName = field.name; fieldType = field.type; fieldRequired = field.required; fieldOptions = field.options }) { Icon(Icons.Default.Edit, strings.editTransaction) }
+                                        IconButton(onClick = { fieldPendingDelete = field }) { Icon(Icons.Default.Delete, strings.delete) }
+                                    }
+                                }
+                            }
+                            OutlinedTextField(value = fieldName, onValueChange = { fieldName = it }, label = { Text("字段名称") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                            var typeExpanded by remember { mutableStateOf(false) }
+                            ExposedDropdownMenuBox(expanded = typeExpanded, onExpandedChange = { typeExpanded = !typeExpanded }) {
+                                OutlinedTextField(value = fieldType.name, onValueChange = {}, readOnly = true, label = { Text("字段类型") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(typeExpanded) }, modifier = Modifier.menuAnchor().fillMaxWidth())
+                                ExposedDropdownMenu(expanded = typeExpanded, onDismissRequest = { typeExpanded = false }) {
+                                    AssetFieldType.entries.forEach { option -> DropdownMenuItem(text = { Text(option.name) }, onClick = { fieldType = option; typeExpanded = false }) }
+                                }
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(checked = fieldRequired, onCheckedChange = { fieldRequired = it }); Text("必填") }
+                            if (fieldType == AssetFieldType.SINGLE_CHOICE) OutlinedTextField(value = fieldOptions, onValueChange = { fieldOptions = it }, label = { Text("选项，每行一个") }, minLines = 2, modifier = Modifier.fillMaxWidth())
+                            Button(onClick = { if (fieldName.isNotBlank()) { val current = editingField; if (current == null) assetCategoryViewModel.addField(assetCategory.id, fieldName, fieldType, fieldRequired, fieldOptions) else assetCategoryViewModel.updateField(current.copy(name = fieldName, type = fieldType, required = fieldRequired, options = fieldOptions)); fieldName = ""; fieldOptions = ""; fieldRequired = false; fieldType = AssetFieldType.TEXT; editingField = null } }, modifier = Modifier.fillMaxWidth()) { Text(if (editingField == null) "新增字段" else "保存字段") }
+                            if (editingField != null) TextButton(onClick = { editingField = null; fieldName = ""; fieldOptions = ""; fieldRequired = false; fieldType = AssetFieldType.TEXT }) { Text(strings.cancel) }
+                        }
+                    },
+                    confirmButton = { TextButton(onClick = { showFieldDialog = false }) { Text(strings.ok) } }
+                )
+            }
+        }
+
+        fieldPendingDelete?.let { field ->
+            AlertDialog(
+                onDismissRequest = { fieldPendingDelete = null },
+                title = { Text("删除详情字段") },
+                text = { Text("删除“${field.name}”后，已保存资产和申请中的对应字段值也会删除。") },
+                confirmButton = { TextButton(onClick = { assetCategoryViewModel.deleteField(field); fieldPendingDelete = null }) { Text(strings.ok) } },
+                dismissButton = { TextButton(onClick = { fieldPendingDelete = null }) { Text(strings.cancel) } }
+            )
+        }
+
         showDeleteDialog?.let { category ->
             AlertDialog(
                 onDismissRequest = { showDeleteDialog = null },
@@ -277,3 +336,4 @@ fun CategorySettingsScreen(
         }
     }
 }
+

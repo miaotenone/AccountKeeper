@@ -48,6 +48,7 @@ import com.example.accountkeeper.LocalCurrencySymbol
 import com.example.accountkeeper.data.model.Transaction
 import com.example.accountkeeper.data.model.TransactionType
 import com.example.accountkeeper.data.model.SortType
+import com.example.accountkeeper.ui.components.AppAddFab
 import com.example.accountkeeper.ui.theme.*
 import com.example.accountkeeper.ui.viewmodel.CategoryViewModel
 import com.example.accountkeeper.ui.viewmodel.TimeRange
@@ -307,22 +308,7 @@ fun HomeScreen(
         },
         floatingActionButton = {
             if (!selectionMode) {
-                FloatingActionButton(
-                    onClick = onNavigateToAddTransaction,
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    elevation = FloatingActionButtonDefaults.elevation(
-                        defaultElevation = 16.dp,
-                        pressedElevation = 24.dp
-                    ),
-                    shape = CircleShape,
-                    modifier = Modifier.size(64.dp)
-                ) {
-                    Icon(
-                        Icons.Default.Add,
-                        contentDescription = strings.addTransaction,
-                        modifier = Modifier.size(32.dp)
-                    )
-                }
+                AppAddFab(onClick = onNavigateToAddTransaction, contentDescription = strings.addTransaction)
             }
         },
         contentWindowInsets = WindowInsets(0, 0, 0, 0)
@@ -788,10 +774,10 @@ fun PremiumBalanceCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 4.dp),
-        shape = RoundedCornerShape(28.dp),
+        shape = RoundedCornerShape(12.dp),
         elevation = CardDefaults.cardElevation(
-            defaultElevation = 8.dp,
-            pressedElevation = 12.dp
+            defaultElevation = 2.dp,
+            pressedElevation = 4.dp
         )
     ) {
         Box(
@@ -1101,7 +1087,7 @@ fun PremiumTransactionItem(
                     onClick = { onClick() },
                     onLongClick = { onLongClick() }
                 ),
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(8.dp),
             colors = CardDefaults.cardColors(
                 containerColor = backgroundColor
             ),
@@ -1241,7 +1227,7 @@ fun PremiumTransactionItem(
                     .matchParentSize()
                     .background(
                         MaterialTheme.colorScheme.error,
-                        RoundedCornerShape(20.dp)
+                        RoundedCornerShape(8.dp)
                     )
                     .clickable {
                         isSwipedOpen = false
@@ -1351,7 +1337,7 @@ fun PremiumTransactionItem(
                         },
                         onLongClick = { onLongClick() }
                     ),
-                shape = RoundedCornerShape(20.dp),
+                shape = RoundedCornerShape(8.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = backgroundColor
                 ),
@@ -1474,7 +1460,7 @@ fun DeleteTransactionDialog(
                 Text(strings.cancel)
             }
         },
-        shape = RoundedCornerShape(24.dp)
+        shape = RoundedCornerShape(8.dp)
     )
 }
 
@@ -1519,6 +1505,6 @@ fun BatchDeleteTransactionDialog(
                 Text(strings.cancel)
             }
         },
-        shape = RoundedCornerShape(24.dp)
+        shape = RoundedCornerShape(8.dp)
     )
 }

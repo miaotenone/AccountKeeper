@@ -247,7 +247,7 @@ fun AboutScreen(
                 colors = CardDefaults.cardColors(
                     containerColor = if (isDark) DarkSurface else LightSurface
                 ),
-                shape = RoundedCornerShape(20.dp)
+                shape = RoundedCornerShape(8.dp)
             ) {
                 Row(
                     modifier = Modifier
@@ -346,7 +346,7 @@ fun AboutCard(
         colors = CardDefaults.cardColors(
             containerColor = if (isDark) DarkSurfaceVariant else LightSurfaceVariant
         ),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(8.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Row(
@@ -414,7 +414,7 @@ fun AboutCardWithStatus(
         colors = CardDefaults.cardColors(
             containerColor = if (isDark) DarkSurfaceVariant else LightSurfaceVariant
         ),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(8.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Row(
@@ -488,7 +488,7 @@ fun HelpTutorialDialog(
             colors = CardDefaults.cardColors(
                 containerColor = if (isDark) DarkSurface else LightSurface
             ),
-            shape = RoundedCornerShape(20.dp)
+            shape = RoundedCornerShape(8.dp)
         ) {
             Column(
                 modifier = Modifier
@@ -938,7 +938,7 @@ fun FeedbackDialog(
             colors = CardDefaults.cardColors(
                 containerColor = if (isDark) DarkSurface else LightSurface
             ),
-            shape = RoundedCornerShape(20.dp)
+            shape = RoundedCornerShape(8.dp)
         ) {
             Column(
                 modifier = Modifier
@@ -1076,3 +1076,4 @@ fun FeedbackDialog(
         }
     }
 }
+

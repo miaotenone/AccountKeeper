@@ -26,6 +26,8 @@ import com.example.accountkeeper.LocalCurrencySymbol
 import com.example.accountkeeper.data.model.TransactionType
 import com.example.accountkeeper.ui.theme.*
 import com.example.accountkeeper.ui.theme.LocalAppStrings
+import com.example.accountkeeper.ui.components.AppSectionCard
+import com.example.accountkeeper.ui.components.AppEmptyState
 import com.example.accountkeeper.ui.viewmodel.CategoryViewModel
 import com.example.accountkeeper.ui.viewmodel.TransactionViewModel
 import com.example.accountkeeper.utils.CurrencyUtils
@@ -39,188 +41,83 @@ fun CategoryTransactionsScreen(
     categoryName: String,
     startTime: Long,
     endTime: Long,
+    transactionType: TransactionType = TransactionType.EXPENSE,
     onNavigateBack: () -> Unit,
     viewModel: TransactionViewModel = hiltViewModel(),
     categoryViewModel: CategoryViewModel = hiltViewModel()
 ) {
-    val categories by categoryViewModel.categories.collectAsState()
     val currency = LocalCurrencySymbol.current
     val strings = LocalAppStrings.current
-
-    // 分页数据
-    val pagedTransactions = viewModel.getByCategoryAndTimePaged(categoryId, startTime, endTime)
-        .collectAsLazyPagingItems()
-
+    val pagedTransactions = remember(categoryId, startTime, endTime, transactionType) {
+        viewModel.getByCategoryAndTimePaged(categoryId, transactionType, startTime, endTime)
+    }.collectAsLazyPagingItems()
+    val transactionCount by remember(categoryId, startTime, endTime, transactionType) {
+        viewModel.countByCategoryAndTime(categoryId, transactionType, startTime, endTime)
+    }.collectAsState(initial = 0)
+    val totalAmount by remember(categoryId, startTime, endTime, transactionType) {
+        viewModel.sumByCategoryAndTime(categoryId, transactionType, startTime, endTime)
+    }.collectAsState(initial = 0.0)
+    val dailySummary by remember(categoryId, startTime, endTime) {
+        viewModel.getDailyCategorySummary(categoryId, startTime, endTime)
+    }.collectAsState(initial = emptyList())
     val dateFormat = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()) }
-
-    // Compute count from loaded items for TopAppBar
-    val transactionCount = pagedTransactions.itemCount
-
     val lazyListState = rememberLazyListState()
+    val isInitialLoading = pagedTransactions.loadState.refresh is androidx.paging.LoadState.Loading
+    val showEmpty = !isInitialLoading && transactionCount == 0
+    val totalDisplay = CurrencyUtils.convertToDisplay(totalAmount, currency)
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     Column {
-                        Text(
-                            categoryName,
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            "$transactionCount ${strings.transactions}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Text(categoryName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(" ", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = strings.back
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Transparent
-                ),
+                navigationIcon = { IconButton(onClick = onNavigateBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = strings.back) } },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
                 windowInsets = WindowInsets(0, 0, 0, 0)
             )
         },
         contentWindowInsets = WindowInsets(0, 0, 0, 0)
     ) { paddingValues ->
-        // Compute stats from loaded items
-        val loadedTransactions = remember(pagedTransactions.itemCount) {
-            (0 until pagedTransactions.itemCount).mapNotNull { pagedTransactions[it] }
-        }
-        val totalIncome = CurrencyUtils.convertToDisplay(
-            loadedTransactions.filter { it.type == TransactionType.INCOME }.sumOf { it.amount },
-            currency
-        )
-        val totalExpense = CurrencyUtils.convertToDisplay(
-            loadedTransactions.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount },
-            currency
-        )
-
         LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues),
+            modifier = Modifier.fillMaxSize().padding(paddingValues),
             state = lazyListState,
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Summary Card
             item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-                ) {
-                    val gradient = if (isSystemInDarkTheme()) {
-                        Brush.linearGradient(DarkGradientPrimary)
-                    } else {
-                        Brush.linearGradient(LightGradientPrimary)
-                    }
-                    
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(gradient)
-                            .padding(20.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceEvenly
-                        ) {
-                            if (totalIncome > 0) {
-                                SummaryItem(
-                                    label = strings.income,
-                                    value = "$currency${String.format(Locale.US, "%.2f", totalIncome)}",
-                                    color = Color(0xFF5BD9CA)
-                                )
-                            }
-                            if (totalExpense > 0) {
-                                if (totalIncome > 0) {
-                                    VerticalDivider(
-                                        color = Color.White.copy(alpha = 0.25f),
-                                        thickness = 1.dp,
-                                        modifier = Modifier.height(50.dp)
-                                    )
-                                }
-                                SummaryItem(
-                                    label = strings.expense,
-                                    value = "-$currency${String.format(Locale.US, "%.2f", totalExpense)}",
-                                    color = Color(0xFFFF6B6B)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Transaction List
-            if (pagedTransactions.itemCount == 0) {
-                item {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(200.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            strings.noTransactions,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            } else {
-                items(
-                    count = pagedTransactions.itemCount,
-                    key = { pagedTransactions[it]?.id ?: -it.toLong() }
-                ) { index ->
-                    val transaction = pagedTransactions[index] ?: return@items
-
-                    // Detect date boundary
-                    val prevTransaction = if (index > 0) pagedTransactions[index - 1] else null
-                    val currentDateStr = dateFormat.format(Date(transaction.date))
-                    val prevDateStr = prevTransaction?.let { dateFormat.format(Date(it.date)) }
-                    val showDateHeader = prevDateStr == null || currentDateStr != prevDateStr
-
-                    if (showDateHeader) {
-                        val dayTransactions = mutableListOf<com.example.accountkeeper.data.model.Transaction>()
-                        for (i in index until pagedTransactions.itemCount) {
-                            val tx = pagedTransactions[i] ?: break
-                            if (dateFormat.format(Date(tx.date)) != currentDateStr) break
-                            dayTransactions.add(tx)
-                        }
-                        DateHeaderCompact(
-                            date = currentDateStr,
-                            txList = dayTransactions,
-                            currency = currency
-                        )
-                    }
-
-                    CategoryTransactionItem(
-                        transaction = transaction,
-                        currency = currency
+                val gradient = if (isSystemInDarkTheme()) Brush.linearGradient(DarkGradientPrimary) else Brush.linearGradient(LightGradientPrimary)
+                AppSectionCard(modifier = Modifier.fillMaxWidth(), emphasis = true, gradient = gradient) {
+                    SummaryItem(
+                        label = if (transactionType == TransactionType.INCOME) strings.income else strings.expense,
+                        value = "$currency${String.format(Locale.getDefault(), "%.2f", totalDisplay)}",
+                        color = if (transactionType == TransactionType.INCOME) Color(0xFF5BD9CA) else Color(0xFFFF6B6B)
                     )
+                    Text(String.format(Locale.getDefault(), "%d", transactionCount), color = Color.White.copy(alpha = 0.78f), style = MaterialTheme.typography.labelMedium)
                 }
             }
+            if (showEmpty) {
 
-            // Bottom spacer
-            item {
-                Spacer(modifier = Modifier.height(16.dp))
+                item { AppEmptyState(strings.noTransactions, Modifier.fillMaxWidth()) }
+            } else {
+                items(count = pagedTransactions.itemCount, key = { index -> pagedTransactions[index]?.id ?: "placeholder-" }) { index ->
+                    val transaction = pagedTransactions[index] ?: return@items
+                    val currentDate = dateFormat.format(Date(transaction.date))
+                    val previousDate = if (index > 0) pagedTransactions[index - 1]?.let { dateFormat.format(Date(it.date)) } else null
+                    if (currentDate != previousDate) {
+                        val summary = dailySummary.firstOrNull { it.date == currentDate }
+                        DateHeaderCompact(currentDate, summary?.income ?: 0.0, summary?.expense ?: 0.0, currency)
+                    }
+                    CategoryTransactionItem(transaction = transaction, currency = currency)
+                }
             }
+            item { Spacer(modifier = Modifier.height(16.dp)) }
         }
     }
 }
-
 @Composable
 fun SummaryItem(
     label: String,
@@ -248,18 +145,10 @@ fun SummaryItem(
 @Composable
 fun DateHeaderCompact(
     date: String,
-    txList: List<com.example.accountkeeper.data.model.Transaction>,
+    dayIncome: Double,
+    dayExpense: Double,
     currency: String
 ) {
-    val dayIncome = CurrencyUtils.convertToDisplay(
-        txList.filter { it.type == TransactionType.INCOME }.sumOf { it.amount },
-        currency
-    )
-    val dayExpense = CurrencyUtils.convertToDisplay(
-        txList.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount },
-        currency
-    )
-
     Surface(
         color = Color.Transparent,
         modifier = Modifier
@@ -309,7 +198,7 @@ fun CategoryTransactionItem(
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(8.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Row(
@@ -379,3 +268,4 @@ fun CategoryTransactionItem(
         }
     }
 }
+

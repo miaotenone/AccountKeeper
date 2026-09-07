@@ -1,7 +1,9 @@
 package com.example.accountkeeper.data.local
 
 import androidx.room.TypeConverter
-import com.example.accountkeeper.data.model.AssetRootType
+
+import com.example.accountkeeper.data.model.AssetFieldType
+import com.example.accountkeeper.data.model.AssetDirection
 import com.example.accountkeeper.data.model.AssetStatus
 import com.example.accountkeeper.data.model.AttachmentOwnerType
 import com.example.accountkeeper.data.model.BudgetApprovalStatus
@@ -16,10 +18,12 @@ class Converters {
     @TypeConverter fun toTransactionSource(value: String): TransactionSource = TransactionSource.valueOf(value)
     @TypeConverter fun fromAttachmentOwnerType(value: AttachmentOwnerType): String = value.name
     @TypeConverter fun toAttachmentOwnerType(value: String): AttachmentOwnerType = AttachmentOwnerType.valueOf(value)
+    @TypeConverter fun fromAssetFieldType(value: AssetFieldType): String = value.name
+    @TypeConverter fun toAssetFieldType(value: String): AssetFieldType = runCatching { AssetFieldType.valueOf(value) }.getOrDefault(AssetFieldType.TEXT)
     @TypeConverter fun fromAssetStatus(value: AssetStatus): String = value.name
     @TypeConverter fun toAssetStatus(value: String): AssetStatus = AssetStatus.valueOf(value)
-    @TypeConverter fun fromAssetRootType(value: AssetRootType): String = value.name
-    @TypeConverter fun toAssetRootType(value: String): AssetRootType = AssetRootType.valueOf(value)
+    @TypeConverter fun fromAssetDirection(value: AssetDirection): String = value.name
+    @TypeConverter fun toAssetDirection(value: String): AssetDirection = AssetDirection.fromStoredValue(value)
     @TypeConverter fun fromBudgetApprovalType(value: BudgetApprovalType): String = value.name
     @TypeConverter fun toBudgetApprovalType(value: String): BudgetApprovalType = BudgetApprovalType.valueOf(value)
     @TypeConverter fun fromBudgetApprovalStatus(value: BudgetApprovalStatus): String = value.name

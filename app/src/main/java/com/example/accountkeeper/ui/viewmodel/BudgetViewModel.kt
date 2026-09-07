@@ -2,6 +2,8 @@ package com.example.accountkeeper.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.accountkeeper.data.local.ApprovalFieldValueDao
+import com.example.accountkeeper.data.model.ApprovalFieldValue
 import com.example.accountkeeper.data.model.Budget
 import com.example.accountkeeper.data.model.BudgetApprovalRequest
 import com.example.accountkeeper.data.model.BudgetPeriodType
@@ -36,7 +38,8 @@ sealed class ApprovalSubmitState {
 class BudgetViewModel @Inject constructor(
     private val repository: BudgetRepository,
     private val approvalRepository: BudgetApprovalRepository,
-    private val autoBackupCoordinator: AutoBackupCoordinator
+    private val autoBackupCoordinator: AutoBackupCoordinator,
+    private val approvalFieldValueDao: ApprovalFieldValueDao
 ) : ViewModel() {
     private val selectedMonth = MutableStateFlow(monthKey(System.currentTimeMillis()))
     val monthKey: StateFlow<String> = selectedMonth
@@ -173,6 +176,19 @@ class BudgetViewModel @Inject constructor(
         val (start, end) = monthRange(month)
         return repository.getMonthlyExpense(start, end)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
+    }
+
+    suspend fun getApprovalFieldValues(approvalId: Long): List<ApprovalFieldValue> = approvalFieldValueDao.getForApproval(approvalId)
+
+    fun submitApprovalWithFields(request: BudgetApprovalRequest, values: Map<Long, String>, replacingId: Long? = null) {
+        submitState.value = ApprovalSubmitState.Submitting
+        viewModelScope.launch {
+            try {
+                val id = approvalRepository.submitWithFields(request, values.map { (fieldId, value) -> ApprovalFieldValue(0L, fieldId, value) }, replacingId)
+                autoBackupCoordinator.backupAfterDataChange()
+                submitState.value = ApprovalSubmitState.Success(id)
+            } catch (e: Exception) { submitState.value = ApprovalSubmitState.Error(e.message ?: "提交失败") }
+        }
     }
 
     fun submitApproval(request: BudgetApprovalRequest, replacingId: Long? = null) {

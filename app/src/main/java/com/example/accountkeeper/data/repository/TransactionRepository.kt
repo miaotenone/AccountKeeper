@@ -45,9 +45,9 @@ class TransactionRepository @Inject constructor(
         }
     ).flow
 
-    fun getByCategoryAndTimePaged(categoryId: Long, startTime: Long, endTime: Long): Flow<PagingData<Transaction>> = Pager(
+    fun getByCategoryAndTimePaged(categoryId: Long, type: String, startTime: Long, endTime: Long): Flow<PagingData<Transaction>> = Pager(
         config = PagingConfig(pageSize = PAGE_SIZE, prefetchDistance = PAGE_SIZE / 2, enablePlaceholders = false),
-        pagingSourceFactory = { transactionDao.getByCategoryAndTimePaged(categoryId, startTime, endTime) }
+        pagingSourceFactory = { transactionDao.getByCategoryAndTimePaged(categoryId, type, startTime, endTime) }
     ).flow
 
     fun getByTimeRangePaged(startDate: Long, endDate: Long, sortType: SortType = SortType.TIME_DESC): Flow<PagingData<Transaction>> = Pager(
@@ -74,11 +74,15 @@ class TransactionRepository @Inject constructor(
         }
     ).flow
 
+    fun countByCategoryAndTime(categoryId: Long, type: String, startTime: Long, endTime: Long): Flow<Int> = transactionDao.countByCategoryAndTime(categoryId, type, startTime, endTime)
+    fun sumByCategoryAndTime(categoryId: Long, type: String, startTime: Long, endTime: Long): Flow<Double> = transactionDao.sumByCategoryAndTime(categoryId, type, startTime, endTime)
+
+    fun getDailyCategorySummary(categoryId: Long, startTime: Long, endTime: Long): Flow<List<com.example.accountkeeper.data.local.DailyTransactionSummary>> = transactionDao.getDailyCategorySummary(categoryId, startTime, endTime)
     fun getIncomeBetween(startDate: Long, endDate: Long): Flow<Double> = transactionDao.getIncomeBetween(startDate, endDate)
     fun getExpenseBetween(startDate: Long, endDate: Long): Flow<Double> = transactionDao.getExpenseBetween(startDate, endDate)
 
     suspend fun getTransactionById(id: Long): Transaction? = transactionDao.getTransactionById(id)
-    suspend fun getAvailableExpenseTransactions(categoryId: Long, startDate: Long, endDate: Long): List<Transaction> = transactionDao.getAvailableExpenseTransactions(categoryId, startDate, endDate)
+    suspend fun getAvailableExpenseTransactions(categoryId: Long, amount: Double, startDate: Long, endDate: Long): List<Transaction> = transactionDao.getAvailableExpenseTransactions(categoryId, amount, startDate, endDate)
     suspend fun updateTransactionCategory(oldId: Long, newId: Long) = transactionDao.updateTransactionCategory(oldId, newId)
     suspend fun insertTransaction(transaction: Transaction) {
         transactionDao.insertTransaction(transaction)

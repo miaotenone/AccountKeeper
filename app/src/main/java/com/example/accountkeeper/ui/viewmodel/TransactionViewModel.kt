@@ -132,7 +132,10 @@ class TransactionViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
 
     fun searchTransactionsPaged(query: String, sortType: SortType = SortType.TIME_DESC): Flow<PagingData<Transaction>> = transactionRepository.searchTransactionsPaged(query, sortType).cachedIn(viewModelScope)
-    fun getByCategoryAndTimePaged(categoryId: Long, startTime: Long, endTime: Long): Flow<PagingData<Transaction>> = transactionRepository.getByCategoryAndTimePaged(categoryId, startTime, endTime).cachedIn(viewModelScope)
+    fun getByCategoryAndTimePaged(categoryId: Long, type: TransactionType, startTime: Long, endTime: Long): Flow<PagingData<Transaction>> = transactionRepository.getByCategoryAndTimePaged(categoryId, type.name, startTime, endTime).cachedIn(viewModelScope)
+    fun countByCategoryAndTime(categoryId: Long, type: TransactionType, startTime: Long, endTime: Long): Flow<Int> = transactionRepository.countByCategoryAndTime(categoryId, type.name, startTime, endTime)
+    fun sumByCategoryAndTime(categoryId: Long, type: TransactionType, startTime: Long, endTime: Long): Flow<Double> = transactionRepository.sumByCategoryAndTime(categoryId, type.name, startTime, endTime)
+    fun getDailyCategorySummary(categoryId: Long, startTime: Long, endTime: Long): Flow<List<com.example.accountkeeper.data.local.DailyTransactionSummary>> = transactionRepository.getDailyCategorySummary(categoryId, startTime, endTime)
     suspend fun getTransactionById(id: Long): Transaction? = transactionRepository.getTransactionById(id)
     fun searchTransactions(query: String): Flow<List<Transaction>> = transactionRepository.searchTransactions(query)
 

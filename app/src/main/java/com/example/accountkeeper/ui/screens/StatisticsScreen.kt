@@ -32,6 +32,7 @@ import com.example.accountkeeper.LocalCurrencySymbol
 import com.example.accountkeeper.data.model.TransactionType
 import com.example.accountkeeper.ui.theme.*
 import com.example.accountkeeper.ui.theme.LocalAppStrings
+import com.example.accountkeeper.ui.components.AppEmptyState
 import com.example.accountkeeper.ui.viewmodel.CategoryViewModel
 import com.example.accountkeeper.ui.viewmodel.TransactionViewModel
 import com.example.accountkeeper.utils.CurrencyUtils
@@ -47,7 +48,7 @@ enum class StatType { EXPENSE, INCOME, BALANCE }
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StatisticsScreen(
-    onNavigateToCategoryTransactions: (categoryId: Long, categoryName: String, startTime: Long, endTime: Long) -> Unit = { _, _, _, _ -> },
+    onNavigateToCategoryTransactions: (categoryId: Long, categoryName: String, startTime: Long, endTime: Long, type: TransactionType) -> Unit = { _, _, _, _, _ -> },
     viewModel: TransactionViewModel = hiltViewModel(),
     categoryViewModel: CategoryViewModel = hiltViewModel()
 ) {
@@ -391,26 +392,13 @@ fun StatisticsScreen(
                         isIncome = categoryId == -1L,
                         onClick = {
                             if (statType != StatType.BALANCE) {
-                                onNavigateToCategoryTransactions(categoryId, categoryName, startTime, endTime)
+                                onNavigateToCategoryTransactions(categoryId, categoryName, startTime, endTime, if (statType == StatType.INCOME) TransactionType.INCOME else TransactionType.EXPENSE)
                             }
                         }
                     )
                 }
             } else {
-                item {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(200.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            strings.noTransactions,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
+                item { AppEmptyState(strings.noTransactions, Modifier.fillMaxWidth()) }
             }
 
             // Bottom spacer
@@ -497,8 +485,8 @@ fun PremiumTotalCard(
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(28.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+        shape = RoundedCornerShape(12.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Box(
             modifier = Modifier
@@ -559,8 +547,8 @@ fun PremiumPieChart(
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(28.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+        shape = RoundedCornerShape(12.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
             modifier = Modifier
@@ -722,8 +710,8 @@ fun PremiumCategoryBreakdown(
                     Modifier
                 }
             ),
-        shape = RoundedCornerShape(20.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        shape = RoundedCornerShape(8.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Column(
             modifier = Modifier

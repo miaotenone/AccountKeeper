@@ -27,31 +27,62 @@ class AssetRepository @Inject constructor(
     suspend fun getBySourceApprovalId(id: Long): Asset? = assetDao.getBySourceApprovalId(id)
     suspend fun getByTransactionId(id: Long): Asset? = assetDao.getByTransactionId(id)
 
-    suspend fun confirmOwned(assetId: Long, transactionId: Long) {
+    suspend fun linkTransaction(assetId: Long, transactionId: Long) {
         database.withTransaction {
             val current = assetDao.getAssetById(assetId) ?: error("Asset not found")
-            check(current.status == AssetStatus.IN_PROGRESS) { "Only in-progress assets can be confirmed" }
+            check(current.status == AssetStatus.IN_PROGRESS) { "Only in-progress assets can be linked" }
             check(current.transactionId == null) { "Asset is already linked to a transaction" }
             val transaction = transactionDao.getTransactionById(transactionId) ?: error("Transaction not found")
             check(transaction.type == TransactionType.EXPENSE) { "Only expense transactions can be linked" }
             check(transaction.categoryId == current.categoryId) { "Transaction category does not match" }
-            val start = monthStart(current.purchaseDate ?: current.date)
-            check(transaction.date >= start && transaction.date < monthEnd(start)) { "Transaction month does not match" }
+            check(kotlin.math.abs(transaction.amount - current.amount) < 0.000001) { "Transaction amount does not match" }
+            check(transaction.date >= (current.purchaseDate ?: current.date)) { "Transaction date is before purchase date" }
             check(assetDao.getByTransactionId(transactionId) == null) { "Transaction is already linked" }
-            assetDao.updateAsset(current.copy(status = AssetStatus.OWNED, transactionId = transactionId, updatedAt = System.currentTimeMillis()))
+            assetDao.updateAsset(current.copy(transactionId = transactionId, updatedAt = System.currentTimeMillis()))
         }
     }
 
-    suspend fun insertAsset(asset: Asset) {
+    suspend fun confirmOwned(assetId: Long) {
+        database.withTransaction {
+            val current = assetDao.getAssetById(assetId) ?: error("Asset not found")
+            check(current.status == AssetStatus.IN_PROGRESS) { "Only in-progress assets can be confirmed" }
+            val transactionId = current.transactionId ?: error("Link an expense transaction first")
+            val transaction = transactionDao.getTransactionById(transactionId) ?: error("Transaction not found")
+            check(transaction.type == TransactionType.EXPENSE && transaction.categoryId == current.categoryId) { "Transaction no longer matches" }
+            check(kotlin.math.abs(transaction.amount - current.amount) < 0.000001) { "Transaction amount no longer matches" }
+            check(transaction.date >= (current.purchaseDate ?: current.date)) { "Transaction date no longer matches" }
+            assetDao.updateAsset(current.copy(status = AssetStatus.OWNED, isCompleted = true, updatedAt = System.currentTimeMillis()))
+            current.sourceApprovalId?.let { approvalId ->
+                database.budgetApprovalDao().getById(approvalId)?.let { approval ->
+                    database.budgetApprovalDao().update(approval.copy(status = com.example.accountkeeper.data.model.BudgetApprovalStatus.PURCHASE_COMPLETED, updatedAt = System.currentTimeMillis()))
+                }
+            }
+        }
+    }
+
+    suspend fun insertAsset(asset: Asset) = database.withTransaction {
+        validateLinkedTransaction(asset)
         assetDao.insertAsset(asset)
         syncAttachments(asset)
     }
 
-    suspend fun updateAsset(asset: Asset) {
+    suspend fun updateAsset(asset: Asset) = database.withTransaction {
+        validateLinkedTransaction(asset)
         assetDao.updateAsset(asset)
         syncAttachments(asset)
     }
 
+    private suspend fun validateLinkedTransaction(asset: Asset) {
+        val transactionId = asset.transactionId ?: return
+        check(asset.status == AssetStatus.IN_PROGRESS) { "Only in-progress assets can link a transaction" }
+        val transaction = transactionDao.getTransactionById(transactionId) ?: error("Transaction not found")
+        check(transaction.type == TransactionType.EXPENSE) { "Only expense transactions can be linked" }
+        check(transaction.categoryId == asset.categoryId) { "Transaction category does not match" }
+        check(kotlin.math.abs(transaction.amount - asset.amount) < 0.000001) { "Transaction amount does not match" }
+        check(transaction.date >= (asset.purchaseDate ?: asset.date)) { "Transaction date is before purchase date" }
+        val linked = assetDao.getByTransactionId(transactionId)
+        check(linked == null || linked.id == asset.id) { "Transaction is already linked" }
+    }
     suspend fun deleteAsset(asset: Asset) {
         attachmentRepository.deleteForOwner(AttachmentOwnerType.ASSET, asset.id)
         assetDao.deleteAsset(asset)

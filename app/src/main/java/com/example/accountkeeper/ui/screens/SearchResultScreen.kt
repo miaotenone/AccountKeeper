@@ -40,6 +40,7 @@ import com.example.accountkeeper.data.model.SortType
 import com.example.accountkeeper.data.model.TransactionType
 import com.example.accountkeeper.ui.theme.*
 import com.example.accountkeeper.ui.theme.LocalAppStrings
+import com.example.accountkeeper.ui.components.AppEmptyState
 import com.example.accountkeeper.ui.viewmodel.CategoryViewModel
 import com.example.accountkeeper.ui.viewmodel.TransactionViewModel
 import com.example.accountkeeper.utils.CurrencyUtils
@@ -258,7 +259,7 @@ fun SearchResultScreen(
                 item {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(10.dp),
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
                         )
@@ -347,38 +348,14 @@ fun SearchResultScreen(
 
             if (transactions.isEmpty()) {
                 // Empty state
-                item {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(300.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Text(
-                                strings.noSearchResults,
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Text(
-                                "\"$query\"",
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    }
-                }
+                item { AppEmptyState("$query: ${strings.noSearchResults}", Modifier.fillMaxWidth()) }
             } else {
                 // Summary Card
                 item {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(20.dp),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                        shape = RoundedCornerShape(8.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                     ) {
                         val gradient = if (isSystemInDarkTheme()) {
                             Brush.linearGradient(DarkGradientPrimary)
@@ -908,7 +885,7 @@ fun SearchTransactionItem(
                     onClick = { onClick() },
                     onLongClick = { onLongClick() }
                 ),
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(8.dp),
             colors = CardDefaults.cardColors(
                 containerColor = backgroundColor
             ),
@@ -1032,7 +1009,7 @@ fun SearchTransactionItem(
                     .matchParentSize()
                     .background(
                         MaterialTheme.colorScheme.error,
-                        RoundedCornerShape(20.dp)
+                        RoundedCornerShape(8.dp)
                     )
                     .clickable { onDelete() }
                     .padding(end = 20.dp),
@@ -1056,7 +1033,7 @@ fun SearchTransactionItem(
                         onClick = { onClick() },
                         onLongClick = { onLongClick() }
                     ),
-                shape = RoundedCornerShape(20.dp),
+                shape = RoundedCornerShape(8.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = backgroundColor
                 ),
@@ -1146,3 +1123,4 @@ fun SearchTransactionItem(
         }
     }
 }
+

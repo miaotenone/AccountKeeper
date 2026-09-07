@@ -7,6 +7,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
+import com.example.accountkeeper.data.model.TransactionType
 import com.example.accountkeeper.ui.screens.AboutScreen
 import com.example.accountkeeper.ui.screens.AddEditAssetScreen
 import com.example.accountkeeper.ui.screens.AddEditTransactionScreen
@@ -28,7 +29,7 @@ import kotlinx.serialization.Serializable
 @Serializable object StatisticsRoute
 @Serializable object AssetsRoute
 @Serializable object BudgetRoute
-@Serializable object BudgetApprovalRoute
+@Serializable data class BudgetApprovalRoute(val newRequest: Boolean = false)
 @Serializable data class AddEditTransactionRoute(val transactionId: Long = -1L)
 @Serializable data class AddEditAssetRoute(val assetId: Long = -1L)
 @Serializable object SettingsRoute
@@ -37,7 +38,7 @@ import kotlinx.serialization.Serializable
 @Serializable object AppSettingsRoute
 @Serializable object CategorySettingsRoute
 @Serializable object AboutRoute
-@Serializable data class CategoryTransactionsRoute(val categoryId: Long, val categoryName: String, val startTime: Long, val endTime: Long)
+@Serializable data class CategoryTransactionsRoute(val categoryId: Long, val categoryName: String, val startTime: Long, val endTime: Long, val transactionType: TransactionType)
 @Serializable data class SearchResultRoute(val query: String)
 
 @Composable
@@ -60,10 +61,17 @@ fun AppNavigation(
                 refreshTick = homeRefreshTick
             )
         }
-        composable<StatisticsRoute> { StatisticsScreen(onNavigateToCategoryTransactions = { id, name, start, end -> navController.navigate(CategoryTransactionsRoute(id, name, start, end)) }) }
+        composable<StatisticsRoute> { StatisticsScreen(onNavigateToCategoryTransactions = { id, name, start, end, type -> navController.navigate(CategoryTransactionsRoute(id, name, start, end, type)) }) }
         composable<AssetsRoute> { AssetsScreen(onNavigateToAddAsset = { navController.navigate(AddEditAssetRoute()) }, onNavigateToEditAsset = { navController.navigate(AddEditAssetRoute(it)) }) }
-        composable<BudgetRoute> { BudgetScreen(onNavigateToCategoryTransactions = { id, name, start, end -> navController.navigate(CategoryTransactionsRoute(id, name, start, end)) }, onNavigateToBudgetApproval = { navController.navigate(BudgetApprovalRoute) }) }
-        composable<BudgetApprovalRoute> { BudgetApprovalScreen(onNavigateBack = { navController.popBackStack() }) }
+        composable<BudgetRoute> { BudgetScreen(onNavigateToCategoryTransactions = { id, name, start, end -> navController.navigate(CategoryTransactionsRoute(id, name, start, end, TransactionType.EXPENSE)) }, onNavigateToBudgetApproval = { navController.navigate(BudgetApprovalRoute()) }) }
+        composable<BudgetApprovalRoute> { entry ->
+            val args = entry.toRoute<BudgetApprovalRoute>()
+            BudgetApprovalScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToNewRequest = { navController.navigate(BudgetApprovalRoute(newRequest = true)) },
+                startNewRequest = args.newRequest
+            )
+        }
         composable<SettingsRoute> { SettingsScreen(onNavigateToDataManagement = { navController.navigate(DataManagementRoute) }, onNavigateToAttachments = { navController.navigate(AttachmentOverviewRoute) }, onNavigateToAppSettings = { navController.navigate(AppSettingsRoute) }, onNavigateToCategorySettings = { navController.navigate(CategorySettingsRoute) }, onNavigateToAbout = { navController.navigate(AboutRoute) }) }
         composable<DataManagementRoute> { DataManagementScreen(onNavigateBack = { navController.popBackStack() }) }
         composable<AttachmentOverviewRoute> { AttachmentOverviewScreen(onNavigateBack = { navController.popBackStack() }) }
@@ -84,7 +92,7 @@ fun AppNavigation(
         composable<AboutRoute> { AboutScreen(onNavigateBack = { navController.popBackStack() }) }
         composable<CategoryTransactionsRoute> { entry ->
             val args = entry.toRoute<CategoryTransactionsRoute>()
-            CategoryTransactionsScreen(categoryId = args.categoryId, categoryName = args.categoryName, startTime = args.startTime, endTime = args.endTime, onNavigateBack = { navController.popBackStack() })
+            CategoryTransactionsScreen(categoryId = args.categoryId, categoryName = args.categoryName, startTime = args.startTime, endTime = args.endTime, transactionType = args.transactionType, onNavigateBack = { navController.popBackStack() })
         }
         composable<SearchResultRoute> { entry ->
             val args = entry.toRoute<SearchResultRoute>()

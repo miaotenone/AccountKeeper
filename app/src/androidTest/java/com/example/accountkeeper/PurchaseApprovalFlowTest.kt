@@ -5,7 +5,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.example.accountkeeper.data.local.AppDatabase
 import com.example.accountkeeper.data.model.AssetCategoryEntity
-import com.example.accountkeeper.data.model.AssetRootType
+import com.example.accountkeeper.data.model.AssetDirection
 import com.example.accountkeeper.data.model.AssetStatus
 import com.example.accountkeeper.data.model.Attachment
 import com.example.accountkeeper.data.model.AttachmentConverter
@@ -45,7 +45,7 @@ class PurchaseApprovalFlowTest {
         database.categoryDao().insertCategory(Category(name = "Office", type = TransactionType.EXPENSE))
         expenseCategoryId = database.categoryDao().getAllCategoriesList().single().id
         assetCategoryId = database.assetCategoryDao().insert(
-            AssetCategoryEntity(name = "Laptop", rootType = AssetRootType.PHYSICAL)
+            AssetCategoryEntity(name = "Laptop", direction = AssetDirection.POSITIVE)
         )
         attachmentRepository = AttachmentRepository(database.attachmentDao())
         repository = BudgetApprovalRepository(
@@ -56,7 +56,9 @@ class PurchaseApprovalFlowTest {
             categoryDao = database.categoryDao(),
             assetCategoryDao = database.assetCategoryDao(),
             assetDao = database.assetDao(),
-            attachmentRepository = attachmentRepository
+            attachmentRepository = attachmentRepository,
+            approvalFieldValueDao = database.approvalFieldValueDao(),
+            assetFieldValueDao = database.assetFieldValueDao()
         )
     }
 
@@ -103,7 +105,7 @@ class PurchaseApprovalFlowTest {
         repository.approve(requestId, "ok")
 
         val approved = repository.getById(requestId)!!
-        assertEquals(BudgetApprovalStatus.APPROVED, approved.status)
+        assertEquals(BudgetApprovalStatus.PURCHASE_IN_PROGRESS, approved.status)
         assertEquals("ok", approved.decisionNote)
 
         val assets = database.assetDao().getAllAssets().first()

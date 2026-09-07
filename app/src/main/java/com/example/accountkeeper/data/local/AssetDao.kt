@@ -34,8 +34,6 @@ interface AssetDao {
     @Query("""
         SELECT * FROM assets
         WHERE note LIKE '%' || :query || '%'
-           OR targetPerson LIKE '%' || :query || '%'
-           OR targetAccount LIKE '%' || :query || '%'
         ORDER BY date DESC
     """)
     fun searchAssets(query: String): Flow<List<Asset>>
@@ -45,4 +43,6 @@ interface AssetDao {
     fun getTotalAssets(): Flow<Double>
     @Query("SELECT COALESCE(SUM(amount), 0) FROM assets WHERE (status = 'NOT_OWNED' OR status = 'TEMPORARILY_WITH_OTHERS') AND isCompleted = 0")
     fun getTotalLiabilities(): Flow<Double>
+    @Query("UPDATE assets SET assetDirection = :direction, updatedAt = :updatedAt WHERE assetCategoryId = :assetCategoryId")
+    suspend fun updateDirectionForCategory(assetCategoryId: Long, direction: String, updatedAt: Long)
 }

@@ -6,7 +6,11 @@ import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.accountkeeper.data.model.Asset
+
 import com.example.accountkeeper.data.model.AssetCategoryEntity
+import com.example.accountkeeper.data.model.AssetFieldDefinition
+import com.example.accountkeeper.data.model.AssetFieldValue
+import com.example.accountkeeper.data.model.ApprovalFieldValue
 import com.example.accountkeeper.data.model.AttachmentConverter
 import com.example.accountkeeper.data.model.AttachmentEntity
 import com.example.accountkeeper.data.model.AttachmentOwnerType
@@ -18,8 +22,8 @@ import com.example.accountkeeper.data.model.Category
 import com.example.accountkeeper.data.model.Transaction
 
 @Database(
-    entities = [Transaction::class, Category::class, Asset::class, AssetCategoryEntity::class, Budget::class, BudgetMonth::class, BudgetApprovalRequest::class, AttachmentEntity::class, BillFileEntity::class],
-    version = 23,
+    entities = [Transaction::class, Category::class, Asset::class, AssetCategoryEntity::class, Budget::class, BudgetMonth::class, BudgetApprovalRequest::class, AttachmentEntity::class, BillFileEntity::class, AssetFieldDefinition::class, AssetFieldValue::class, ApprovalFieldValue::class],
+    version = 27,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -34,7 +38,57 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun attachmentDao(): AttachmentDao
     abstract fun billFileDao(): BillFileDao
 
+    abstract fun assetFieldDefinitionDao(): AssetFieldDefinitionDao
+    abstract fun assetFieldValueDao(): AssetFieldValueDao
+    abstract fun approvalFieldValueDao(): ApprovalFieldValueDao
+
     companion object {
+        val MIGRATION_25_26 = object : Migration(25, 26) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE budget_approval_requests ADD COLUMN expectedPurchaseEndAt INTEGER")
+            }
+        }
+        val MIGRATION_26_27 = object : Migration(26, 27) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("DROP INDEX IF EXISTS index_assets_assetCategoryId")
+                db.execSQL("DROP INDEX IF EXISTS index_assets_sourceApprovalId")
+                db.execSQL("DROP INDEX IF EXISTS index_assets_transactionId")
+                db.execSQL("CREATE TABLE assets_new (id INTEGER NOT NULL, date INTEGER NOT NULL, amount REAL NOT NULL, status TEXT NOT NULL, assetCategoryId INTEGER, categoryId INTEGER, name TEXT NOT NULL, specification TEXT NOT NULL, quantity REAL NOT NULL, purchaseDate INTEGER, sourceApprovalId INTEGER, transactionId INTEGER, note TEXT NOT NULL, isCompleted INTEGER NOT NULL, attachments TEXT NOT NULL, createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL, assetDirection TEXT NOT NULL, supplier TEXT NOT NULL, location TEXT NOT NULL, userOrDepartment TEXT NOT NULL, warranty TEXT NOT NULL, serviceStartDate INTEGER, serviceEndDate INTEGER, renewalCycle TEXT NOT NULL, accessUrl TEXT NOT NULL, PRIMARY KEY(id), FOREIGN KEY(assetCategoryId) REFERENCES asset_categories(id) ON UPDATE NO ACTION ON DELETE SET NULL, FOREIGN KEY(transactionId) REFERENCES transactions(id) ON UPDATE NO ACTION ON DELETE SET NULL)")
+                db.execSQL("INSERT INTO assets_new (id,date,amount,status,assetCategoryId,categoryId,name,specification,quantity,purchaseDate,sourceApprovalId,transactionId,note,isCompleted,attachments,createdAt,updatedAt,assetDirection,supplier,location,userOrDepartment,warranty,serviceStartDate,serviceEndDate,renewalCycle,accessUrl) SELECT id,date,amount,status,assetCategoryId,categoryId,name,specification,quantity,purchaseDate,sourceApprovalId,transactionId,note,isCompleted,attachments,createdAt,updatedAt,assetDirection,supplier,location,userOrDepartment,warranty,serviceStartDate,serviceEndDate,renewalCycle,accessUrl FROM assets")
+                db.execSQL("DROP TABLE assets")
+                db.execSQL("ALTER TABLE assets_new RENAME TO assets")
+                db.execSQL("CREATE INDEX index_assets_assetCategoryId ON assets(assetCategoryId)")
+                db.execSQL("CREATE UNIQUE INDEX index_assets_sourceApprovalId ON assets(sourceApprovalId) WHERE sourceApprovalId IS NOT NULL")
+                db.execSQL("CREATE UNIQUE INDEX index_assets_transactionId ON assets(transactionId) WHERE transactionId IS NOT NULL")
+            }
+        }
+        val MIGRATION_24_25 = object : Migration(24, 25) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("UPDATE budget_approval_requests SET assetCategoryId = NULL")
+                db.execSQL("DELETE FROM approval_field_values")
+                db.execSQL("DELETE FROM asset_field_values")
+                db.execSQL("DELETE FROM asset_field_definitions")
+
+                db.execSQL("DROP INDEX IF EXISTS index_assets_assetCategoryId")
+                db.execSQL("DROP INDEX IF EXISTS index_assets_sourceApprovalId")
+                db.execSQL("DROP INDEX IF EXISTS index_assets_transactionId")
+                db.execSQL("CREATE TABLE assets_new (id INTEGER NOT NULL, date INTEGER NOT NULL, amount REAL NOT NULL, status TEXT NOT NULL, assetCategoryId INTEGER, categoryId INTEGER, name TEXT NOT NULL, specification TEXT NOT NULL, quantity REAL NOT NULL, purchaseDate INTEGER, sourceApprovalId INTEGER, transactionId INTEGER, targetPerson TEXT NOT NULL, targetAccount TEXT NOT NULL, note TEXT NOT NULL, isCompleted INTEGER NOT NULL, attachments TEXT NOT NULL, createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL, assetDirection TEXT NOT NULL, supplier TEXT NOT NULL, location TEXT NOT NULL, userOrDepartment TEXT NOT NULL, warranty TEXT NOT NULL, serviceStartDate INTEGER, serviceEndDate INTEGER, renewalCycle TEXT NOT NULL, accessUrl TEXT NOT NULL, PRIMARY KEY(id), FOREIGN KEY(assetCategoryId) REFERENCES asset_categories(id) ON UPDATE NO ACTION ON DELETE SET NULL, FOREIGN KEY(transactionId) REFERENCES transactions(id) ON UPDATE NO ACTION ON DELETE SET NULL)")
+                db.execSQL("INSERT INTO assets_new (id,date,amount,status,assetCategoryId,categoryId,name,specification,quantity,purchaseDate,sourceApprovalId,transactionId,targetPerson,targetAccount,note,isCompleted,attachments,createdAt,updatedAt,assetDirection,supplier,location,userOrDepartment,warranty,serviceStartDate,serviceEndDate,renewalCycle,accessUrl) SELECT id,date,amount,status,NULL,categoryId,name,specification,quantity,purchaseDate,sourceApprovalId,transactionId,targetPerson,targetAccount,note,isCompleted,attachments,createdAt,updatedAt,CASE WHEN assetRootType = 'VIRTUAL' THEN 'NEGATIVE' ELSE 'POSITIVE' END,supplier,location,userOrDepartment,warranty,serviceStartDate,serviceEndDate,renewalCycle,accessUrl FROM assets")
+                db.execSQL("DROP TABLE assets")
+
+                db.execSQL("DROP INDEX IF EXISTS index_asset_categories_rootType")
+                db.execSQL("DROP TABLE asset_categories")
+                db.execSQL("CREATE TABLE asset_categories (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, name TEXT NOT NULL, direction TEXT NOT NULL, isDefault INTEGER NOT NULL DEFAULT 0, createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL)")
+                db.execSQL("CREATE INDEX index_asset_categories_direction ON asset_categories(direction)")
+                AssetCategorySeed.insertDefaults(db)
+
+                db.execSQL("ALTER TABLE assets_new RENAME TO assets")
+                db.execSQL("CREATE INDEX index_assets_assetCategoryId ON assets(assetCategoryId)")
+                db.execSQL("CREATE UNIQUE INDEX index_assets_sourceApprovalId ON assets(sourceApprovalId) WHERE sourceApprovalId IS NOT NULL")
+                db.execSQL("CREATE UNIQUE INDEX index_assets_transactionId ON assets(transactionId) WHERE transactionId IS NOT NULL")
+            }
+        }
+        val MIGRATION_23_24 = object : Migration(23, 24) { override fun migrate(db: SupportSQLiteDatabase) { db.execSQL("CREATE TABLE IF NOT EXISTS asset_field_definitions (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, assetCategoryId INTEGER NOT NULL, name TEXT NOT NULL, type TEXT NOT NULL, required INTEGER NOT NULL, options TEXT NOT NULL, sortOrder INTEGER NOT NULL, createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL, FOREIGN KEY(assetCategoryId) REFERENCES asset_categories(id) ON DELETE CASCADE)"); db.execSQL("CREATE INDEX IF NOT EXISTS index_asset_field_definitions_assetCategoryId ON asset_field_definitions(assetCategoryId)"); db.execSQL("CREATE TABLE IF NOT EXISTS asset_field_values (assetId INTEGER NOT NULL, fieldId INTEGER NOT NULL, value TEXT NOT NULL, PRIMARY KEY(assetId, fieldId), FOREIGN KEY(assetId) REFERENCES assets(id) ON DELETE CASCADE, FOREIGN KEY(fieldId) REFERENCES asset_field_definitions(id) ON DELETE CASCADE)"); db.execSQL("CREATE INDEX IF NOT EXISTS index_asset_field_values_fieldId ON asset_field_values(fieldId)"); db.execSQL("CREATE TABLE IF NOT EXISTS approval_field_values (approvalId INTEGER NOT NULL, fieldId INTEGER NOT NULL, value TEXT NOT NULL, PRIMARY KEY(approvalId, fieldId), FOREIGN KEY(approvalId) REFERENCES budget_approval_requests(id) ON DELETE CASCADE, FOREIGN KEY(fieldId) REFERENCES asset_field_definitions(id) ON DELETE CASCADE)"); db.execSQL("CREATE INDEX IF NOT EXISTS index_approval_field_values_fieldId ON approval_field_values(fieldId)") } }
         val MIGRATION_22_23 = object : androidx.room.migration.Migration(22, 23) {
             override fun migrate(database: androidx.sqlite.db.SupportSQLiteDatabase) {
                 database.execSQL("DELETE FROM budget_approval_requests WHERE type = 'BUDGET_ADJUSTMENT'")
@@ -70,7 +124,7 @@ abstract class AppDatabase : RoomDatabase() {
         val MIGRATION_20_21 = object : Migration(20, 21) { override fun migrate(db: SupportSQLiteDatabase) { addColumnIfMissing(db,"transactions","attachments","TEXT NOT NULL DEFAULT ''"); seedDefaultAssetCategories(db); db.execSQL("DROP INDEX IF EXISTS index_assets_categoryId"); db.execSQL("DROP INDEX IF EXISTS index_assets_assetCategoryId"); db.execSQL("DROP INDEX IF EXISTS index_assets_sourceApprovalId"); db.execSQL("CREATE TABLE assets_new (id INTEGER NOT NULL, date INTEGER NOT NULL, amount REAL NOT NULL, status TEXT NOT NULL, assetCategoryId INTEGER, categoryId INTEGER, name TEXT NOT NULL, specification TEXT NOT NULL, quantity REAL NOT NULL, purchaseDate INTEGER, sourceApprovalId INTEGER, targetPerson TEXT NOT NULL, targetAccount TEXT NOT NULL, note TEXT NOT NULL, isCompleted INTEGER NOT NULL, attachments TEXT NOT NULL, createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL, assetRootType TEXT NOT NULL, supplier TEXT NOT NULL, location TEXT NOT NULL, userOrDepartment TEXT NOT NULL, warranty TEXT NOT NULL, serviceStartDate INTEGER, serviceEndDate INTEGER, renewalCycle TEXT NOT NULL, accessUrl TEXT NOT NULL, PRIMARY KEY(id), FOREIGN KEY(assetCategoryId) REFERENCES asset_categories(id) ON DELETE SET NULL)"); db.execSQL("INSERT INTO assets_new (id,date,amount,status,assetCategoryId,categoryId,name,specification,quantity,purchaseDate,sourceApprovalId,targetPerson,targetAccount,note,isCompleted,attachments,createdAt,updatedAt,assetRootType,supplier,location,userOrDepartment,warranty,serviceStartDate,serviceEndDate,renewalCycle,accessUrl) SELECT id,date,amount,status,assetCategoryId,categoryId,name,specification,quantity,purchaseDate,sourceApprovalId,targetPerson,targetAccount,note,isCompleted,attachments,createdAt,updatedAt,assetRootType,supplier,location,userOrDepartment,warranty,serviceStartDate,serviceEndDate,renewalCycle,accessUrl FROM assets"); db.execSQL("DROP TABLE assets"); db.execSQL("ALTER TABLE assets_new RENAME TO assets"); migrateLegacyAttachmentJson(db,"assets",AttachmentOwnerType.ASSET); migrateLegacyAttachmentJson(db,"budget_approval_requests",AttachmentOwnerType.APPROVAL); migrateLegacyAttachmentJson(db,"transactions",AttachmentOwnerType.TRANSACTION); db.execSQL("CREATE INDEX IF NOT EXISTS index_assets_assetCategoryId ON assets(assetCategoryId)"); db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_assets_sourceApprovalId ON assets(sourceApprovalId) WHERE sourceApprovalId IS NOT NULL"); db.execSQL("CREATE INDEX IF NOT EXISTS index_attachments_sha256 ON attachments(sha256)"); db.execSQL("CREATE INDEX IF NOT EXISTS index_asset_categories_rootType ON asset_categories(rootType)"); db.execSQL("CREATE INDEX IF NOT EXISTS index_bill_files_ownerType ON bill_files(ownerType)"); db.execSQL("CREATE INDEX IF NOT EXISTS index_budgets_categoryId ON budgets(categoryId)") } }
         val MIGRATION_21_22 = DatabaseMigrations.MIGRATION_21_22
         private fun addColumnIfMissing(db: SupportSQLiteDatabase, table: String, column: String, definition: String) { val c=db.query("PRAGMA table_info($table)"); var found=false; c.use { while(it.moveToNext()) if(it.getString(1)==column) found=true }; if(!found) db.execSQL("ALTER TABLE $table ADD COLUMN $column $definition") }
-        fun seedDefaultAssetCategories(db: SupportSQLiteDatabase) { val now=System.currentTimeMillis(); db.execSQL("INSERT INTO asset_categories(name,rootType,parentCategoryId,isDefault,createdAt,updatedAt) SELECT 'Equipment','PHYSICAL',NULL,1,$now,$now WHERE NOT EXISTS(SELECT 1 FROM asset_categories WHERE rootType='PHYSICAL' AND parentCategoryId IS NULL)"); db.execSQL("INSERT INTO asset_categories(name,rootType,parentCategoryId,isDefault,createdAt,updatedAt) SELECT 'Digital Service','VIRTUAL',NULL,1,$now,$now WHERE NOT EXISTS(SELECT 1 FROM asset_categories WHERE rootType='VIRTUAL' AND parentCategoryId IS NULL)") }
+        fun seedDefaultAssetCategories(db: SupportSQLiteDatabase) = AssetCategorySeed.insertDefaults(db)
         private fun migrateLegacyAttachmentJson(db: SupportSQLiteDatabase, table: String, owner: AttachmentOwnerType) { val c=db.query("SELECT id,attachments FROM $table WHERE attachments IS NOT NULL AND attachments!=''"); c.use { while(it.moveToNext()) AttachmentConverter.fromJson(it.getString(1)).forEach { a -> db.execSQL("INSERT OR IGNORE INTO attachments VALUES(?,?,?,?,?,?,?,?,?)",arrayOf("${owner.name}_${it.getLong(0)}_${a.id}",owner.name,it.getLong(0),a.fileName,a.filePath,a.mimeType,a.fileSize,a.id,a.createdAt)) } } }
         fun createBudgetValidationTriggers(db: SupportSQLiteDatabase) { db.execSQL("CREATE TRIGGER IF NOT EXISTS budgets_amount_insert_guard BEFORE INSERT ON budgets WHEN NEW.amount<0 BEGIN SELECT RAISE(ABORT,'budget amount must be non-negative'); END"); db.execSQL("CREATE TRIGGER IF NOT EXISTS budgets_amount_update_guard BEFORE UPDATE OF amount ON budgets WHEN NEW.amount<0 BEGIN SELECT RAISE(ABORT,'budget amount must be non-negative'); END"); db.execSQL("CREATE TRIGGER IF NOT EXISTS budgets_expense_category_insert_guard BEFORE INSERT ON budgets WHEN NEW.categoryId IS NOT NULL AND NOT EXISTS (SELECT 1 FROM categories WHERE id=NEW.categoryId AND type='EXPENSE') BEGIN SELECT RAISE(ABORT,'budget category must be expense'); END"); db.execSQL("CREATE TRIGGER IF NOT EXISTS budgets_expense_category_update_guard BEFORE UPDATE OF categoryId ON budgets WHEN NEW.categoryId IS NOT NULL AND NOT EXISTS (SELECT 1 FROM categories WHERE id=NEW.categoryId AND type='EXPENSE') BEGIN SELECT RAISE(ABORT,'budget category must be expense'); END"); db.execSQL("CREATE TRIGGER IF NOT EXISTS categories_budget_type_guard BEFORE UPDATE OF type ON categories WHEN NEW.type!='EXPENSE' AND EXISTS (SELECT 1 FROM budgets WHERE categoryId=NEW.id) BEGIN SELECT RAISE(ABORT,'budget category must remain expense'); END") }
     }

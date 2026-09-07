@@ -34,6 +34,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.accountkeeper.data.model.Attachment
 import com.example.accountkeeper.data.model.AttachmentEntity
 import com.example.accountkeeper.ui.theme.LocalAppStrings
+import com.example.accountkeeper.ui.components.AppEmptyState
+
 import com.example.accountkeeper.ui.viewmodel.AttachmentViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -62,12 +64,7 @@ fun AttachmentOverviewScreen(
         contentWindowInsets = WindowInsets(0, 0, 0, 0)
     ) { padding ->
         if (attachments.isEmpty()) {
-            Card(modifier = Modifier.fillMaxWidth().padding(padding).padding(16.dp)) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(strings.attachments, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text(strings.noAttachments)
-                }
-            }
+            AppEmptyState(strings.noAttachments, Modifier.fillMaxWidth().padding(padding).padding(16.dp))
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(padding),
@@ -125,3 +122,4 @@ private fun AttachmentEntity.toAttachmentModel(): Attachment = Attachment(
     mimeType = mimeType,
     createdAt = createdAt
 )
+

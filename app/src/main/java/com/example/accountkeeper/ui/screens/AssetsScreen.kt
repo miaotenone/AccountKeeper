@@ -53,11 +53,13 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.accountkeeper.LocalCurrencySymbol
 import com.example.accountkeeper.data.model.Asset
-import com.example.accountkeeper.data.model.AssetRootType
+import com.example.accountkeeper.data.model.AssetDirection
 import com.example.accountkeeper.data.model.AssetStatus
 import com.example.accountkeeper.data.model.SortType
+import com.example.accountkeeper.ui.components.AppAddFab
 import com.example.accountkeeper.ui.theme.*
 import com.example.accountkeeper.ui.theme.LocalAppStrings
+
 import com.example.accountkeeper.ui.viewmodel.AssetCategoryViewModel
 import com.example.accountkeeper.ui.viewmodel.AssetViewModel
 import com.example.accountkeeper.ui.viewmodel.SettingsViewModel
@@ -89,6 +91,7 @@ fun AssetsScreen(
     val selectedIds = remember { mutableStateListOf<Long>() }
     var showBatchDeleteDialog by remember { mutableStateOf(false) }
     var ownedAssetTarget by remember { mutableStateOf<Asset?>(null) }
+    var confirmAssetTarget by remember { mutableStateOf<Asset?>(null) }
     var candidateTransactions by remember { mutableStateOf<List<com.example.accountkeeper.data.model.Transaction>>(emptyList()) }
 
     // Track which card is swiped open (for closing when clicking elsewhere)
@@ -129,8 +132,6 @@ fun AssetsScreen(
                     AssetStatus.TEMPORARILY_WITH_OTHERS -> strings.notOwned
                 }
                 asset.note.lowercase().contains(query) ||
-                asset.targetPerson.lowercase().contains(query) ||
-                asset.targetAccount.lowercase().contains(query) ||
                 categoryName.lowercase().contains(query) ||
                 statusName.lowercase().contains(query)
             }
@@ -172,8 +173,8 @@ fun AssetsScreen(
 
     // 计算筛选后的统计数据
     val filteredStats = remember(displayAssets, categories) {
-        val positiveCategoryIds = categories.filter { it.rootType != AssetRootType.VIRTUAL }.map { it.id }.toSet()
-        val negativeCategoryIds = categories.filter { it.rootType == AssetRootType.VIRTUAL }.map { it.id }.toSet()
+        val positiveCategoryIds = categories.filter { it.direction != AssetDirection.NEGATIVE }.map { it.id }.toSet()
+        val negativeCategoryIds = categories.filter { it.direction == AssetDirection.NEGATIVE }.map { it.id }.toSet()
 
         // 筛选后的正资产金额
         val filteredPositiveAmount = displayAssets.filter { it.assetCategoryId in positiveCategoryIds }.sumOf { asset ->
@@ -221,7 +222,7 @@ fun AssetsScreen(
             val inProgressAmount = categoryAssets.filter { it.status == AssetStatus.IN_PROGRESS }.sumOf { it.amount }
 
             // 根据分类类型计算状态金额
-            val statusAmount = if (filteredCategory.rootType != AssetRootType.VIRTUAL) {
+            val statusAmount = if (filteredCategory.direction != AssetDirection.NEGATIVE) {
                 // 正资产：OWNED状态金额（确认拥有）
                 categoryAssets.filter { it.status == AssetStatus.OWNED }.sumOf { it.amount }
             } else {
@@ -409,22 +410,7 @@ fun AssetsScreen(
         },
         floatingActionButton = {
             if (!selectionMode) {
-                FloatingActionButton(
-                    onClick = onNavigateToAddAsset,
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    elevation = FloatingActionButtonDefaults.elevation(
-                        defaultElevation = 16.dp,
-                        pressedElevation = 24.dp
-                    ),
-                    shape = CircleShape,
-                    modifier = Modifier.size(64.dp)
-                ) {
-                    Icon(
-                        Icons.Default.Add,
-                        contentDescription = strings.addAsset,
-                        modifier = Modifier.size(32.dp)
-                    )
-                }
+                AppAddFab(onClick = onNavigateToAddAsset, contentDescription = strings.addAsset)
             }
         },
         contentWindowInsets = WindowInsets(0, 0, 0, 0)
@@ -452,8 +438,8 @@ fun AssetsScreen(
             // 统计卡片 - 根据筛选条件显示不同内容
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                shape = RoundedCornerShape(8.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
             ) {
                 val gradient = if (isSystemInDarkTheme()) {
                     Brush.linearGradient(DarkGradientPrimary)
@@ -479,7 +465,7 @@ fun AssetsScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                if (filteredCategory.rootType != AssetRootType.VIRTUAL) "(${strings.positiveAsset})" else "(${strings.negativeAsset})",
+                                if (filteredCategory.direction != AssetDirection.NEGATIVE) "(${strings.positiveAsset})" else "(${strings.negativeAsset})",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = Color.White.copy(alpha = 0.6f)
                             )
@@ -515,7 +501,7 @@ fun AssetsScreen(
                             // 根据分类类型显示不同状态
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(
-                                    if (filteredCategory.rootType != AssetRootType.VIRTUAL) strings.owned else strings.notOwned,
+                                    if (filteredCategory.direction != AssetDirection.NEGATIVE) strings.owned else strings.notOwned,
                                     style = MaterialTheme.typography.labelSmall,
                                     color = Color.White.copy(alpha = 0.7f)
                                 )
@@ -607,7 +593,7 @@ fun AssetsScreen(
                     datedAssets.forEach { asset ->
                         val category = categories.find { it.id == asset.assetCategoryId }
                         val categoryName = category?.name ?: strings.other
-                        val isPositiveCategory = category?.rootType != AssetRootType.VIRTUAL
+                        val isPositiveCategory = category?.direction != AssetDirection.NEGATIVE
                         val isSelected = selectedIds.contains(asset.id)
 
                         AssetItem(
@@ -664,7 +650,11 @@ fun AssetsScreen(
 
         ownedAssetTarget?.let { asset ->
             LaunchedEffect(asset.id) { candidateTransactions = viewModel.availableExpenseTransactions(asset) }
-            AlertDialog(onDismissRequest = { ownedAssetTarget = null }, title = { Text("选择真实支出交易") }, text = { if (candidateTransactions.isEmpty()) Text("没有找到同月、同费用分类且未绑定的支出交易") else LazyColumn { items(candidateTransactions) { transaction -> TextButton(onClick = { viewModel.confirmOwned(asset.id, transaction.id); ownedAssetTarget = null }) { Text("${SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(transaction.date))}  ${transaction.amount}") } } } }, confirmButton = {}, dismissButton = { TextButton(onClick = { ownedAssetTarget = null }) { Text(strings.cancel) } })
+            AlertDialog(onDismissRequest = { ownedAssetTarget = null }, title = { Text("关联实际支出交易") }, text = { if (candidateTransactions.isEmpty()) Text("没有找到采购日期之后、金额和支出分类匹配的支出交易") else LazyColumn { items(candidateTransactions) { transaction -> TextButton(onClick = { viewModel.linkTransaction(asset.id, transaction.id); ownedAssetTarget = null; confirmAssetTarget = asset }) { Text("${SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(transaction.date))}  ${transaction.amount}") } } } }, confirmButton = {}, dismissButton = { TextButton(onClick = { ownedAssetTarget = null }) { Text(strings.cancel) } })
+        }
+
+        confirmAssetTarget?.let { asset ->
+            AlertDialog(onDismissRequest = { confirmAssetTarget = null }, title = { Text("确认采购完成") }, text = { Text("实际交易已关联。确认后资产将变为已拥有。") }, confirmButton = { Button(onClick = { viewModel.confirmOwned(asset.id); confirmAssetTarget = null }) { Text("确认完成") } }, dismissButton = { TextButton(onClick = { confirmAssetTarget = null }) { Text(strings.cancel) } })
         }
 
         // Batch delete dialog
@@ -823,9 +813,9 @@ fun AssetsScreen(
                                                 Text(category.name)
                                                 Spacer(modifier = Modifier.width(8.dp))
                                                 Text(
-                                                    if (category.rootType != AssetRootType.VIRTUAL) "(${strings.positiveAsset})" else "(${strings.negativeAsset})",
+                                                    if (category.direction != AssetDirection.NEGATIVE) "(${strings.positiveAsset})" else "(${strings.negativeAsset})",
                                                     style = MaterialTheme.typography.labelSmall,
-                                                    color = if (category.rootType != AssetRootType.VIRTUAL)
+                                                    color = if (category.direction != AssetDirection.NEGATIVE)
                                                         Color(0xFF4ADE80)
                                                     else
                                                         Color(0xFFFF6B6B)
@@ -1065,7 +1055,7 @@ fun AssetItem(
                     onClick = { onClick() },
                     onLongClick = { onLongClick() }
                 ),
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(8.dp),
             colors = CardDefaults.cardColors(containerColor = backgroundColor),
             border = if (isSelected) BorderStroke(2.dp, borderColor) else null,
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
@@ -1085,8 +1075,6 @@ fun AssetItem(
                         uncheckedColor = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 )
-
-                // Category icon (clickable for status toggle)
                 Box(
                     modifier = Modifier
                         .size(48.dp)
@@ -1101,7 +1089,6 @@ fun AssetItem(
                         color = Color.White
                     )
                 }
-
                 Column(modifier = Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
@@ -1111,26 +1098,11 @@ fun AssetItem(
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        // 正/负资产标签
                         Text(
                             if (isPositiveCategory) "[${strings.positiveAsset}]" else "[${strings.negativeAsset}]",
                             style = MaterialTheme.typography.labelSmall,
                             color = if (isPositiveCategory) Color(0xFF4ADE80) else Color(0xFFFF6B6B),
                             fontWeight = FontWeight.Bold
-                        )
-                    }
-                    if (asset.targetPerson.isNotBlank()) {
-                        Text(
-                            "${strings.targetPerson}: ${asset.targetPerson}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    if (asset.targetAccount.isNotBlank()) {
-                        Text(
-                            "${strings.targetAccount}: ${asset.targetAccount}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     Text(
@@ -1139,15 +1111,11 @@ fun AssetItem(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-
-                // Status label and amount
                 Column(horizontalAlignment = Alignment.End) {
-                    // Status label
                     val statusLabel = when (asset.status) {
                         AssetStatus.NONE -> null
                         AssetStatus.OWNED -> strings.owned
-                    AssetStatus.NOT_OWNED -> strings.notOwned
-                    AssetStatus.LOST -> strings.lost
+                        AssetStatus.NOT_OWNED -> strings.notOwned
                         AssetStatus.LOST -> strings.lost
                         AssetStatus.IN_PROGRESS -> strings.inProgress
                         AssetStatus.TEMPORARILY_WITH_ME -> strings.owned
@@ -1203,7 +1171,7 @@ fun AssetItem(
                 Box(
                     modifier = Modifier
                         .matchParentSize()
-                        .background(Color(0xFF4CAF50), RoundedCornerShape(20.dp))
+                        .background(Color(0xFF4CAF50), RoundedCornerShape(8.dp))
                         .padding(horizontal = 16.dp),
                     contentAlignment = Alignment.CenterStart
                 ) {
@@ -1234,7 +1202,7 @@ fun AssetItem(
                 Box(
                     modifier = Modifier
                         .matchParentSize()
-                        .background(MaterialTheme.colorScheme.error, RoundedCornerShape(20.dp))
+                        .background(MaterialTheme.colorScheme.error, RoundedCornerShape(8.dp))
                         .clickable {
                             // Reset card position first
                             isSwipedOpen = false
@@ -1281,7 +1249,7 @@ fun AssetItem(
                         },
                         onLongClick = { onLongClick() }
                     ),
-                shape = RoundedCornerShape(20.dp),
+                shape = RoundedCornerShape(8.dp),
                 colors = CardDefaults.cardColors(containerColor = backgroundColor),
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
             ) {
@@ -1337,20 +1305,6 @@ fun AssetItem(
                                 overflow = TextOverflow.Ellipsis
                             )
                         }
-                        if (asset.targetPerson.isNotBlank()) {
-                            Text(
-                                "${strings.targetPerson}: ${asset.targetPerson}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        if (asset.targetAccount.isNotBlank()) {
-                            Text(
-                                "${strings.targetAccount}: ${asset.targetAccount}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
                         Text(
                             timeFormat.format(Date(asset.date)),
                             style = MaterialTheme.typography.labelSmall,
@@ -1387,8 +1341,7 @@ fun AssetItem(
                 }
             }
         }
-    }
-
+        }
     // Delete confirmation dialog
     if (showDeleteDialog) {
         AlertDialog(
@@ -1428,6 +1381,7 @@ fun AssetItem(
         )
     }
 }
+
 
 @Composable
 private fun AssetOverviewMetric(label: String, amount: Double, currency: String, color: Color) {
@@ -1482,3 +1436,5 @@ fun BatchDeleteAssetDialog(
         }
     )
 }
+
+

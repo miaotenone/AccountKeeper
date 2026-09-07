@@ -4,8 +4,8 @@ import androidx.paging.PagingSource
 import androidx.room.Dao
 import androidx.room.Delete
 import androidx.room.Insert
-import androidx.room.Query
 import androidx.room.Update
+import androidx.room.Query
 import com.example.accountkeeper.data.model.Transaction
 import kotlinx.coroutines.flow.Flow
 
@@ -22,84 +22,59 @@ interface TransactionDao {
 
     @Query("SELECT * FROM transactions WHERE id = :id")
     suspend fun getTransactionById(id: Long): Transaction?
-
     @Query("""
-        SELECT t.* FROM transactions t
-        LEFT JOIN assets a ON a.transactionId = t.id
-        WHERE t.type = 'EXPENSE'
-          AND t.categoryId = :categoryId
-          AND t.date >= :startDate AND t.date < :endDate
-          AND a.id IS NULL
+        SELECT t.* FROM transactions t LEFT JOIN assets a ON a.transactionId = t.id
+        WHERE t.type = 'EXPENSE' AND t.categoryId = :categoryId
+          AND ABS(t.amount - :amount) < 0.005
+          AND t.date >= :startDate AND t.date < :endDate AND a.id IS NULL
         ORDER BY t.date DESC
     """)
-    suspend fun getAvailableExpenseTransactions(categoryId: Long, startDate: Long, endDate: Long): List<Transaction>
+    suspend fun getAvailableExpenseTransactions(categoryId: Long, amount: Double, startDate: Long, endDate: Long): List<Transaction>
 
     @Query("UPDATE transactions SET categoryId = :newId WHERE categoryId = :oldId")
     suspend fun updateTransactionCategory(oldId: Long, newId: Long)
-
     @Query("DELETE FROM transactions")
     suspend fun deleteAllTransactions()
+    @Insert suspend fun insertTransaction(transaction: Transaction)
+    @Update suspend fun updateTransaction(transaction: Transaction)
+    @Delete suspend fun deleteTransaction(transaction: Transaction)
+    @Delete suspend fun deleteTransactions(transactions: List<Transaction>)
 
-    @Insert
-    suspend fun insertTransaction(transaction: Transaction)
-
-    @Update
-    suspend fun updateTransaction(transaction: Transaction)
-
-    @Delete
-    suspend fun deleteTransaction(transaction: Transaction)
-
-    @Delete
-    suspend fun deleteTransactions(transactions: List<Transaction>)
-
-    @Query("""
-        SELECT t.* FROM transactions t
-        LEFT JOIN categories c ON t.categoryId = c.id
-        WHERE t.note LIKE '%' || :query || '%' OR c.name LIKE '%' || :query || '%'
-        ORDER BY t.date DESC
-    """)
+    @Query("SELECT t.* FROM transactions t LEFT JOIN categories c ON t.categoryId = c.id WHERE t.note LIKE '%' || :query || '%' OR c.name LIKE '%' || :query || '%' ORDER BY t.date DESC")
     fun searchTransactions(query: String): Flow<List<Transaction>>
-
-    @Query("""
-        SELECT t.* FROM transactions t
-        LEFT JOIN categories c ON t.categoryId = c.id
-        WHERE t.note LIKE '%' || :query || '%' OR c.name LIKE '%' || :query || '%'
-        ORDER BY t.date DESC
-    """)
+    @Query("SELECT t.* FROM transactions t LEFT JOIN categories c ON t.categoryId = c.id WHERE t.note LIKE '%' || :query || '%' OR c.name LIKE '%' || :query || '%' ORDER BY t.date DESC")
     fun searchTransactionsPagedDesc(query: String): PagingSource<Int, Transaction>
-
-    @Query("""
-        SELECT t.* FROM transactions t
-        LEFT JOIN categories c ON t.categoryId = c.id
-        WHERE t.note LIKE '%' || :query || '%' OR c.name LIKE '%' || :query || '%'
-        ORDER BY t.date ASC
-    """)
+    @Query("SELECT t.* FROM transactions t LEFT JOIN categories c ON t.categoryId = c.id WHERE t.note LIKE '%' || :query || '%' OR c.name LIKE '%' || :query || '%' ORDER BY t.date ASC")
     fun searchTransactionsPagedAsc(query: String): PagingSource<Int, Transaction>
-
-    @Query("""
-        SELECT t.* FROM transactions t
-        LEFT JOIN categories c ON t.categoryId = c.id
-        WHERE t.note LIKE '%' || :query || '%' OR c.name LIKE '%' || :query || '%'
-        ORDER BY t.amount DESC
-    """)
+    @Query("SELECT t.* FROM transactions t LEFT JOIN categories c ON t.categoryId = c.id WHERE t.note LIKE '%' || :query || '%' OR c.name LIKE '%' || :query || '%' ORDER BY t.amount DESC")
     fun searchTransactionsPagedAmountDesc(query: String): PagingSource<Int, Transaction>
-
-    @Query("""
-        SELECT t.* FROM transactions t
-        LEFT JOIN categories c ON t.categoryId = c.id
-        WHERE t.note LIKE '%' || :query || '%' OR c.name LIKE '%' || :query || '%'
-        ORDER BY t.amount ASC
-    """)
+    @Query("SELECT t.* FROM transactions t LEFT JOIN categories c ON t.categoryId = c.id WHERE t.note LIKE '%' || :query || '%' OR c.name LIKE '%' || :query || '%' ORDER BY t.amount ASC")
     fun searchTransactionsPagedAmountAsc(query: String): PagingSource<Int, Transaction>
 
     @Query("""
         SELECT * FROM transactions
         WHERE categoryId = :categoryId
+        AND type = :type
         AND date >= :startTime
         AND date < :endTime
         ORDER BY date DESC
     """)
-    fun getByCategoryAndTimePaged(categoryId: Long, startTime: Long, endTime: Long): PagingSource<Int, Transaction>
+    fun getByCategoryAndTimePaged(categoryId: Long, type: String, startTime: Long, endTime: Long): PagingSource<Int, Transaction>
+    @Query("SELECT COUNT(*) FROM transactions WHERE categoryId = :categoryId AND type = :type AND date >= :startTime AND date < :endTime")
+    fun countByCategoryAndTime(categoryId: Long, type: String, startTime: Long, endTime: Long): Flow<Int>
+
+    @Query("SELECT COALESCE(SUM(amount), 0.0) FROM transactions WHERE categoryId = :categoryId AND type = :type AND date >= :startTime AND date < :endTime")
+    fun sumByCategoryAndTime(categoryId: Long, type: String, startTime: Long, endTime: Long): Flow<Double>
+
+    @Query("""
+        SELECT strftime('%Y-%m-%d', date / 1000, 'unixepoch', 'localtime') AS date,
+               COALESCE(SUM(CASE WHEN type = 'INCOME' THEN amount ELSE 0.0 END), 0.0) AS income,
+               COALESCE(SUM(CASE WHEN type = 'EXPENSE' THEN amount ELSE 0.0 END), 0.0) AS expense
+        FROM transactions
+        WHERE categoryId = :categoryId AND date >= :startTime AND date < :endTime
+        GROUP BY strftime('%Y-%m-%d', date / 1000, 'unixepoch', 'localtime')
+    """)
+    fun getDailyCategorySummary(categoryId: Long, startTime: Long, endTime: Long): Flow<List<DailyTransactionSummary>>
 
     @Query("SELECT * FROM transactions WHERE date >= :startDate AND date < :endDate ORDER BY date DESC")
     fun getByTimeRangePagedDesc(startDate: Long, endDate: Long): PagingSource<Int, Transaction>

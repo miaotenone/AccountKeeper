@@ -13,31 +13,18 @@ enum class BudgetApprovalStatus {
     PENDING,
     APPROVED,
     REJECTED,
+    PURCHASE_IN_PROGRESS,
+    PURCHASE_COMPLETED,
     WITHDRAWN
 }
 
 @Entity(
     tableName = "budget_approval_requests",
     foreignKeys = [
-        ForeignKey(
-            entity = Category::class,
-            parentColumns = ["id"],
-            childColumns = ["categoryId"],
-            onDelete = ForeignKey.SET_NULL
-        ),
-        ForeignKey(
-            entity = AssetCategoryEntity::class,
-            parentColumns = ["id"],
-            childColumns = ["assetCategoryId"],
-            onDelete = ForeignKey.SET_NULL
-        )
+        ForeignKey(entity = Category::class, parentColumns = ["id"], childColumns = ["categoryId"], onDelete = ForeignKey.SET_NULL),
+        ForeignKey(entity = AssetCategoryEntity::class, parentColumns = ["id"], childColumns = ["assetCategoryId"], onDelete = ForeignKey.SET_NULL)
     ],
-    indices = [
-        Index(value = ["status"]),
-        Index(value = ["createdAt"]),
-        Index(value = ["categoryId"]),
-        Index(value = ["assetCategoryId"])
-    ]
+    indices = [Index(value = ["status"]), Index(value = ["createdAt"]), Index(value = ["categoryId"]), Index(value = ["assetCategoryId"])]
 )
 data class BudgetApprovalRequest(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -46,6 +33,7 @@ data class BudgetApprovalRequest(
     val assetCategoryId: Long? = null,
     val amount: Double,
     val purchaseDate: Long? = null,
+    val expectedPurchaseEndAt: Long? = null,
     val reason: String = "",
     val itemName: String = "",
     val specification: String = "",

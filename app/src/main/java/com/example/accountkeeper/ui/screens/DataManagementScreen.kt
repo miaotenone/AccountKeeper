@@ -625,7 +625,7 @@ fun DataManagementScreen(
                     OutlinedButton(
                         onClick = { showClearTransactionsDialog = true },
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
+                        shape = RoundedCornerShape(8.dp),
                         colors = ButtonDefaults.outlinedButtonColors(
                             contentColor = MaterialTheme.colorScheme.error
                         )
@@ -639,7 +639,7 @@ fun DataManagementScreen(
                     OutlinedButton(
                         onClick = { showClearAssetsDialog = true },
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
+                        shape = RoundedCornerShape(8.dp),
                         colors = ButtonDefaults.outlinedButtonColors(
                             contentColor = MaterialTheme.colorScheme.error
                         )
@@ -655,7 +655,7 @@ fun DataManagementScreen(
                     Button(
                         onClick = { showClearDataDialog = true },
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
+                        shape = RoundedCornerShape(8.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.error
                         )
@@ -719,7 +719,7 @@ fun DataManagementScreen(
             dismissButton = {
                 TextButton(onClick = { showCustomBackupNameDialog = false }) { Text(strings.cancel) }
             },
-            shape = RoundedCornerShape(20.dp)
+            shape = RoundedCornerShape(8.dp)
         )
     }
 
@@ -812,7 +812,7 @@ fun DataManagementScreen(
                     Text(strings.cancel)
                 }
             },
-            shape = RoundedCornerShape(20.dp)
+            shape = RoundedCornerShape(8.dp)
         )
     }
 
@@ -859,7 +859,7 @@ fun DataManagementScreen(
                     Text(strings.cancel)
                 }
             },
-            shape = RoundedCornerShape(20.dp)
+            shape = RoundedCornerShape(8.dp)
         )
     }
 
@@ -906,7 +906,7 @@ fun DataManagementScreen(
                     Text(strings.cancel)
                 }
             },
-            shape = RoundedCornerShape(20.dp)
+            shape = RoundedCornerShape(8.dp)
         )
     }
 
@@ -976,7 +976,7 @@ fun DataManagementScreen(
                     Text(strings.cancel)
                 }
             },
-            shape = RoundedCornerShape(20.dp)
+            shape = RoundedCornerShape(8.dp)
         )
     }
 }
@@ -991,8 +991,8 @@ fun PremiumDataCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        shape = RoundedCornerShape(8.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Column(
             modifier = Modifier
@@ -1048,7 +1048,7 @@ fun PremiumButton(
     Button(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp)
+        shape = RoundedCornerShape(8.dp)
     ) {
         Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(20.dp))
         Spacer(modifier = Modifier.width(8.dp))
@@ -1195,7 +1195,7 @@ fun ManualBackupsDialog(
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text(strings.close) } },
-        shape = RoundedCornerShape(20.dp)
+        shape = RoundedCornerShape(8.dp)
     )
 
     // 增量备份还原确认对话框
@@ -1259,7 +1259,7 @@ fun ManualBackupsDialog(
                     Text(strings.cancel)
                 }
             },
-            shape = RoundedCornerShape(20.dp)
+            shape = RoundedCornerShape(8.dp)
         )
     }
 
@@ -1324,7 +1324,7 @@ fun ManualBackupsDialog(
                     Text(strings.cancel)
                 }
             },
-            shape = RoundedCornerShape(20.dp)
+            shape = RoundedCornerShape(8.dp)
         )
     }
 }
@@ -1657,7 +1657,7 @@ fun BillFileDialog(
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text(strings.close) } },
-        shape = RoundedCornerShape(20.dp)
+        shape = RoundedCornerShape(8.dp)
     )
 
     previewBill?.let { preview ->
@@ -1878,3 +1878,4 @@ fun BillFileItem(
         }
     }
 }
+

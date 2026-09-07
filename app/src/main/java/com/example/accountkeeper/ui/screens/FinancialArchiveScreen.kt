@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.accountkeeper.ui.theme.LocalAppStrings
+import com.example.accountkeeper.ui.components.AppSectionCard
 import com.example.accountkeeper.ui.viewmodel.FinancialArchiveViewModel
 import kotlinx.coroutines.launch
 
@@ -67,7 +68,7 @@ fun FinancialArchiveScreen(
             modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Card(Modifier.fillMaxWidth()) {
+            AppSectionCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(strings.exportAll, style = MaterialTheme.typography.titleMedium)
                     Text(strings.financialArchiveDescription)
@@ -78,7 +79,7 @@ fun FinancialArchiveScreen(
                     }
                 }
             }
-            Card(Modifier.fillMaxWidth()) {
+            AppSectionCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(strings.uploadBackup, style = MaterialTheme.typography.titleMedium)
                     Text(strings.infoLimitation)
@@ -92,3 +93,4 @@ fun FinancialArchiveScreen(
         }
     }
 }
+

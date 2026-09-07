@@ -74,7 +74,7 @@ class ZipRoundtripTest {
         assetTypeId: Long, targetPerson: String, targetAccount: String, note: String
     ) = AssetData(
         id = id, date = date, amount = amount, status = "OWNED", categoryName = categoryName,
-        targetPerson = targetPerson, targetAccount = targetAccount, note = note,
+        note = note,
         isCompleted = false, attachments = emptyList(), createdAt = 1700000000000,
         updatedAt = 1700000000000, assetTypeId = assetTypeId
     )
@@ -275,7 +275,7 @@ class ZipRoundtripTest {
     @Test
     fun archiveManifest_preservesCategoriesApprovalsAndAttachments() {
         val original = ZipBackupData(
-            assetCategories = listOf(AssetCategoryData(10, "Hardware", "PHYSICAL", null, true, 1, 2), AssetCategoryData(11, "Laptop", "PHYSICAL", 10, false, 3, 4)),
+            assetCategories = listOf(AssetCategoryData(10, "Hardware", "POSITIVE", true, 1, 2), AssetCategoryData(11, "Laptop", "NEGATIVE", false, 3, 4)),
             approvals = listOf(ApprovalData(id = 7, type = "PURCHASE_BUDGET", categoryName = "Office", assetCategoryId = 11, amount = 3000.0, purchaseDate = 1, reason = "Need", itemName = "ThinkPad", specification = "14-inch", quantity = 1.0, attachments = "[]", status = "PENDING", decisionNote = "", createdAt = 1, updatedAt = 2)),
             attachments = listOf(AttachmentData("approval-7", "APPROVAL", 7, "quote.pdf", "approval-7_quote.pdf", "application/pdf", 10, "hash", 5)),
             version = 2
@@ -283,7 +283,7 @@ class ZipRoundtripTest {
         val result = backupManager.readZipBackupFromFile(createTestZipFile(original, "extended_manifest"))
         assertTrue(result.success)
         assertEquals(2, result.assetCategories.size)
-        assertEquals(10L, result.assetCategories[1].parentCategoryId)
+        assertEquals("NEGATIVE", result.assetCategories[1].direction)
         assertEquals("ThinkPad", result.approvals.single().itemName)
         assertEquals("APPROVAL", result.attachments.single().ownerType)
     }
@@ -470,7 +470,6 @@ class ZipRoundtripTest {
         assertEquals("工资", result.transactions[0].categoryName)
         assertEquals("测试中文", result.transactions[0].note)
         assertEquals("房子", result.assets[0].categoryName)
-        assertEquals("张三", result.assets[0].targetPerson)
         assertEquals("实物资产", result.assetTypes[0].name)
     }
 
@@ -656,8 +655,6 @@ class ZipRoundtripTest {
             amount = 10.0,
             status = AssetStatus.OWNED,
             name = "Desk",
-            targetPerson = "",
-            targetAccount = "",
             note = "",
             attachments = AttachmentConverter.toJson(listOf(legacy))
         )

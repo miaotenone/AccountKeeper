@@ -57,7 +57,12 @@ class RoomMigrationTest {
         AppDatabase.MIGRATION_17_18,
         AppDatabase.MIGRATION_18_19,
         AppDatabase.MIGRATION_19_20,
-        AppDatabase.MIGRATION_20_21
+        AppDatabase.MIGRATION_20_21,
+        AppDatabase.MIGRATION_21_22,
+        AppDatabase.MIGRATION_22_23,
+        AppDatabase.MIGRATION_23_24,
+        AppDatabase.MIGRATION_24_25,
+        AppDatabase.MIGRATION_25_26
     )
 
     private fun createVersion1Schema(db: SupportSQLiteDatabase) {
@@ -543,4 +548,42 @@ class RoomMigrationTest {
         countCursor.close()
         db.close()
     }
+    @Test
+    fun migration24To25_replacesAssetCategoriesAndMapsAssetDirections() {
+        val db = openDbAtVersion(24) {
+            it.execSQL("CREATE TABLE transactions (id INTEGER PRIMARY KEY NOT NULL)")
+            it.execSQL("CREATE TABLE assets (id INTEGER NOT NULL, date INTEGER NOT NULL, amount REAL NOT NULL, status TEXT NOT NULL, assetCategoryId INTEGER, categoryId INTEGER, name TEXT NOT NULL, specification TEXT NOT NULL, quantity REAL NOT NULL, purchaseDate INTEGER, sourceApprovalId INTEGER, transactionId INTEGER, targetPerson TEXT NOT NULL, targetAccount TEXT NOT NULL, note TEXT NOT NULL, isCompleted INTEGER NOT NULL, attachments TEXT NOT NULL, createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL, assetRootType TEXT NOT NULL, supplier TEXT NOT NULL, location TEXT NOT NULL, userOrDepartment TEXT NOT NULL, warranty TEXT NOT NULL, serviceStartDate INTEGER, serviceEndDate INTEGER, renewalCycle TEXT NOT NULL, accessUrl TEXT NOT NULL, PRIMARY KEY(id))")
+            it.execSQL("CREATE TABLE budget_approval_requests (id INTEGER PRIMARY KEY NOT NULL, assetCategoryId INTEGER)")
+            it.execSQL("CREATE TABLE asset_categories (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, name TEXT NOT NULL, rootType TEXT NOT NULL, parentCategoryId INTEGER, isDefault INTEGER NOT NULL DEFAULT 0, createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL)")
+            it.execSQL("CREATE TABLE asset_field_definitions (id INTEGER PRIMARY KEY NOT NULL, assetCategoryId INTEGER NOT NULL)")
+            it.execSQL("CREATE TABLE asset_field_values (assetId INTEGER NOT NULL, fieldId INTEGER NOT NULL, value TEXT NOT NULL, PRIMARY KEY(assetId, fieldId))")
+            it.execSQL("CREATE TABLE approval_field_values (approvalId INTEGER NOT NULL, fieldId INTEGER NOT NULL, value TEXT NOT NULL, PRIMARY KEY(approvalId, fieldId))")
+            it.execSQL("INSERT INTO asset_categories VALUES (1, '旧分类', 'PHYSICAL', NULL, 0, 1, 1)")
+            it.execSQL("INSERT INTO assets VALUES (1, 1, 20.0, 'OWNED', 1, NULL, '', '', 1.0, NULL, NULL, NULL, '', '', '', 0, '', 1, 1, 'PHYSICAL', '', '', '', '', NULL, NULL, '', ''), (2, 1, 30.0, 'OWNED', 1, NULL, '', '', 1.0, NULL, NULL, NULL, '', '', '', 0, '', 1, 1, 'VIRTUAL', '', '', '', '', NULL, NULL, '', '')")
+            it.execSQL("INSERT INTO budget_approval_requests VALUES (1, 1)")
+            it.execSQL("INSERT INTO asset_field_definitions VALUES (1, 1)")
+            it.execSQL("INSERT INTO asset_field_values VALUES (1, 1, 'x')")
+            it.execSQL("INSERT INTO approval_field_values VALUES (1, 1, 'x')")
+        }
+
+        AppDatabase.MIGRATION_24_25.migrate(db)
+
+        assertEquals(9, countRows(db, "asset_categories"))
+        assertEquals(5, countRows(db, "asset_categories WHERE direction = 'POSITIVE'"))
+        assertEquals(4, countRows(db, "asset_categories WHERE direction = 'NEGATIVE'"))
+        assertEquals(0, countRows(db, "asset_field_definitions"))
+        assertEquals(0, countRows(db, "asset_field_values"))
+        assertEquals(0, countRows(db, "approval_field_values"))
+        assertEquals(0, countRows(db, "assets WHERE assetCategoryId IS NOT NULL"))
+        assertEquals(0, countRows(db, "budget_approval_requests WHERE assetCategoryId IS NOT NULL"))
+        assertEquals("POSITIVE", db.query("SELECT assetDirection FROM assets WHERE id = 1").use { cursor -> cursor.moveToFirst(); cursor.getString(0) })
+        assertEquals("NEGATIVE", db.query("SELECT assetDirection FROM assets WHERE id = 2").use { cursor -> cursor.moveToFirst(); cursor.getString(0) })
+        assertEquals(0, db.query("SELECT COUNT(*) FROM pragma_table_info('asset_categories') WHERE name = 'parentCategoryId'").use { cursor -> cursor.moveToFirst(); cursor.getInt(0) })
+        db.close()
+    }
+    private fun countRows(db: SupportSQLiteDatabase, tableOrWhere: String): Int =
+        db.query("SELECT COUNT(*) FROM $tableOrWhere").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            cursor.getInt(0)
+        }
 }

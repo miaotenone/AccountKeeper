@@ -38,11 +38,13 @@ import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
@@ -69,8 +71,9 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.accountkeeper.LocalCurrencySymbol
 import com.example.accountkeeper.data.model.Asset
+import com.example.accountkeeper.data.model.AssetFieldDefinition
 import com.example.accountkeeper.data.model.AssetCategoryEntity
-import com.example.accountkeeper.data.model.AssetRootType
+import com.example.accountkeeper.data.model.sortedAssetLeafCategories
 import com.example.accountkeeper.data.model.AssetStatus
 import com.example.accountkeeper.data.model.Attachment
 import com.example.accountkeeper.data.model.AttachmentConverter
@@ -81,7 +84,13 @@ import com.example.accountkeeper.data.model.Category
 import com.example.accountkeeper.data.model.TransactionType
 import com.example.accountkeeper.ui.theme.AppStrings
 import com.example.accountkeeper.ui.theme.LocalAppStrings
+import com.example.accountkeeper.ui.components.AppSectionCard
+import com.example.accountkeeper.ui.components.AppAddFab
+import com.example.accountkeeper.ui.components.AppPrimaryButton
+
 import com.example.accountkeeper.ui.viewmodel.AssetCategoryViewModel
+import kotlinx.coroutines.flow.flowOf
+import com.example.accountkeeper.data.model.AssetFieldType
 import com.example.accountkeeper.ui.viewmodel.AssetViewModel
 import com.example.accountkeeper.ui.viewmodel.ApprovalSubmitState
 import com.example.accountkeeper.ui.viewmodel.BudgetViewModel
@@ -94,6 +103,8 @@ import java.util.Locale
 @Composable
 fun BudgetApprovalScreen(
     onNavigateBack: () -> Unit,
+    onNavigateToNewRequest: () -> Unit = {},
+    startNewRequest: Boolean = false,
     viewModel: BudgetViewModel = hiltViewModel(),
     assetCategoryViewModel: AssetCategoryViewModel = hiltViewModel(),
     categoryViewModel: CategoryViewModel = hiltViewModel(),
@@ -109,7 +120,25 @@ fun BudgetApprovalScreen(
 
     var approver by remember { mutableStateOf(false) }
     var history by remember { mutableStateOf(false) }
-    var editing by remember { mutableStateOf<BudgetApprovalRequest?>(null) }
+    var historyStartAt by remember { mutableStateOf<Long?>(null) }
+    var historyEndAt by remember { mutableStateOf<Long?>(null) }
+    var historyCategoryId by remember { mutableStateOf<Long?>(null) }
+    var historyAssetCategoryId by remember { mutableStateOf<Long?>(null) }
+    var searchQuery by remember { mutableStateOf("") }
+    var showHistoryStartPicker by remember { mutableStateOf(false) }
+    var showHistoryEndPicker by remember { mutableStateOf(false) }
+    var historyCategoryExpanded by remember { mutableStateOf(false) }
+    var historyAssetCategoryExpanded by remember { mutableStateOf(false) }
+    var editing by remember(startNewRequest) {
+        mutableStateOf(
+            if (startNewRequest) {
+                BudgetApprovalRequest(
+                    type = BudgetApprovalType.PURCHASE_BUDGET,
+                    amount = 0.0
+                )
+            } else null
+        )
+    }
     var reviewing by remember { mutableStateOf<BudgetApprovalRequest?>(null) }
     val submitState by viewModel.submitState.collectAsState()
 
@@ -118,6 +147,7 @@ fun BudgetApprovalScreen(
         if (submitState is ApprovalSubmitState.Success) {
             editing = null
             viewModel.submitState.value = ApprovalSubmitState.Idle
+            if (startNewRequest) onNavigateBack()
         }
     }
 
@@ -126,13 +156,15 @@ fun BudgetApprovalScreen(
             existing = editing,
             categories = expenseCategories,
             assetCategories = assetCategories,
+            assetCategoryViewModel = assetCategoryViewModel,
             strings = strings,
             currency = currency,
             isSubmitting = submitState is ApprovalSubmitState.Submitting,
+            loadExistingFieldValues = viewModel::getApprovalFieldValues,
             submitError = (submitState as? ApprovalSubmitState.Error)?.message,
-            onDismiss = { editing = null; viewModel.submitState.value = ApprovalSubmitState.Idle },
-            onSubmit = { request ->
-                viewModel.submitApproval(request, editing?.id)
+            onDismiss = { editing = null; viewModel.submitState.value = ApprovalSubmitState.Idle; if (startNewRequest) onNavigateBack() },
+            onSubmit = { request, values ->
+                viewModel.submitApprovalWithFields(request, values, editing?.id)
             }
         )
         return
@@ -163,17 +195,7 @@ fun BudgetApprovalScreen(
         },
         floatingActionButton = {
             if (!approver && !history) {
-                FloatingActionButton(
-                    onClick = {
-                        editing = BudgetApprovalRequest(
-                            type = BudgetApprovalType.PURCHASE_BUDGET,
-                            amount = 0.0
-                        )
-                    },
-                    shape = CircleShape
-                ) {
-                    Icon(Icons.Default.Add, strings.add)
-                }
+                AppAddFab(onClick = onNavigateToNewRequest, contentDescription = strings.approvalNewRequest)
             }
         },
         contentWindowInsets = WindowInsets(0, 0, 0, 0)
@@ -232,7 +254,7 @@ fun BudgetApprovalScreen(
                         categoryName = expenseCategories.firstOrNull { it.id == request.categoryId }?.name,
                         currency = currency,
                         strings = strings,
-                        canManage = !approver && !history,
+                        canManage = !approver && (!history || request.status in listOf(BudgetApprovalStatus.REJECTED, BudgetApprovalStatus.WITHDRAWN, BudgetApprovalStatus.PENDING)),
                         onView = { reviewing = request },
                         onWithdraw = { viewModel.withdrawApproval(request.id) },
                         onEdit = { editing = request }
@@ -242,6 +264,14 @@ fun BudgetApprovalScreen(
         }
     }
 
+    if (showHistoryStartPicker) {
+        val state = rememberDatePickerState(initialSelectedDateMillis = historyStartAt ?: System.currentTimeMillis())
+        DatePickerDialog(onDismissRequest = { showHistoryStartPicker = false }, confirmButton = { TextButton(onClick = { historyStartAt = state.selectedDateMillis; showHistoryStartPicker = false }) { Text(strings.ok) } }, dismissButton = { TextButton(onClick = { showHistoryStartPicker = false }) { Text(strings.cancel) } }) { DatePicker(state = state) }
+    }
+    if (showHistoryEndPicker) {
+        val state = rememberDatePickerState(initialSelectedDateMillis = historyEndAt ?: System.currentTimeMillis())
+        DatePickerDialog(onDismissRequest = { showHistoryEndPicker = false }, confirmButton = { TextButton(onClick = { historyEndAt = state.selectedDateMillis?.plus(86_400_000L); showHistoryEndPicker = false }) { Text(strings.ok) } }, dismissButton = { TextButton(onClick = { showHistoryEndPicker = false }) { Text(strings.cancel) } }) { DatePicker(state = state) }
+    }
     reviewing?.let { request ->
         ApprovalDetail(
             request = request,
@@ -275,7 +305,7 @@ private fun ApprovalCard(
     onWithdraw: () -> Unit,
     onEdit: () -> Unit
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    AppSectionCard(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -340,12 +370,14 @@ private fun ApprovalFormScreen(
     existing: BudgetApprovalRequest?,
     categories: List<Category>,
     assetCategories: List<AssetCategoryEntity>,
+    assetCategoryViewModel: AssetCategoryViewModel,
     strings: AppStrings,
     currency: String,
     isSubmitting: Boolean = false,
+    loadExistingFieldValues: suspend (Long) -> List<com.example.accountkeeper.data.model.ApprovalFieldValue>,
     submitError: String? = null,
     onDismiss: () -> Unit,
-    onSubmit: (BudgetApprovalRequest) -> Unit
+    onSubmit: (BudgetApprovalRequest, Map<Long, String>) -> Unit
 ) {
     val context = LocalContext.current
     val isResubmit = existing?.id != null && existing.id > 0L
@@ -353,27 +385,23 @@ private fun ApprovalFormScreen(
     var type by remember(existing?.id) { mutableStateOf(existing?.type ?: BudgetApprovalType.PURCHASE_BUDGET) }
     var categoryId by remember(existing?.id) { mutableStateOf(existing?.categoryId) }
     var assetCategoryId by remember(existing?.id) { mutableStateOf(existing?.assetCategoryId) }
-    var rootType by remember(existing?.id) {
-        mutableStateOf(
-            assetCategories.firstOrNull { it.id == existing?.assetCategoryId }?.rootType ?: AssetRootType.PHYSICAL
-        )
-    }
     var amount by remember(existing?.id) {
         mutableStateOf(existing?.amount?.takeIf { it > 0 }?.toString() ?: "")
     }
-    var itemName by remember(existing?.id) { mutableStateOf(existing?.itemName ?: "") }
-    var specification by remember(existing?.id) { mutableStateOf(existing?.specification ?: "") }
-    var quantity by remember(existing?.id) { mutableStateOf(existing?.quantity?.toString() ?: "1") }
     var reason by remember(existing?.id) { mutableStateOf(existing?.reason ?: "") }
     var purchaseDate by remember(existing?.id) { mutableStateOf(existing?.purchaseDate) }
+    var expectedPurchaseEndAt by remember(existing?.id) { mutableStateOf(existing?.expectedPurchaseEndAt) }
     var attachments by remember(existing?.id) {
         mutableStateOf(existing?.let { AttachmentConverter.fromJson(it.attachments) } ?: emptyList())
     }
     var showDatePicker by remember { mutableStateOf(false) }
+    var showDeadlinePicker by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var categoryExpanded by remember { mutableStateOf(false) }
     var assetCategoryExpanded by remember { mutableStateOf(false) }
     var preview by remember { mutableStateOf<Attachment?>(null) }
+    var fieldValues by remember(existing?.id) { mutableStateOf<Map<Long, String>>(emptyMap()) }
+    val fieldDefinitions by remember(assetCategoryId) { assetCategoryId?.let { assetCategoryViewModel.fieldsFor(it) } ?: flowOf(emptyList()) }.collectAsState(emptyList())
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         uri?.let {
@@ -384,26 +412,31 @@ private fun ApprovalFormScreen(
     }
     val selectedCategory = categories.firstOrNull { it.id == categoryId }
     val selectedAssetCategory = assetCategories.firstOrNull { it.id == assetCategoryId }
-    val visibleAssetCategories = assetCategories.filter {
-        it.rootType == rootType && it.parentCategoryId != null
-    }
+    val visibleAssetCategories = sortedAssetLeafCategories(assetCategories)
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        if (isResubmit) strings.approvalResubmit else strings.approvalNewRequest,
-                        fontWeight = FontWeight.Bold
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, strings.back)
-                    }
-                },
-                windowInsets = WindowInsets(0, 0, 0, 0)
-            )
+            Surface(
+                color = Color.Transparent,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                TopAppBar(
+                    title = {
+                        Text(
+                            if (isResubmit) strings.approvalResubmit else strings.approvalNewRequest,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onDismiss) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, strings.back)
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
+                    windowInsets = WindowInsets(0, 0, 0, 0)
+                )
+            }
         },
         contentWindowInsets = WindowInsets(0, 0, 0, 0)
     ) { padding ->
@@ -412,8 +445,23 @@ private fun ApprovalFormScreen(
                 .fillMaxSize()
                 .padding(padding),
             contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            if (type == BudgetApprovalType.PURCHASE_BUDGET) {
+                item {
+                    OutlinedTextField(
+                        value = existing?.createdAt?.let(::formatApprovalDate) ?: strings.approvalNotSet,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text(strings.approvalCreatedAt) },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                item {
+                    OutlinedTextField(value = purchaseDate?.let(::formatApprovalDate) ?: strings.approvalNotSet, onValueChange = {}, readOnly = true, label = { Text(strings.approvalPurchaseDate) }, trailingIcon = { IconButton(onClick = { showDatePicker = true }) { Icon(Icons.Default.CalendarToday, strings.approvalPurchaseDate) } }, modifier = Modifier.fillMaxWidth())
+                }
+            }
+
             item {
                 OutlinedTextField(
                     value = amount,
@@ -460,96 +508,20 @@ private fun ApprovalFormScreen(
                 }
             }
 
+
             if (type == BudgetApprovalType.PURCHASE_BUDGET) {
                 item {
-                    Text(strings.assetCategory, fontWeight = FontWeight.Bold)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        AssetRootType.entries.forEach { option ->
-                            FilterChip(
-                                selected = rootType == option,
-                                onClick = {
-                                    rootType = option
-                                    assetCategoryId = null
-                                    error = null
-                                },
-                                label = { Text(assetRootTypeName(option, strings)) }
-                            )
-                        }
-                    }
-                    Spacer(Modifier.padding(top = 4.dp))
-                    ExposedDropdownMenuBox(
-                        expanded = assetCategoryExpanded,
-                        onExpandedChange = { assetCategoryExpanded = !assetCategoryExpanded }
-                    ) {
-                        OutlinedTextField(
-                            value = selectedAssetCategory?.name ?: strings.selectCategory,
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text(strings.assetCategory) },
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(assetCategoryExpanded) },
-                            modifier = Modifier
-                                .menuAnchor()
-                                .fillMaxWidth()
-                        )
-                        ExposedDropdownMenu(
-                            expanded = assetCategoryExpanded,
-                            onDismissRequest = { assetCategoryExpanded = false }
-                        ) {
+                    ExposedDropdownMenuBox(expanded = assetCategoryExpanded, onExpandedChange = { assetCategoryExpanded = !assetCategoryExpanded }) {
+                        OutlinedTextField(value = selectedAssetCategory?.name ?: strings.selectCategory, onValueChange = {}, readOnly = true, label = { Text(strings.assetCategory) }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(assetCategoryExpanded) }, modifier = Modifier.menuAnchor().fillMaxWidth())
+                        ExposedDropdownMenu(expanded = assetCategoryExpanded, onDismissRequest = { assetCategoryExpanded = false }) {
                             visibleAssetCategories.forEach { item ->
-                                DropdownMenuItem(
-                                    text = { Text(item.name) },
-                                    onClick = {
-                                        assetCategoryId = item.id
-                                        error = null
-                                        assetCategoryExpanded = false
-                                    }
-                                )
+                                DropdownMenuItem(text = { Text(item.name) }, onClick = { assetCategoryId = item.id; fieldValues = emptyMap(); error = null; assetCategoryExpanded = false })
                             }
                         }
                     }
                 }
-
-                item {
-                    OutlinedTextField(
-                        value = itemName,
-                        onValueChange = { itemName = it },
-                        label = { Text(strings.itemName) },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-                item {
-                    OutlinedTextField(
-                        value = specification,
-                        onValueChange = { specification = it },
-                        label = { Text(strings.specification) },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-                item {
-                    OutlinedTextField(
-                        value = quantity,
-                        onValueChange = { quantity = it },
-                        label = { Text(strings.quantity) },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-                item {
-                    OutlinedTextField(
-                        value = purchaseDate?.let(::formatApprovalDate) ?: strings.approvalNotSet,
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text(strings.approvalPurchaseDate) },
-                        trailingIcon = {
-                            IconButton(onClick = { showDatePicker = true }) {
-                                Icon(Icons.Default.CalendarToday, strings.approvalPurchaseDate)
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                if (fieldDefinitions.isNotEmpty()) {
+                    item { AssetDetailsCard(fields = fieldDefinitions, values = fieldValues, onValueChange = { id, value -> fieldValues = fieldValues + (id to value); error = null }) }
                 }
             }
 
@@ -566,6 +538,8 @@ private fun ApprovalFormScreen(
             item {
                 AttachmentSection(
                     title = strings.attachments,
+                    addLabel = strings.addAttachment,
+                    emptyText = strings.noAttachments,
                     attachments = attachments,
                     onAddAttachment = { picker.launch(arrayOf("*/*")) },
                     onRemoveAttachment = { file ->
@@ -597,52 +571,27 @@ private fun ApprovalFormScreen(
             }
 
             item {
-                Button(
+                AppPrimaryButton(
+                    text = strings.approvalSubmit,
                     onClick = {
                         val parsedAmount = amount.toDoubleOrNull()
-                        val parsedQuantity = quantity.toDoubleOrNull()
                         error = when {
                             parsedAmount == null || parsedAmount <= 0.0 -> strings.approvalInvalidAmount
                             categoryId == null -> strings.approvalMissingCategory
                             assetCategoryId == null -> strings.approvalMissingAssetCategory
-                            itemName.isBlank() -> strings.approvalMissingItemName
-                            (parsedQuantity == null || parsedQuantity <= 0.0) -> strings.approvalInvalidQuantity
+                            reason.isBlank() -> strings.approvalMissingReason
+                            fieldDefinitions.any { it.required && fieldValues[it.id].isNullOrBlank() } -> strings.approvalMissingAssetDetails
                             else -> null
                         }
                         if (error == null && parsedAmount != null) {
                             val now = System.currentTimeMillis()
-                            onSubmit(
-                                BudgetApprovalRequest(
-                                    id = existing?.id ?: 0L,
-                                    type = type,
-                                    categoryId = categoryId,
-                                    assetCategoryId = assetCategoryId,
-                                    amount = parsedAmount,
-                                    purchaseDate = purchaseDate,
-                                    reason = reason.trim(),
-                                    itemName = itemName.trim(),
-                                    specification = specification.trim(),
-                                    quantity = parsedQuantity ?: 1.0,
-                                    attachments = AttachmentConverter.toJson(attachments),
-                                    status = BudgetApprovalStatus.PENDING,
-                                    createdAt = existing?.createdAt ?: now
-                                )
-                            )
+                            onSubmit(BudgetApprovalRequest(id = existing?.id ?: 0L, type = type, categoryId = categoryId, assetCategoryId = assetCategoryId, amount = parsedAmount, purchaseDate = purchaseDate, expectedPurchaseEndAt = expectedPurchaseEndAt, reason = reason.trim(), itemName = "", specification = "", quantity = 1.0, attachments = AttachmentConverter.toJson(attachments), status = BudgetApprovalStatus.PENDING, createdAt = existing?.createdAt ?: now), fieldValues)
                         }
                     },
                     enabled = !isSubmitting,
+                    loading = isSubmitting,
                     modifier = Modifier.fillMaxWidth()
-                ) {
-                    if (isSubmitting) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.onPrimary
-                        )
-                        Spacer(Modifier.width(8.dp))
-                    }
-                    Text(strings.approvalSubmit)
-                }
+                )
             }
         }
     }
@@ -671,6 +620,11 @@ private fun ApprovalFormScreen(
         ) {
             DatePicker(state = state)
         }
+    }
+
+    if (showDeadlinePicker) {
+        val state = rememberDatePickerState(initialSelectedDateMillis = expectedPurchaseEndAt ?: purchaseDate ?: System.currentTimeMillis())
+        DatePickerDialog(onDismissRequest = { showDeadlinePicker = false }, confirmButton = { TextButton(onClick = { expectedPurchaseEndAt = state.selectedDateMillis; showDeadlinePicker = false }) { Text(strings.ok) } }, dismissButton = { TextButton(onClick = { showDeadlinePicker = false }) { Text(strings.cancel) } }) { DatePicker(state = state) }
     }
 
     preview?.let { attachment ->
@@ -710,7 +664,7 @@ private fun ApprovalDetail(
         title = { Text(strings.approvalDetailTitle, fontWeight = FontWeight.Bold) },
         text = {
             LazyColumn(
-                modifier = Modifier.heightIn(max = 580.dp),
+                modifier = Modifier.fillMaxWidth().heightIn(max = 580.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 item { DetailLine(strings.approvalRequestId, request.id.toString()) }
@@ -733,9 +687,6 @@ private fun ApprovalDetail(
                         "$currency${String.format(Locale.US, "%.2f", request.amount)}"
                     )
                 }
-                item { DetailLine(strings.itemName, request.itemName.ifBlank { strings.approvalNotSet }) }
-                item { DetailLine(strings.specification, request.specification.ifBlank { strings.approvalNotSet }) }
-                item { DetailLine(strings.quantity, request.quantity.toString()) }
                 item {
                     DetailLine(
                         strings.approvalPurchaseDate,
@@ -841,11 +792,8 @@ private fun statusText(status: BudgetApprovalStatus, strings: AppStrings): Strin
     BudgetApprovalStatus.APPROVED -> strings.approvalApproved
     BudgetApprovalStatus.REJECTED -> strings.approvalRejected
     BudgetApprovalStatus.WITHDRAWN -> strings.approvalWithdrawn
-}
-
-private fun assetRootTypeName(type: AssetRootType, strings: AppStrings): String = when (type) {
-    AssetRootType.PHYSICAL -> "实物资产"
-    AssetRootType.VIRTUAL -> "虚拟资产"
+    BudgetApprovalStatus.PURCHASE_IN_PROGRESS -> strings.approvalPurchaseInProgress
+    BudgetApprovalStatus.PURCHASE_COMPLETED -> strings.approvalPurchaseCompleted
 }
 
 private fun formatApprovalDate(time: Long): String =

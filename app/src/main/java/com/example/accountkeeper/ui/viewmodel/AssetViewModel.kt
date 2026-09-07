@@ -4,11 +4,13 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.accountkeeper.data.model.Asset
-import com.example.accountkeeper.data.model.AssetRootType
+import com.example.accountkeeper.data.model.AssetDirection
 import com.example.accountkeeper.data.model.AssetStatus
 import com.example.accountkeeper.data.model.Transaction
 import com.example.accountkeeper.data.model.TransactionType
 import com.example.accountkeeper.data.repository.AssetCategoryRepository
+import com.example.accountkeeper.data.local.AssetFieldValueDao
+import com.example.accountkeeper.data.model.AssetFieldValue
 import com.example.accountkeeper.data.repository.AssetRepository
 import com.example.accountkeeper.data.repository.BudgetRepository
 import com.example.accountkeeper.data.repository.CategoryRepository
@@ -32,6 +34,7 @@ class AssetViewModel @Inject constructor(
     application: Application,
     private val assetRepository: AssetRepository,
     private val assetCategoryRepository: AssetCategoryRepository,
+    private val assetFieldValueDao: AssetFieldValueDao,
     private val categoryRepository: CategoryRepository,
     private val transactionRepository: TransactionRepository,
     private val settingsRepository: SettingsRepository,
@@ -47,12 +50,12 @@ class AssetViewModel @Inject constructor(
     private val transactions: StateFlow<List<Transaction>> = transactionRepository.getAllTransactions().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val transactionBalance: StateFlow<Double> = transactions.map { list -> list.filter { it.type == TransactionType.INCOME }.sumOf { it.amount } - list.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount } }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0.0)
     val positiveAssetAmount: StateFlow<Double> = combine(assets, assetCategories) { list, categories ->
-        val physicalIds = categories.filter { it.rootType == AssetRootType.PHYSICAL }.map { it.id }.toSet()
+        val physicalIds = categories.filter { it.direction == AssetDirection.POSITIVE }.map { it.id }.toSet()
         list.filter { it.assetCategoryId in physicalIds && it.isAssetHeld() }.sumOf { it.amount }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0.0)
     val currentAssetAmount: StateFlow<Double> = positiveAssetAmount
     val negativeAssetAmount: StateFlow<Double> = combine(assets, assetCategories) { list, categories ->
-        val virtualIds = categories.filter { it.rootType == AssetRootType.VIRTUAL }.map { it.id }.toSet()
+        val virtualIds = categories.filter { it.direction == AssetDirection.NEGATIVE }.map { it.id }.toSet()
         list.filter { it.assetCategoryId in virtualIds && it.isLiability() }.sumOf { it.amount }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0.0)
     val totalLiabilities: StateFlow<Double> = negativeAssetAmount
@@ -60,21 +63,43 @@ class AssetViewModel @Inject constructor(
     val netAssets: StateFlow<Double> = combine(currentAssetAmount, totalLiabilities) { current, liabilities -> current - liabilities }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0.0)
 
     suspend fun getAssetById(id: Long): Asset? = assetRepository.getAssetById(id)
+    suspend fun getAssetFieldValues(assetId: Long): List<AssetFieldValue> = assetFieldValueDao.getForAsset(assetId)
+    fun saveAssetFieldValues(assetId: Long, values: Map<Long, String>) = viewModelScope.launch { assetFieldValueDao.deleteForAsset(assetId); assetFieldValueDao.upsertAll(values.filterValues { it.isNotBlank() }.map { (fieldId, value) -> AssetFieldValue(assetId, fieldId, value) }); autoBackupCoordinator.backupAfterDataChange() }
     fun searchAssets(query: String): Flow<List<Asset>> = assetRepository.searchAssets(query)
 
-    suspend fun availableExpenseTransactions(asset: Asset): List<Transaction> {
-        val categoryId = asset.categoryId ?: return emptyList()
-        val start = monthStart(asset.purchaseDate ?: asset.date)
-        return transactionRepository.getAvailableExpenseTransactions(categoryId, start, monthEnd(start))
+    suspend fun availableExpenseTransactions(asset: Asset): List<Transaction> =
+        availableExpenseTransactions(asset.categoryId, asset.amount, asset.purchaseDate ?: asset.date, asset.transactionId)
+
+    suspend fun availableExpenseTransactions(
+        categoryId: Long?,
+        amount: Double,
+        purchaseDate: Long,
+        selectedTransactionId: Long? = null
+    ): List<Transaction> {
+        val id = categoryId ?: return emptyList()
+        val available = transactionRepository.getAvailableExpenseTransactions(id, amount, purchaseDate, Long.MAX_VALUE)
+        val selected = if (selectedTransactionId == null) null else transactionRepository.getTransactionById(selectedTransactionId)
+        return (available + listOfNotNull(selected)).distinctBy { it.id }
+    }
+    fun linkTransaction(assetId: Long, transactionId: Long) = viewModelScope.launch {
+        runCatching { assetRepository.linkTransaction(assetId, transactionId) }
+            .onFailure { _operationError.value = it.message ?: "操作失败" }
+            .onSuccess { autoBackupCoordinator.backupAfterDataChange() }
     }
 
-    fun confirmOwned(assetId: Long, transactionId: Long) = viewModelScope.launch {
-        runCatching { assetRepository.confirmOwned(assetId, transactionId) }
+    fun confirmOwned(assetId: Long) = viewModelScope.launch {
+        runCatching { assetRepository.confirmOwned(assetId) }
             .onFailure { _operationError.value = it.message ?: "操作失败" }
             .onSuccess { autoBackupCoordinator.backupAfterDataChange() }
     }
     fun addAsset(asset: Asset) = launchBackup { assetRepository.insertAsset(asset) }
     fun updateAsset(asset: Asset) = launchBackup { assetRepository.updateAsset(asset) }
+    suspend fun saveAssetWithFields(asset: Asset, values: Map<Long, String>, isEditing: Boolean): Result<Unit> = runCatching {
+        if (isEditing) assetRepository.updateAsset(asset) else assetRepository.insertAsset(asset)
+        assetFieldValueDao.deleteForAsset(asset.id)
+        assetFieldValueDao.upsertAll(values.filterValues { it.isNotBlank() }.map { (fieldId, value) -> AssetFieldValue(asset.id, fieldId, value) })
+        autoBackupCoordinator.backupAfterDataChange()
+    }
     fun deleteAsset(asset: Asset) = launchBackup { assetRepository.deleteAsset(asset) }
     fun deleteAssets(list: List<Asset>) = launchBackup { assetRepository.deleteAssets(list) }
     fun deleteAllAssets() = launchBackup { assetRepository.deleteAllAssets() }

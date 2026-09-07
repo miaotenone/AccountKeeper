@@ -69,6 +69,7 @@ import com.example.accountkeeper.data.model.TransactionType
 import com.example.accountkeeper.ui.theme.DarkGradientPrimary
 import com.example.accountkeeper.ui.theme.LightGradientPrimary
 import com.example.accountkeeper.ui.theme.LocalAppStrings
+
 import com.example.accountkeeper.ui.viewmodel.BudgetViewModel
 import com.example.accountkeeper.ui.viewmodel.CategoryViewModel
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -143,8 +144,8 @@ fun BudgetScreen(
                 onClick = { showCreateTarget = true },
                 containerColor = MaterialTheme.colorScheme.primary,
                 elevation = FloatingActionButtonDefaults.elevation(
-                    defaultElevation = 16.dp,
-                    pressedElevation = 24.dp
+                    defaultElevation = 1.dp,
+                    pressedElevation = 6.dp
                 ),
                 shape = CircleShape,
                 modifier = Modifier.size(64.dp)
@@ -332,8 +333,8 @@ private fun BudgetSummaryCard(
     Card(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp, pressedElevation = 8.dp)
+        shape = RoundedCornerShape(12.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp, pressedElevation = 2.dp)
     ) {
         Box(
             modifier = Modifier
@@ -406,7 +407,7 @@ private fun CategoryBudgetCard(
     Card(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(8.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp, pressedElevation = 4.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -532,3 +533,4 @@ private fun BudgetEditorDialog(
         )
     }
 }
+

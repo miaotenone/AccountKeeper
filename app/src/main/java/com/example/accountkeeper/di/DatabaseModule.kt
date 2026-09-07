@@ -39,8 +39,12 @@ object DatabaseModule {
                 AppDatabase.MIGRATION_19_20,
                 AppDatabase.MIGRATION_20_21,
                 AppDatabase.MIGRATION_21_22,
-                AppDatabase.MIGRATION_22_23
-            )
+                AppDatabase.MIGRATION_22_23,
+                AppDatabase.MIGRATION_23_24,
+                AppDatabase.MIGRATION_24_25,
+                AppDatabase.MIGRATION_25_26,
+                AppDatabase.MIGRATION_26_27
+)
             .addCallback(object : androidx.room.RoomDatabase.Callback() {
                 override fun onCreate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
                     AppDatabase.createBudgetValidationTriggers(db)
@@ -58,5 +62,8 @@ object DatabaseModule {
     @Provides fun provideBudgetApprovalDao(database: AppDatabase) = database.budgetApprovalDao()
     @Provides fun provideAttachmentDao(database: AppDatabase) = database.attachmentDao()
     @Provides fun provideBillFileDao(database: AppDatabase) = database.billFileDao()
+    @Provides fun provideAssetFieldDefinitionDao(database: AppDatabase) = database.assetFieldDefinitionDao()
+    @Provides fun provideAssetFieldValueDao(database: AppDatabase) = database.assetFieldValueDao()
+    @Provides fun provideApprovalFieldValueDao(database: AppDatabase) = database.approvalFieldValueDao()
 }
 

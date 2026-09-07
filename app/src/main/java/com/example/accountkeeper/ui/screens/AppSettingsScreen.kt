@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.accountkeeper.ui.theme.*
 import com.example.accountkeeper.ui.theme.LocalAppStrings
+import com.example.accountkeeper.ui.components.AppSectionCard
 import com.example.accountkeeper.ui.viewmodel.SettingsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -283,7 +284,7 @@ fun AppSettingsScreen(
             confirmButton = {
                 TextButton(onClick = { showLanguageDialog = false }) { Text(strings.cancel) }
             },
-            shape = RoundedCornerShape(20.dp)
+            shape = RoundedCornerShape(8.dp)
         )
     }
 
@@ -310,7 +311,7 @@ fun AppSettingsScreen(
             confirmButton = {
                 TextButton(onClick = { showCurrencyDialog = false }) { Text(strings.cancel) }
             },
-            shape = RoundedCornerShape(20.dp)
+            shape = RoundedCornerShape(8.dp)
         )
     }
 }
@@ -325,8 +326,8 @@ fun PremiumSettingCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        shape = RoundedCornerShape(8.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Column(
             modifier = Modifier
@@ -467,7 +468,7 @@ fun InfoCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
         )

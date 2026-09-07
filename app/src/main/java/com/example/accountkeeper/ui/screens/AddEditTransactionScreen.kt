@@ -260,6 +260,8 @@ fun AddEditTransactionScreen(
 
             AttachmentSection(
                 title = strings.attachments,
+                addLabel = strings.addAttachment,
+                emptyText = strings.noAttachments,
                 attachments = attachments,
                 onAddAttachment = { attachmentPicker.launch(arrayOf("*/*")) },
                 onRemoveAttachment = { removed -> attachments = attachments.filterNot { it.id == removed.id } },
@@ -310,14 +312,14 @@ fun PremiumTypeSelector(
     strings: AppStrings
 ) {
     Card(
-        shape = RoundedCornerShape(24.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        shape = RoundedCornerShape(8.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(60.dp)
-                    .clip(RoundedCornerShape(24.dp))
+                    .clip(RoundedCornerShape(8.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant)
             ) {
                 Box(
@@ -390,7 +392,7 @@ fun PremiumAmountInput(
 
     Card(
         modifier = modifier,
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(8.dp),
         elevation = CardDefaults.cardElevation(
             defaultElevation = if (isFocused) 8.dp else 4.dp
         ),
@@ -458,8 +460,8 @@ fun PremiumDateSelector(
     Card(
         onClick = onClick,
         modifier = modifier,
-        shape = RoundedCornerShape(24.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        shape = RoundedCornerShape(8.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Row(
             modifier = Modifier
@@ -535,7 +537,7 @@ fun PremiumCategoryGrid(
                     .fillMaxWidth()
                     .aspectRatio(1f)
                     .scale(scale),
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(8.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = categoryColor
                 ),
@@ -571,8 +573,8 @@ fun PremiumNoteInput(
 ) {
     Card(
         modifier = modifier,
-        shape = RoundedCornerShape(24.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        shape = RoundedCornerShape(8.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         OutlinedTextField(
             value = note,
@@ -584,7 +586,7 @@ fun PremiumNoteInput(
             label = { Text(strings.note) },
             minLines = 2,
             maxLines = 4,
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(8.dp),
             colors = TextFieldDefaults.colors(
                 unfocusedContainerColor = Color.Transparent,
                 focusedContainerColor = Color.Transparent
@@ -616,13 +618,13 @@ fun PremiumSaveButton(
             .height(64.dp)
             .scale(scale),
         interactionSource = interactionSource,
-        shape = RoundedCornerShape(32.dp),
+        shape = RoundedCornerShape(8.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = MaterialTheme.colorScheme.primary
         ),
         elevation = ButtonDefaults.buttonElevation(
-            defaultElevation = 8.dp,
-            pressedElevation = 12.dp
+            defaultElevation = 2.dp,
+            pressedElevation = 4.dp
         )
     ) {
         Text(
