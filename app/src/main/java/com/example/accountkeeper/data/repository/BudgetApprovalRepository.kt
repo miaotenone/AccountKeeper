@@ -82,6 +82,16 @@ class BudgetApprovalRepository @Inject constructor(
         id
     }
 
+    suspend fun deleteHistory(id: Long) = database.withTransaction {
+        val approval = approvalDao.getById(id) ?: error("Approval request not found")
+        check(approval.status != BudgetApprovalStatus.PENDING) { "Pending approvals cannot be deleted" }
+        val linked = assetDao.getBySourceApprovalId(id)
+        check(linked == null || linked.status == AssetStatus.LOST) { "Only approvals whose related asset is confirmed lost can be deleted" }
+        if (linked != null) assetDao.clearSourceApprovalId(id, System.currentTimeMillis())
+        approvalFieldValueDao.deleteForApproval(id)
+        attachmentRepository.deleteForOwner(AttachmentOwnerType.APPROVAL, id)
+        approvalDao.deleteById(id)
+    }
     suspend fun withdraw(id: Long) {
         val existing = approvalDao.getById(id) ?: error("Approval request not found")
         check(existing.status == BudgetApprovalStatus.PENDING)

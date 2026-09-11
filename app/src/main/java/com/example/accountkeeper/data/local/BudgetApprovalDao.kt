@@ -24,6 +24,9 @@ interface BudgetApprovalDao {
     @Update
     suspend fun update(request: BudgetApprovalRequest)
 
+    @Query("DELETE FROM budget_approval_requests WHERE id = :id")
+    suspend fun deleteById(id: Long)
+
     @Query("DELETE FROM budget_approval_requests")
     suspend fun deleteAll()
 }

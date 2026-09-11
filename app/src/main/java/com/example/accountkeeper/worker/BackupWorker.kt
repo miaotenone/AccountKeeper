@@ -50,7 +50,7 @@ class BackupWorker @AssistedInject constructor(
             if (!settingsRepository.settingsFlow.first().isScheduledBackupEnabled) {
                 Result.success()
             } else {
-                autoBackupCoordinator.backupAfterDataChange()
+                autoBackupCoordinator.backupOnSchedule()
                 Result.success()
             }
         } catch (error: Exception) {

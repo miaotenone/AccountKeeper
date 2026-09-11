@@ -63,6 +63,8 @@ import com.example.accountkeeper.data.model.Asset
 import com.example.accountkeeper.data.model.AssetDirection
 import com.example.accountkeeper.data.model.sortedAssetLeafCategories
 import com.example.accountkeeper.data.model.AssetFieldDefinition
+import com.example.accountkeeper.data.model.localizedAssetFieldName
+import com.example.accountkeeper.ui.theme.LocalAppStrings
 import com.example.accountkeeper.data.model.AssetFieldType
 import com.example.accountkeeper.data.model.AssetStatus
 import com.example.accountkeeper.data.model.Attachment
@@ -253,7 +255,7 @@ fun AddEditAssetScreen(
                             modifier = Modifier.menuAnchor().fillMaxWidth()
                         )
                         ExposedDropdownMenu(expanded = statusExpanded, onDismissRequest = { statusExpanded = false }) {
-                            listOf(AssetStatus.NONE, AssetStatus.OWNED, AssetStatus.NOT_OWNED, AssetStatus.IN_PROGRESS).forEach { option ->
+                            listOf(AssetStatus.NONE, AssetStatus.IN_PROGRESS, AssetStatus.OWNED, AssetStatus.LOST).forEach { option ->
                                 DropdownMenuItem(text = { Text(assetStatusName(option, strings)) }, onClick = {
                                     status = option
                                     statusExpanded = false
@@ -537,20 +539,21 @@ fun AssetDetailsCard(
     values: Map<Long, String>,
     onValueChange: (Long, String) -> Unit
 ) {
+    val chinese = LocalAppStrings.current.language == "zh"
     AssetFormCard {
         Text("资产详细信息", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
         fields.forEach { field ->
                 val value = values[field.id].orEmpty()
                 when (field.type) {
                     AssetFieldType.BOOLEAN -> Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween) {
-                        Text(field.name)
+                        Text(localizedAssetFieldName(field.name, chinese))
                         androidx.compose.material3.Switch(checked = value == "true", onCheckedChange = { onValueChange(field.id, it.toString()) })
                     }
                     AssetFieldType.SINGLE_CHOICE -> {
                         var expanded by remember(field.id) { mutableStateOf(false) }
                         val options = field.options.split("\n").map { it.trim() }.filter { it.isNotEmpty() }
                         ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
-                            OutlinedTextField(value = value, onValueChange = {}, readOnly = true, label = { Text(field.name + if (field.required) " *" else "") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) }, modifier = Modifier.menuAnchor().fillMaxWidth())
+                            OutlinedTextField(value = value, onValueChange = {}, readOnly = true, label = { Text(localizedAssetFieldName(field.name, chinese) + if (field.required) " *" else "") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) }, modifier = Modifier.menuAnchor().fillMaxWidth())
                             ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                                 options.forEach { option -> DropdownMenuItem(text = { Text(option) }, onClick = { onValueChange(field.id, option); expanded = false }) }
                             }
@@ -558,13 +561,13 @@ fun AssetDetailsCard(
                     }
                     AssetFieldType.DATE -> {
                         var showFieldDatePicker by remember(field.id) { mutableStateOf(false) }
-                        OutlinedTextField(value = value, onValueChange = {}, readOnly = true, label = { Text(field.name + if (field.required) " *" else "") }, trailingIcon = { IconButton(onClick = { showFieldDatePicker = true }) { Icon(Icons.Default.CalendarToday, field.name) } }, modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(value = value, onValueChange = {}, readOnly = true, label = { Text(localizedAssetFieldName(field.name, chinese) + if (field.required) " *" else "") }, trailingIcon = { IconButton(onClick = { showFieldDatePicker = true }) { Icon(Icons.Default.CalendarToday, localizedAssetFieldName(field.name, chinese)) } }, modifier = Modifier.fillMaxWidth())
                         if (showFieldDatePicker) {
                             val pickerState = rememberDatePickerState(initialSelectedDateMillis = value.toLongOrNull() ?: System.currentTimeMillis())
                             DatePickerDialog(onDismissRequest = { showFieldDatePicker = false }, confirmButton = { TextButton(onClick = { onValueChange(field.id, (pickerState.selectedDateMillis ?: System.currentTimeMillis()).toString()); showFieldDatePicker = false }) { Text("确定") } }, dismissButton = { TextButton(onClick = { showFieldDatePicker = false }) { Text("取消") } }) { DatePicker(state = pickerState) }
                         }
                     }
-                    else -> OutlinedTextField(value = value, onValueChange = { input -> if (field.type != AssetFieldType.NUMBER || input.isEmpty() || input.toDoubleOrNull() != null) onValueChange(field.id, input) }, label = { Text(field.name + if (field.required) " *" else "") }, keyboardOptions = KeyboardOptions(keyboardType = if (field.type == AssetFieldType.NUMBER) KeyboardType.Decimal else KeyboardType.Text), singleLine = true, modifier = Modifier.fillMaxWidth())
+                    else -> OutlinedTextField(value = value, onValueChange = { input -> if (field.type != AssetFieldType.NUMBER || input.isEmpty() || input.toDoubleOrNull() != null) onValueChange(field.id, input) }, label = { Text(localizedAssetFieldName(field.name, chinese) + if (field.required) " *" else "") }, keyboardOptions = KeyboardOptions(keyboardType = if (field.type == AssetFieldType.NUMBER) KeyboardType.Decimal else KeyboardType.Text), singleLine = true, modifier = Modifier.fillMaxWidth())
             }
         }
     }
@@ -578,9 +581,9 @@ private fun directionLabel(type: AssetDirection): String = when (type) {
 private fun assetStatusName(status: AssetStatus, strings: com.example.accountkeeper.ui.theme.AppStrings): String = when (status) {
     AssetStatus.NONE -> strings.none
     AssetStatus.OWNED -> strings.owned
-    AssetStatus.NOT_OWNED -> strings.notOwned
+    AssetStatus.NOT_OWNED -> strings.lost
     AssetStatus.LOST -> strings.lost
     AssetStatus.IN_PROGRESS -> strings.inProgress
     AssetStatus.TEMPORARILY_WITH_ME -> strings.owned
-    AssetStatus.TEMPORARILY_WITH_OTHERS -> strings.notOwned
+    AssetStatus.TEMPORARILY_WITH_OTHERS -> strings.lost
 }

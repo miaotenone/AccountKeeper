@@ -82,6 +82,7 @@ class BudgetViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val submitState = MutableStateFlow<ApprovalSubmitState>(ApprovalSubmitState.Idle)
+    val operationError = MutableStateFlow<String?>(null)
 
     init { ensureMonth(selectedMonth.value) }
 
@@ -208,6 +209,8 @@ class BudgetViewModel @Inject constructor(
             }
         }
     }
+
+    fun deleteHistoryApproval(id: Long) = viewModelScope.launch { runCatching { approvalRepository.deleteHistory(id); autoBackupCoordinator.backupAfterDataChange() }.onFailure { operationError.value = it.message ?: "删除审批失败" } }
 
     fun withdrawApproval(id: Long) = launchBackup { approvalRepository.withdraw(id) }
 

@@ -125,11 +125,11 @@ fun AssetsScreen(
                 val statusName = when (asset.status) {
                     AssetStatus.NONE -> strings.none
                     AssetStatus.OWNED -> strings.owned
-                    AssetStatus.NOT_OWNED -> strings.notOwned
+                    AssetStatus.NOT_OWNED -> strings.lost
                     AssetStatus.LOST -> strings.lost
                     AssetStatus.IN_PROGRESS -> strings.inProgress
                     AssetStatus.TEMPORARILY_WITH_ME -> strings.owned
-                    AssetStatus.TEMPORARILY_WITH_OTHERS -> strings.notOwned
+                    AssetStatus.TEMPORARILY_WITH_OTHERS -> strings.lost
                 }
                 asset.note.lowercase().contains(query) ||
                 categoryName.lowercase().contains(query) ||
@@ -221,14 +221,8 @@ fun AssetsScreen(
             // 进行中：所有 IN_PROGRESS 状态的金额
             val inProgressAmount = categoryAssets.filter { it.status == AssetStatus.IN_PROGRESS }.sumOf { it.amount }
 
-            // 根据分类类型计算状态金额
-            val statusAmount = if (filteredCategory.direction != AssetDirection.NEGATIVE) {
-                // 正资产：OWNED状态金额（确认拥有）
-                categoryAssets.filter { it.status == AssetStatus.OWNED }.sumOf { it.amount }
-            } else {
-                // 负资产：NOT_OWNED状态金额（确认没有）
-                categoryAssets.filter { it.status == AssetStatus.NOT_OWNED }.sumOf { it.amount }
-            }
+            // Positive and negative categories both count only confirmed ownership.
+            val statusAmount = categoryAssets.filter { it.status == AssetStatus.OWNED }.sumOf { it.amount }
 
             CategoryStats(totalAmount, inProgressAmount, statusAmount)
         } else {
@@ -639,7 +633,7 @@ fun AssetsScreen(
                                 }
                             },
                             onDelete = { viewModel.deleteAsset(asset) },
-                            onToggleStatus = { if (asset.status == AssetStatus.IN_PROGRESS && isPositiveCategory) ownedAssetTarget = asset else viewModel.toggleAssetStatus(asset, isPositiveCategory) }
+                            onToggleStatus = { if (asset.status == AssetStatus.IN_PROGRESS && asset.sourceApprovalId != null) ownedAssetTarget = asset else viewModel.toggleAssetStatus(asset) }
                         )
                     }
                 }
@@ -1115,11 +1109,11 @@ fun AssetItem(
                     val statusLabel = when (asset.status) {
                         AssetStatus.NONE -> null
                         AssetStatus.OWNED -> strings.owned
-                        AssetStatus.NOT_OWNED -> strings.notOwned
+                        AssetStatus.NOT_OWNED -> strings.lost
                         AssetStatus.LOST -> strings.lost
                         AssetStatus.IN_PROGRESS -> strings.inProgress
                         AssetStatus.TEMPORARILY_WITH_ME -> strings.owned
-                        AssetStatus.TEMPORARILY_WITH_OTHERS -> strings.notOwned
+                        AssetStatus.TEMPORARILY_WITH_OTHERS -> strings.lost
                     }
                     if (statusLabel != null) {
                         Text(
@@ -1318,11 +1312,11 @@ fun AssetItem(
                         val statusLabel = when (asset.status) {
                             AssetStatus.NONE -> null
                             AssetStatus.OWNED -> strings.owned
-                            AssetStatus.NOT_OWNED -> strings.notOwned
+                            AssetStatus.NOT_OWNED -> strings.lost
                             AssetStatus.LOST -> strings.lost
                             AssetStatus.IN_PROGRESS -> strings.inProgress
                             AssetStatus.TEMPORARILY_WITH_ME -> strings.owned
-                            AssetStatus.TEMPORARILY_WITH_OTHERS -> strings.notOwned
+                            AssetStatus.TEMPORARILY_WITH_OTHERS -> strings.lost
                         }
                         if (statusLabel != null) {
                             Text(
@@ -1436,5 +1430,3 @@ fun BatchDeleteAssetDialog(
         }
     )
 }
-
-

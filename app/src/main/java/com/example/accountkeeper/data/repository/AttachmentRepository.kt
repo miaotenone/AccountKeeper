@@ -8,6 +8,7 @@ import java.io.File
 import java.security.MessageDigest
 import javax.inject.Inject
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 
 class AttachmentRepository @Inject constructor(private val dao: AttachmentDao) {
     fun getAll(): Flow<List<AttachmentEntity>> = dao.getAll()
@@ -22,10 +23,16 @@ class AttachmentRepository @Inject constructor(private val dao: AttachmentDao) {
         dao.getForOwnerList(ownerType, ownerId)
 
     suspend fun insert(attachment: AttachmentEntity) = dao.insert(attachment)
-    suspend fun deleteForOwner(ownerType: AttachmentOwnerType, ownerId: Long) =
+    suspend fun deleteForOwner(ownerType: AttachmentOwnerType, ownerId: Long) {
+        val records = dao.getForOwnerList(ownerType, ownerId)
         dao.deleteForOwner(ownerType, ownerId)
-    suspend fun deleteForOwnerType(ownerType: AttachmentOwnerType) =
+        records.forEach { runCatching { File(it.filePath).delete() } }
+    }
+    suspend fun deleteForOwnerType(ownerType: AttachmentOwnerType) {
+        val records = dao.getAll().first().filter { it.ownerType == ownerType }
         dao.deleteForOwnerType(ownerType)
+        records.forEach { runCatching { File(it.filePath).delete() } }
+    }
 
     suspend fun replaceForOwner(ownerType: AttachmentOwnerType, ownerId: Long, attachments: List<Attachment>) {
         dao.deleteForOwner(ownerType, ownerId)
@@ -56,4 +63,16 @@ class AttachmentRepository @Inject constructor(private val dao: AttachmentDao) {
 
     suspend fun delete(attachment: AttachmentEntity) = dao.delete(attachment)
     suspend fun deleteAll() = dao.deleteAll()
+
+    suspend fun deleteWithFile(attachment: AttachmentEntity) {
+        dao.deleteById(attachment.id)
+        runCatching { File(attachment.filePath).delete() }
+    }
+
+    suspend fun deleteAllWithFiles(attachmentsDir: File) {
+        val attachments = dao.getAll().first()
+        dao.deleteAll()
+        attachments.forEach { runCatching { File(it.filePath).delete() } }
+        attachmentsDir.listFiles()?.forEach { runCatching { it.delete() } }
+    }
 }

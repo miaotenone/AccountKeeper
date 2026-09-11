@@ -29,7 +29,7 @@ interface AttachmentDao {
     @Query("SELECT * FROM attachments WHERE sha256 = :sha256 LIMIT 1")
     suspend fun findByHash(sha256: String): AttachmentEntity?
 
-    @Insert
+    @Insert(onConflict = androidx.room.OnConflictStrategy.REPLACE)
     suspend fun insert(attachment: AttachmentEntity)
 
     @Update

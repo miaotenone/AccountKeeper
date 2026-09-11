@@ -213,13 +213,7 @@ fun AttachmentSection(
                                 text = emptyText,
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Medium
-                            )
-                            Text(
-                                text = addLabel,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
+                            )}
                     }
                 }
             } else {

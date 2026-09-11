@@ -800,26 +800,22 @@ null
 */    
 
 private 
-fun buildTransactionsCsv(        
-transactions: List<Transaction>,        
-categoryMap: Map<Long, String>    
-): String {        
-val sb = StringBuilder()        
-
-sb.append("ID,Date,Type,Amount,Category,Note\n")                
-val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())        
-for (tx in transactions) {            
-val categoryName = categoryMap[tx.categoryId] ?: "Other"            
-val typeString = if (tx.type == TransactionType.INCOME) "Income" else "Expense"            
-val dateString = dateFormat.format(Date(tx.date))            
-val safeNote = tx.note.replace("\"", "\"\"")            
-sb.append("${tx.id
-
-},${dateString},${typeString},${tx.amount},${categoryName},\"${safeNote}\"\n")        }                
-return sb.toString()    
-
-}    
-/**     
+fun buildTransactionsCsv(
+    transactions: List<Transaction>,
+    categoryMap: Map<Long, String>
+): String {
+    val sb = StringBuilder()
+    sb.append("ID,Date,Type,Amount,Category,Note\n")
+    val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+    for (tx in transactions) {
+        val categoryName = categoryMap[tx.categoryId] ?: "Other"
+        val typeString = if (tx.type == TransactionType.INCOME) "Income" else "Expense"
+        val dateString = dateFormat.format(Date(tx.date))
+        val safeNote = tx.note.replace("\"", "\"\"")
+        sb.append("${tx.id},${dateString},${typeString},${tx.amount},${categoryName},\"${safeNote}\"\n")
+    }
+    return sb.toString()
+}/**
 * 从 ZIP 文件读取备份数据（通过 Uri）     
 */    
 
@@ -902,7 +898,11 @@ val billFiles = mutableListOf<BillFileData>()
 val assetCategories = mutableListOf<AssetCategoryData>()            
 val approvals = mutableListOf<ApprovalData>()            
 val attachments = mutableListOf<AttachmentData>()            
-val settings = arrayOfNulls<SettingsData>(1)            
+val settings = arrayOfNulls<SettingsData>(1)
+var backupDataAssetFieldDefinitions = emptyList<AssetFieldDefinitionData>()
+var backupDataAssetFieldValues = emptyList<AssetFieldValueData>()
+var backupDataApprovalFieldValues = emptyList<ApprovalFieldValueData>()
+            var dataJsonFound = false
 val extractedAttachments = mutableMapOf<String, File>()            
 val extractedBills = mutableMapOf<String, File>()            
 
@@ -913,7 +913,8 @@ var entryCount = 0
 while (entry != null) {                    
 entryCount++                    
 when {                        
-entry.name == "data.json" -> {                            
+entry.name == "data.json" -> {
+                            dataJsonFound = true
 val backupData = json.decodeFromString<ZipBackupData>(zipIn.readBytes().toString(Charsets.UTF_8))                            
 transactions.addAll(backupData.transactions)                            
 assets.addAll(backupData.assets)                            
@@ -923,7 +924,10 @@ billFiles.addAll(backupData.billFiles)
 assetCategories.addAll(backupData.assetCategories)                            
 approvals.addAll(backupData.approvals)                            
 attachments.addAll(backupData.attachments)                            
-settings[0] = backupData.settings                        
+backupDataAssetFieldDefinitions = backupData.assetFieldDefinitions
+                            backupDataAssetFieldValues = backupData.assetFieldValues
+                            backupDataApprovalFieldValues = backupData.approvalFieldValues
+                            settings[0] = backupData.settings
 }                        
 entry.name.startsWith("attachments/") -> {                            
 val name = entry.name.removePrefix("attachments/")                            
@@ -947,7 +951,7 @@ extractedBills[entry.name] = file
 zipIn.closeEntry()                    
 entry = zipIn.nextEntry                
 }                
-check(entryCount > 0) { "Invalid or empty ZIP file" 
+check(entryCount > 0 && dataJsonFound) { "Invalid ZIP file: data.json is missing"
 }            }            
 val finalAttachmentFiles = if (attachments.isEmpty()) {                
 val legacy = mutableMapOf<String, File>()                
@@ -995,7 +999,7 @@ billArchiveFiles = extractedBills.filterValues { it.exists() },
 assetCategories = assetCategories,                
 approvals = approvals,                
 attachments = attachments,                
-settings = settings[0],                
+assetFieldDefinitions = backupDataAssetFieldDefinitions,                assetFieldValues = backupDataAssetFieldValues,                approvalFieldValues = backupDataApprovalFieldValues,                settings = settings[0],
 success = true            
 )        
 } catch (e: Exception) {            
@@ -1709,7 +1713,15 @@ val assets = result.assets.toMutableList()
 val attachmentFiles = result.attachmentFiles.toMutableMap()            
 val budgets = result.budgets.toMutableList()            
 
-val restoredAttachments = result.attachments.toMutableList()                        
+val billFiles = result.billFiles.toMutableList()
+            val billArchiveFiles = result.billArchiveFiles.toMutableMap()
+            val assetCategories = result.assetCategories.toMutableList()
+            val approvals = result.approvals.toMutableList()
+            val assetFieldDefinitions = result.assetFieldDefinitions.toMutableList()
+            val assetFieldValues = result.assetFieldValues.toMutableList()
+            val approvalFieldValues = result.approvalFieldValues.toMutableList()
+            val settings = result.settings
+            val restoredAttachments = result.attachments.toMutableList()
 // 确定要应用到的步骤            
 val actualTargetStep = if (targetStep == -1) {                
 chainIndex.deltaBackups.size            
@@ -1758,7 +1770,15 @@ DeltaImportResult(
 transactions = transactions,                
 assets = assets,                
 budgets = budgets,                
-attachmentFiles = attachmentFiles,                
+billFiles = billFiles,
+                billArchiveFiles = billArchiveFiles,
+                assetCategories = assetCategories,
+                approvals = approvals,
+                assetFieldDefinitions = assetFieldDefinitions,
+                assetFieldValues = assetFieldValues,
+                approvalFieldValues = approvalFieldValues,
+                settings = settings,
+                attachmentFiles = attachmentFiles,
 attachments = restoredAttachments,                
 targetStep = actualTargetStep,                
 success = true            

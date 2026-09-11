@@ -24,7 +24,8 @@ data class AppSettings(
     val backupRetentionLimit: Int = 15,
     val swipeDeleteRequiresConfirm: Boolean = true,  // 左滑是否直接弹出确认对话框
     val isScheduledBackupEnabled: Boolean = false,   // 是否启用定时备份
-    val scheduledBackupInterval: Int = 1             // 定时备份间隔（天）
+    val scheduledBackupInterval: Int = 1,            // 定时备份间隔（天）
+    val autoBackupChangeThreshold: Int = 20
 )
 
 @Singleton
@@ -40,6 +41,8 @@ class SettingsRepository @Inject constructor(
         val SWIPE_DELETE_CONFIRM = booleanPreferencesKey("swipe_delete_confirm")
         val SCHEDULED_BACKUP = booleanPreferencesKey("scheduled_backup")
         val SCHEDULED_BACKUP_INTERVAL = intPreferencesKey("scheduled_backup_interval")
+        val AUTO_BACKUP_CHANGE_THRESHOLD = intPreferencesKey("auto_backup_change_threshold")
+        val AUTO_BACKUP_CHANGE_COUNT = intPreferencesKey("auto_backup_change_count")
     }
 
     val settingsFlow: Flow<AppSettings> = context.dataStore.data.map { preferences ->
@@ -51,7 +54,8 @@ class SettingsRepository @Inject constructor(
             backupRetentionLimit = preferences[PreferencesKeys.BACKUP_LIMIT] ?: 15,
             swipeDeleteRequiresConfirm = preferences[PreferencesKeys.SWIPE_DELETE_CONFIRM] ?: true,
             isScheduledBackupEnabled = preferences[PreferencesKeys.SCHEDULED_BACKUP] ?: false,
-            scheduledBackupInterval = normalizeScheduledBackupInterval(preferences[PreferencesKeys.SCHEDULED_BACKUP_INTERVAL])
+            scheduledBackupInterval = normalizeScheduledBackupInterval(preferences[PreferencesKeys.SCHEDULED_BACKUP_INTERVAL]),
+            autoBackupChangeThreshold = (preferences[PreferencesKeys.AUTO_BACKUP_CHANGE_THRESHOLD] ?: 20).coerceIn(1, 100)
         )
     }
 
@@ -116,6 +120,22 @@ class SettingsRepository @Inject constructor(
         }
     }
 
+    suspend fun updateAutoBackupChangeThreshold(threshold: Int) {
+        context.dataStore.edit { it[PreferencesKeys.AUTO_BACKUP_CHANGE_THRESHOLD] = threshold.coerceIn(1, 100) }
+    }
+
+    suspend fun incrementAutoBackupChangeCount(): Int {
+        var count = 0
+        context.dataStore.edit {
+            count = (it[PreferencesKeys.AUTO_BACKUP_CHANGE_COUNT] ?: 0) + 1
+            it[PreferencesKeys.AUTO_BACKUP_CHANGE_COUNT] = count
+        }
+        return count
+    }
+
+    suspend fun resetAutoBackupChangeCount() {
+        context.dataStore.edit { it[PreferencesKeys.AUTO_BACKUP_CHANGE_COUNT] = 0 }
+    }
     private fun normalizeScheduledBackupInterval(rawValue: Int?): Int {
         val value = rawValue ?: return 1
         return when {

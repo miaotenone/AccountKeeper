@@ -42,16 +42,10 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { settingsRepository.updateCurrencySymbol(symbol) }
     }
 
-    fun updateAutoBackup(enabled: Boolean) {
-        viewModelScope.launch {
-            settingsRepository.updateAutoBackup(enabled)
-            settingsRepository.updateScheduledBackup(enabled)
-            val context = getApplication<Application>()
-            if (enabled) BackupWorker.schedule(context, appSettings.value.scheduledBackupInterval)
-            else BackupWorker.cancel(context)
-        }
+    fun updateAutoBackup(enabled: Boolean) = viewModelScope.launch {
+        settingsRepository.updateAutoBackup(enabled)
+        if (!enabled) settingsRepository.resetAutoBackupChangeCount()
     }
-
     fun updateBackupRetentionLimit(limit: Int) {
         viewModelScope.launch { settingsRepository.updateBackupRetentionLimit(limit) }
     }
@@ -60,20 +54,15 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { settingsRepository.updateSwipeDeleteConfirm(requiresConfirm) }
     }
 
-    fun updateScheduledBackup(enabled: Boolean) {
-        viewModelScope.launch {
-            settingsRepository.updateScheduledBackup(enabled)
-            settingsRepository.updateAutoBackup(enabled)
-            val context = getApplication<Application>()
-            if (enabled) {
-                val interval = appSettings.value.scheduledBackupInterval
-                BackupWorker.schedule(context, interval)
-            } else {
-                BackupWorker.cancel(context)
-            }
-        }
+    fun updateScheduledBackup(enabled: Boolean) = viewModelScope.launch {
+        settingsRepository.updateScheduledBackup(enabled)
+        val context = getApplication<Application>()
+        if (enabled) BackupWorker.schedule(context, appSettings.value.scheduledBackupInterval) else BackupWorker.cancel(context)
     }
 
+    fun updateAutoBackupChangeThreshold(threshold: Int) = viewModelScope.launch {
+        settingsRepository.updateAutoBackupChangeThreshold(threshold)
+    }
     fun updateScheduledBackupInterval(intervalDays: Int) {
         viewModelScope.launch {
             settingsRepository.updateScheduledBackupInterval(intervalDays)

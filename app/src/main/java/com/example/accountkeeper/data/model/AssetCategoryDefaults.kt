@@ -1,6 +1,22 @@
 package com.example.accountkeeper.data.model
 
 /** Default asset categories, detail templates, and shared ordering. */
+
+private val assetFieldEnglishNames = mapOf(
+    "机构" to "Institution", "账户类型" to "Account type", "账号/卡号" to "Account/card number", "币种" to "Currency", "开户日期" to "Opening date", "利率" to "Interest rate", "到期日" to "Maturity date", "备注" to "Notes", "产品类型" to "Product type", "发行方" to "Issuer", "账户/代码" to "Account/code", "持有数量" to "Quantity held", "成本单价" to "Cost per unit", "买入日期" to "Purchase date", "风险等级" to "Risk level", "品牌" to "Brand", "型号" to "Model", "资产编号" to "Asset number", "序列号" to "Serial number", "供应商" to "Supplier", "购买日期" to "Purchase date", "保修到期" to "Warranty expiry", "存放地点" to "Storage location", "使用人/部门" to "User/department", "折旧年限" to "Depreciation years", "对方" to "Counterparty", "合同/借据编号" to "Contract/IOU number", "起始日" to "Start date", "还款方式" to "Repayment method", "担保信息" to "Collateral information", "收款方" to "Payee", "合同编号" to "Contract number", "支付日期" to "Payment date", "预计结算日期" to "Expected settlement date", "可退金额" to "Refundable amount", "结算状态" to "Settlement status", "发卡行" to "Card issuer", "卡类型" to "Card type", "尾号" to "Last four digits", "账单日" to "Statement day", "还款日" to "Payment day", "额度" to "Credit limit", "合同号" to "Contract number", "贷款类型" to "Loan type", "总期数" to "Total installments", "已还期数" to "Paid installments", "放款日" to "Loan date", "债权人" to "Creditor", "凭据编号" to "Reference number", "借入日期" to "Borrowing date", "负债类型" to "Liability type", "形成日期" to "Formation date"
+)
+
+fun localizedAssetFieldName(name: String, chinese: Boolean): String =
+    if (chinese) assetFieldEnglishNames.entries.firstOrNull { it.value.equals(name, true) }?.key ?: name
+    else assetFieldEnglishNames[name] ?: name
+
+fun localizedAssetFieldType(type: AssetFieldType, chinese: Boolean): String = when (type) {
+    AssetFieldType.TEXT -> if (chinese) "文本" else "Text"
+    AssetFieldType.NUMBER -> if (chinese) "数字" else "Number"
+    AssetFieldType.DATE -> if (chinese) "日期" else "Date"
+    AssetFieldType.BOOLEAN -> if (chinese) "开关" else "Boolean"
+    AssetFieldType.SINGLE_CHOICE -> if (chinese) "单选" else "Single choice"
+}
 object AssetCategoryDefaults {
     data class FieldTemplate(
         val name: String,

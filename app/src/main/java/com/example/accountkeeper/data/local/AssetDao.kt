@@ -23,6 +23,8 @@ interface AssetDao {
     suspend fun getBySourceApprovalId(sourceApprovalId: Long): Asset?
     @Query("SELECT * FROM assets WHERE transactionId = :transactionId LIMIT 1")
     suspend fun getByTransactionId(transactionId: Long): Asset?
+    @Query("UPDATE assets SET sourceApprovalId = NULL, updatedAt = :updatedAt WHERE sourceApprovalId = :sourceApprovalId")
+    suspend fun clearSourceApprovalId(sourceApprovalId: Long, updatedAt: Long)
     @Query("SELECT * FROM assets WHERE status = :status ORDER BY date DESC")
     fun getAssetsByStatus(status: AssetStatus): Flow<List<Asset>>
     @Query("DELETE FROM assets")

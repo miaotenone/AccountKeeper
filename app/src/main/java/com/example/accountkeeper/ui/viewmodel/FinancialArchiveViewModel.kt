@@ -73,10 +73,38 @@ class FinancialArchiveViewModel @Inject constructor(
     val billFiles: StateFlow<List<BillFileEntity>> = billFileRepository.getAll()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    suspend fun clearAllBusinessData() {
+        val attachmentFiles = attachmentRepository.getAll().first().map { java.io.File(it.filePath) }
+        val billFiles = billFileRepository.getAll().first().map { java.io.File(it.filePath) }
+        database.withTransaction {
+            database.approvalFieldValueDao().deleteAll()
+            database.assetFieldValueDao().deleteAll()
+            database.assetFieldDefinitionDao().getAllList().forEach { database.assetFieldDefinitionDao().delete(it) }
+            database.attachmentDao().deleteAll()
+            database.billFileDao().deleteAll()
+            database.budgetApprovalDao().deleteAll()
+            database.assetDao().deleteAllAssets()
+            database.transactionDao().deleteAllTransactions()
+            database.budgetDao().deleteAllBudgets()
+            database.budgetMonthDao().deleteAll()
+            database.assetCategoryDao().deleteAll()
+            database.categoryDao().deleteAllCategories()
+        }
+        (attachmentFiles + billFiles).forEach { runCatching { it.delete() } }
+        getApplication<Application>().filesDir.resolve("attachments").deleteRecursively()
+        getApplication<Application>().filesDir.resolve("bills").deleteRecursively()
+        // Clear user-managed backup records while leaving protection snapshots untouched.
+        backupManager.clearAllZipAutoBackups()
+        backupManager.clearAllZipManualBackups()
+        backupManager.clearAllAutoBackups()
+        backupManager.clearAllManualBackups()
+        backupManager.clearAllDeltaBackups()
+    }
+
     suspend fun recordBillFile(file: java.io.File, ownerType: String = "BILL", ownerId: Long? = null, categoryId: Long? = null): Boolean {
         if (!file.exists()) return false
         val sha256 = backupManager.getFileSha256(file)
-        if (billFileRepository.getBySha256(sha256) != null) return false
+        if (billFileRepository.getBySha256(sha256) != null) { runCatching { file.delete() }; return false }
         val billFile = BillFileEntity(
             id = "bill_${sha256.take(16)}", ownerType = ownerType, ownerId = ownerId, categoryId = categoryId,
             fileName = file.name, filePath = file.absolutePath, mimeType = backupManager.getBillFileMimeType(file.name),
@@ -106,7 +134,7 @@ class FinancialArchiveViewModel @Inject constructor(
 
     fun import(uri: Uri, onResult: (String) -> Unit) = viewModelScope.launch { try { val result = backupManager.readZipBackup(uri); if (!result.success) { onResult(result.errorMessage ?: "Import failed"); return@launch }; importResult(result, onResult, true) } finally { backupManager.cleanupTempFiles() } }
     fun restoreManualBackup(file: java.io.File, onResult: (String) -> Unit) = viewModelScope.launch { try { val result = backupManager.readZipBackupFromFile(file); if (!result.success) { onResult(result.errorMessage ?: "Restore failed"); return@launch }; importResult(result, onResult, true) } finally { backupManager.cleanupTempFiles() } }
-    fun restoreAutoBackupStep(targetStep: Int, onResult: (String) -> Unit) = viewModelScope.launch { try { val result = backupManager.restoreToStep(targetStep); if (!result.success) { onResult(result.errorMessage ?: "Restore failed"); return@launch }; importResult(ZipImportResult(transactions = result.transactions, assets = result.assets, assetTypes = result.assetTypes, budgets = result.budgets, attachmentFiles = result.attachmentFiles, billFiles = result.billFiles, billArchiveFiles = result.billArchiveFiles, assetCategories = result.assetCategories, approvals = result.approvals, attachments = result.attachments, settings = result.settings, assetFieldDefinitions = emptyList(), assetFieldValues = emptyList(), approvalFieldValues = emptyList(), success = true), onResult, true) } finally { backupManager.cleanupTempFiles() } }
+    fun restoreAutoBackupStep(targetStep: Int, onResult: (String) -> Unit) = viewModelScope.launch { try { val result = backupManager.restoreToStep(targetStep); if (!result.success) { onResult(result.errorMessage ?: "Restore failed"); return@launch }; importResult(ZipImportResult(transactions = result.transactions, assets = result.assets, assetTypes = result.assetTypes, budgets = result.budgets, attachmentFiles = result.attachmentFiles, billFiles = result.billFiles, billArchiveFiles = result.billArchiveFiles, assetCategories = result.assetCategories, approvals = result.approvals, attachments = result.attachments, settings = result.settings, assetFieldDefinitions = result.assetFieldDefinitions, assetFieldValues = result.assetFieldValues, approvalFieldValues = result.approvalFieldValues, success = true), onResult, true) } finally { backupManager.cleanupTempFiles() } }
 
     private suspend fun importResult(result: ZipImportResult, onResult: (String) -> Unit, replaceExisting: Boolean) {
         val protection = createProtectionSnapshot()
@@ -135,7 +163,7 @@ class FinancialArchiveViewModel @Inject constructor(
                     val restored = data.attachments.map { it.copy(filePath = result.attachmentFiles[it.id]?.let { file -> backupManager.copyAttachmentToInternalStorage(it.id, file, it.fileName, createdFiles)?.filePath } ?: it.filePath) }
                     assetRepository.insertAsset(Asset(data.id, data.date, data.amount, runCatching { AssetStatus.valueOf(data.status) }.getOrDefault(AssetStatus.NONE), categoryId, null, data.name, data.specification, data.quantity, data.purchaseDate, data.sourceApprovalId, data.transactionId, data.note, data.isCompleted, AttachmentConverter.toJson(restored), data.createdAt, data.updatedAt, data.assetDirection, data.supplier, data.location, data.userOrDepartment, data.warranty, data.serviceStartDate, data.serviceEndDate, data.renewalCycle, data.accessUrl)); assetsAdded++
                 }
-                importFieldValues(result); importBudgets(result, refreshed); importAttachments(result, createdFiles); val billsAdded = importBillFiles(result, createdFiles); restoreLegacyBillFiles(result, createdFiles); result.settings?.let { settingsRepository.restore(it.toAppSettings()) }
+                importFieldValues(result); assetCategoryRepository.ensureDefaults(); importBudgets(result, refreshed); importAttachments(result, createdFiles); val billsAdded = importBillFiles(result, createdFiles); restoreLegacyBillFiles(result, createdFiles); result.settings?.let { settingsRepository.restore(it.toAppSettings()) }
                 onResult("Imported $transactionsAdded transactions, $assetsAdded assets, and $billsAdded bill files")
             }
             autoBackupCoordinator.resetChainFromCurrentData(); protection.delete(); backupManager.clearProtectionSnapshots()
@@ -197,8 +225,13 @@ class FinancialArchiveViewModel @Inject constructor(
     private fun SettingsData.toAppSettings() = AppSettings(isDarkMode, language, currencySymbol, isAutoBackupEnabled, backupRetentionLimit, swipeDeleteRequiresConfirm, isScheduledBackupEnabled, scheduledBackupInterval)
     private suspend fun importAssetFieldDefinitions(result: ZipImportResult) { result.assetFieldDefinitions.forEach { data -> if (database.assetFieldDefinitionDao().getAllList().none { it.id == data.id }) database.assetFieldDefinitionDao().insert(AssetFieldDefinition(data.id, data.assetCategoryId, data.name, runCatching { AssetFieldType.valueOf(data.type) }.getOrDefault(AssetFieldType.TEXT), data.required, data.options, data.sortOrder, data.createdAt, data.updatedAt)) } }
     private suspend fun importFieldValues(result: ZipImportResult) { database.assetFieldValueDao().upsertAll(result.assetFieldValues.map { AssetFieldValue(it.assetId, it.fieldId, it.value) }); database.approvalFieldValueDao().upsertAll(result.approvalFieldValues.map { ApprovalFieldValue(it.approvalId, it.fieldId, it.value) }) }
-    private suspend fun importAssetCategories(result: ZipImportResult) { result.assetCategories.forEach { data -> if (assetCategoryRepository.getById(data.id) == null) assetCategoryRepository.insert(AssetCategoryEntity(id = data.id, name = data.name, direction = AssetDirection.fromStoredValue(data.direction), isDefault = data.isDefault, createdAt = data.createdAt, updatedAt = data.updatedAt)) } }
-    private suspend fun importApprovals(result: ZipImportResult, categories: List<Category>) { result.approvals.forEach { data -> if (budgetApprovalRepository.getById(data.id) != null) return@forEach; val type = runCatching { BudgetApprovalType.valueOf(data.type) }.getOrNull() ?: return@forEach; budgetApprovalRepository.restore(BudgetApprovalRequest(id = data.id, type = type, categoryId = data.categoryName?.let { n -> categories.firstOrNull { it.name.equals(n, true) && it.type == TransactionType.EXPENSE }?.id }, assetCategoryId = data.assetCategoryId, amount = data.amount, purchaseDate = data.purchaseDate, expectedPurchaseEndAt = data.expectedPurchaseEndAt, reason = data.reason, itemName = data.itemName, specification = data.specification, quantity = data.quantity, attachments = data.attachments, status = runCatching { BudgetApprovalStatus.valueOf(data.status) }.getOrDefault(BudgetApprovalStatus.PENDING), decisionNote = data.decisionNote, createdAt = data.createdAt, updatedAt = data.updatedAt, decidedAt = data.decidedAt)) } }
+    private suspend fun importAssetCategories(result: ZipImportResult) {
+        result.assetCategories.forEach { data ->
+            if (database.assetCategoryDao().getById(data.id) == null) {
+                database.assetCategoryDao().insert(AssetCategoryEntity(id = data.id, name = data.name, direction = AssetDirection.fromStoredValue(data.direction), isDefault = data.isDefault, createdAt = data.createdAt, updatedAt = data.updatedAt))
+            }
+        }
+    }    private suspend fun importApprovals(result: ZipImportResult, categories: List<Category>) { result.approvals.forEach { data -> if (budgetApprovalRepository.getById(data.id) != null) return@forEach; val type = runCatching { BudgetApprovalType.valueOf(data.type) }.getOrNull() ?: return@forEach; budgetApprovalRepository.restore(BudgetApprovalRequest(id = data.id, type = type, categoryId = data.categoryName?.let { n -> categories.firstOrNull { it.name.equals(n, true) && it.type == TransactionType.EXPENSE }?.id }, assetCategoryId = data.assetCategoryId, amount = data.amount, purchaseDate = data.purchaseDate, expectedPurchaseEndAt = data.expectedPurchaseEndAt, reason = data.reason, itemName = data.itemName, specification = data.specification, quantity = data.quantity, attachments = data.attachments, status = runCatching { BudgetApprovalStatus.valueOf(data.status) }.getOrDefault(BudgetApprovalStatus.PENDING), decisionNote = data.decisionNote, createdAt = data.createdAt, updatedAt = data.updatedAt, decidedAt = data.decidedAt)) } }
     private suspend fun importAttachments(result: ZipImportResult, createdFiles: MutableCollection<java.io.File>) { result.attachments.forEach { data -> if (attachmentRepository.getById(data.id) != null) return@forEach; val extracted = result.attachmentFiles[data.id] ?: error("Missing attachment file: ${data.fileName}"); val restored = backupManager.copyAttachmentToInternalStorage(data.id, extracted, data.fileName, createdFiles) ?: error("Unable to restore attachment: ${data.fileName}"); check(backupManager.getFileSha256(java.io.File(restored.filePath)) == data.sha256) { "Attachment verification failed: ${data.fileName}" }; attachmentRepository.insert(AttachmentEntity(data.id, runCatching { AttachmentOwnerType.valueOf(data.ownerType) }.getOrDefault(AttachmentOwnerType.ASSET), data.ownerId, data.fileName, restored.filePath, data.mimeType, restored.fileSize, data.sha256, data.createdAt)) } }
     private suspend fun importTransactionCategories(result: ZipImportResult, current: MutableList<Category>) { result.transactions.forEach { data -> val type = if (data.type.equals("Income", true)) TransactionType.INCOME else TransactionType.EXPENSE; if (data.categoryName.isBlank() || current.any { it.name.equals(data.categoryName, true) && it.type == type }) return@forEach; categoryRepository.insertCategory(Category(name = data.categoryName, type = type)); current += Category(name = data.categoryName, type = type) } }
     private suspend fun resolveAssetCategory(name: String?, directionName: String, categories: MutableList<AssetCategoryEntity>): Long? { if (name.isNullOrBlank()) return null; val root = AssetDirection.fromStoredValue(directionName); categories.firstOrNull { it.name.equals(name, true) && it.direction == root }?.let { return it.id }; val entity = AssetCategoryEntity(name = name, direction = root); val id = assetCategoryRepository.insert(entity); categories += entity.copy(id = id); return id }
@@ -224,5 +257,5 @@ class FinancialArchiveViewModel @Inject constructor(
     private suspend fun syncBillFileAttachment(bill: BillFileEntity) { attachmentRepository.insert(AttachmentEntity("BILL_${bill.id}", AttachmentOwnerType.BILL, bill.id.hashCode().toLong() and Long.MAX_VALUE, bill.fileName, bill.filePath, bill.mimeType, bill.fileSize, bill.sha256, bill.createdAt)) }
     private fun validateBillFiles(result: ZipImportResult) { result.billFiles.forEach { data -> val archiveName = data.archiveFileName.ifBlank { data.fileName }; val file = result.billArchiveFiles[archiveName] ?: error("Missing bill file: ${data.fileName}"); check(backupManager.getFileSha256(file) == data.sha256) { "Bill file verification failed: ${data.fileName}" } }
     }
-    suspend fun deleteBillFile(file: java.io.File): Boolean { val indexed = billFileRepository.getAll().first().filter { it.filePath == file.absolutePath || it.filePath == file.canonicalPath }; val deleted = backupManager.deleteBillFile(file); indexed.forEach { billFileRepository.deleteById(it.id); attachmentRepository.delete(AttachmentEntity("BILL_${it.id}", AttachmentOwnerType.BILL, it.id.hashCode().toLong() and Long.MAX_VALUE, it.fileName, it.filePath, it.mimeType, it.fileSize, it.sha256, it.createdAt)) }; if (!deleted && indexed.isEmpty()) return false; autoBackupCoordinator.backupAfterDataChange(); return true }
+    suspend fun deleteBillFile(file: java.io.File): Boolean { val indexed = billFileRepository.getAll().first().filter { it.filePath == file.absolutePath || it.filePath == file.canonicalPath }; val deleted = backupManager.deleteBillFile(file); indexed.forEach { billFileRepository.deleteById(it.id); attachmentRepository.deleteWithFile(AttachmentEntity("BILL_${it.id}", AttachmentOwnerType.BILL, it.id.hashCode().toLong() and Long.MAX_VALUE, it.fileName, it.filePath, it.mimeType, it.fileSize, it.sha256, it.createdAt)) }; if (!deleted && indexed.isEmpty()) return false; autoBackupCoordinator.backupAfterDataChange(); return true }
 }

@@ -1,6 +1,8 @@
 package com.example.accountkeeper.ui.screens
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -21,6 +23,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.accountkeeper.data.model.Category
 import com.example.accountkeeper.data.model.AssetCategoryEntity
 import com.example.accountkeeper.data.model.AssetFieldType
+import com.example.accountkeeper.data.model.localizedAssetFieldName
+import com.example.accountkeeper.data.model.localizedAssetFieldType
 import com.example.accountkeeper.data.model.AssetFieldDefinition
 import com.example.accountkeeper.data.model.AssetDirection
 import com.example.accountkeeper.data.model.sortedAssetCategories
@@ -41,6 +45,7 @@ fun CategorySettingsScreen(
 ) {
     val categories by categoryViewModel.categories.collectAsState()
     val strings = LocalAppStrings.current
+    val isChinese = strings.language == "界面语言" || strings.language == "zh"
     val assetCategories by assetCategoryViewModel.assetCategories.collectAsState()
     var selectedTab by remember { mutableStateOf(0) }
     
@@ -273,33 +278,43 @@ fun CategorySettingsScreen(
         if (showFieldDialog) {
             selectedAssetCategory?.let { assetCategory ->
                 val fields by assetCategoryViewModel.fieldsFor(assetCategory.id).collectAsState(emptyList())
+                val isChinese = strings.language == "界面语言" || strings.language == "zh"
+                val fieldNameLabel = if (isChinese) "字段名称" else "Field name"
+                val fieldTypeLabel = if (isChinese) "字段类型" else "Field type"
+                val requiredLabel = if (isChinese) "必填" else "Required"
+                val optionsLabel = if (isChinese) "选项，每行一个" else "Options, one per line"
+                val addFieldLabel = if (editingField == null) { if (isChinese) "新增字段" else "Add field" } else { if (isChinese) "保存字段" else "Save field" }
+                val moveUpLabel = if (isChinese) "上移" else "Move up"
+                val moveDownLabel = if (isChinese) "下移" else "Move down"
                 AlertDialog(
                     onDismissRequest = { showFieldDialog = false },
                     title = { Text("${assetCategory.name} - 详情字段") },
                     text = {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            fields.forEachIndexed { index, field ->
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().heightIn(max = 520.dp)) {
+                            Column(modifier = Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                fields.forEachIndexed { index, field ->
                                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text("${field.name} (${field.type.name})${if (field.required) " *" else ""}", modifier = Modifier.weight(1f))
+                                    Text("${field.name} (${localizedAssetFieldType(field.type, isChinese)})${if (field.required) " *" else ""}", modifier = Modifier.weight(1f))
                                     Row {
-                                        IconButton(enabled = index > 0, onClick = { assetCategoryViewModel.moveField(field, -1) }) { Icon(Icons.Default.ArrowUpward, "上移") }
-                                        IconButton(enabled = index < fields.lastIndex, onClick = { assetCategoryViewModel.moveField(field, 1) }) { Icon(Icons.Default.ArrowDownward, "下移") }
+                                        IconButton(enabled = index > 0, onClick = { assetCategoryViewModel.moveField(field, -1) }) { Icon(Icons.Default.ArrowUpward, moveUpLabel) }
+                                        IconButton(enabled = index < fields.lastIndex, onClick = { assetCategoryViewModel.moveField(field, 1) }) { Icon(Icons.Default.ArrowDownward, moveDownLabel) }
                                         IconButton(onClick = { editingField = field; fieldName = field.name; fieldType = field.type; fieldRequired = field.required; fieldOptions = field.options }) { Icon(Icons.Default.Edit, strings.editTransaction) }
                                         IconButton(onClick = { fieldPendingDelete = field }) { Icon(Icons.Default.Delete, strings.delete) }
                                     }
                                 }
                             }
-                            OutlinedTextField(value = fieldName, onValueChange = { fieldName = it }, label = { Text("字段名称") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                            }
+                            OutlinedTextField(value = fieldName, onValueChange = { fieldName = it }, label = { Text(fieldNameLabel) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                             var typeExpanded by remember { mutableStateOf(false) }
                             ExposedDropdownMenuBox(expanded = typeExpanded, onExpandedChange = { typeExpanded = !typeExpanded }) {
-                                OutlinedTextField(value = fieldType.name, onValueChange = {}, readOnly = true, label = { Text("字段类型") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(typeExpanded) }, modifier = Modifier.menuAnchor().fillMaxWidth())
+                                OutlinedTextField(value = localizedAssetFieldType(fieldType, isChinese), onValueChange = {}, readOnly = true, label = { Text(fieldTypeLabel) }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(typeExpanded) }, modifier = Modifier.menuAnchor().fillMaxWidth())
                                 ExposedDropdownMenu(expanded = typeExpanded, onDismissRequest = { typeExpanded = false }) {
-                                    AssetFieldType.entries.forEach { option -> DropdownMenuItem(text = { Text(option.name) }, onClick = { fieldType = option; typeExpanded = false }) }
+                                    AssetFieldType.entries.forEach { option -> DropdownMenuItem(text = { Text(localizedAssetFieldType(option, isChinese)) }, onClick = { fieldType = option; typeExpanded = false }) }
                                 }
                             }
-                            Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(checked = fieldRequired, onCheckedChange = { fieldRequired = it }); Text("必填") }
-                            if (fieldType == AssetFieldType.SINGLE_CHOICE) OutlinedTextField(value = fieldOptions, onValueChange = { fieldOptions = it }, label = { Text("选项，每行一个") }, minLines = 2, modifier = Modifier.fillMaxWidth())
-                            Button(onClick = { if (fieldName.isNotBlank()) { val current = editingField; if (current == null) assetCategoryViewModel.addField(assetCategory.id, fieldName, fieldType, fieldRequired, fieldOptions) else assetCategoryViewModel.updateField(current.copy(name = fieldName, type = fieldType, required = fieldRequired, options = fieldOptions)); fieldName = ""; fieldOptions = ""; fieldRequired = false; fieldType = AssetFieldType.TEXT; editingField = null } }, modifier = Modifier.fillMaxWidth()) { Text(if (editingField == null) "新增字段" else "保存字段") }
+                            Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(checked = fieldRequired, onCheckedChange = { fieldRequired = it }); Text(requiredLabel) }
+                            if (fieldType == AssetFieldType.SINGLE_CHOICE) OutlinedTextField(value = fieldOptions, onValueChange = { fieldOptions = it }, label = { Text(optionsLabel) }, minLines = 2, modifier = Modifier.fillMaxWidth())
+                            Button(onClick = { if (fieldName.isNotBlank()) { val current = editingField; if (current == null) assetCategoryViewModel.addField(assetCategory.id, fieldName, fieldType, fieldRequired, fieldOptions) else assetCategoryViewModel.updateField(current.copy(name = fieldName, type = fieldType, required = fieldRequired, options = fieldOptions)); fieldName = ""; fieldOptions = ""; fieldRequired = false; fieldType = AssetFieldType.TEXT; editingField = null } }, modifier = Modifier.fillMaxWidth()) { Text(addFieldLabel) }
                             if (editingField != null) TextButton(onClick = { editingField = null; fieldName = ""; fieldOptions = ""; fieldRequired = false; fieldType = AssetFieldType.TEXT }) { Text(strings.cancel) }
                         }
                     },
@@ -311,8 +326,8 @@ fun CategorySettingsScreen(
         fieldPendingDelete?.let { field ->
             AlertDialog(
                 onDismissRequest = { fieldPendingDelete = null },
-                title = { Text("删除详情字段") },
-                text = { Text("删除“${field.name}”后，已保存资产和申请中的对应字段值也会删除。") },
+                title = { Text(if (isChinese) "删除详情字段" else "Delete detail field") },
+                text = { Text(if (isChinese) "删除“${field.name}”后，已保存资产和申请中的对应字段值也会删除。" else "Deleting “${field.name}” will also remove its saved values from assets and applications.") },
                 confirmButton = { TextButton(onClick = { assetCategoryViewModel.deleteField(field); fieldPendingDelete = null }) { Text(strings.ok) } },
                 dismissButton = { TextButton(onClick = { fieldPendingDelete = null }) { Text(strings.cancel) } }
             )

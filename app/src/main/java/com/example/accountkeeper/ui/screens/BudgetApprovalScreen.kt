@@ -3,6 +3,9 @@ package com.example.accountkeeper.ui.screens
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -15,6 +18,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -27,6 +31,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -52,17 +57,26 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -125,6 +139,11 @@ fun BudgetApprovalScreen(
     var historyCategoryId by remember { mutableStateOf<Long?>(null) }
     var historyAssetCategoryId by remember { mutableStateOf<Long?>(null) }
     var searchQuery by remember { mutableStateOf("") }
+    var isHistorySearchExpanded by remember { mutableStateOf(false) }
+    var showHistoryFilterDialog by remember { mutableStateOf(false) }
+    var historySelectionMode by remember { mutableStateOf(false) }
+    val selectedHistoryIds = remember { mutableStateListOf<Long>() }
+    var deleteHistoryTarget by remember { mutableStateOf<List<BudgetApprovalRequest>?>(null) }
     var showHistoryStartPicker by remember { mutableStateOf(false) }
     var showHistoryEndPicker by remember { mutableStateOf(false) }
     var historyCategoryExpanded by remember { mutableStateOf(false) }
@@ -171,15 +190,16 @@ fun BudgetApprovalScreen(
     }
 
     val visible = requests.filter { request ->
-        when {
+        val tabMatch = when {
             history -> request.status != BudgetApprovalStatus.PENDING
             approver -> request.status == BudgetApprovalStatus.PENDING
-            else -> request.status == BudgetApprovalStatus.PENDING ||
-                request.status == BudgetApprovalStatus.REJECTED ||
-                request.status == BudgetApprovalStatus.WITHDRAWN
+            else -> request.status == BudgetApprovalStatus.PENDING || request.status == BudgetApprovalStatus.REJECTED || request.status == BudgetApprovalStatus.WITHDRAWN
         }
+        val query = searchQuery.trim().lowercase()
+        val searchMatch = query.isBlank() || listOf(request.id.toString(), request.reason, request.itemName, request.specification, request.decisionNote).any { it.lowercase().contains(query) }
+        val dateMatch = (historyStartAt == null || request.createdAt >= historyStartAt!!) && (historyEndAt == null || request.createdAt < historyEndAt!!)
+        tabMatch && searchMatch && dateMatch && (historyCategoryId == null || request.categoryId == historyCategoryId) && (historyAssetCategoryId == null || request.assetCategoryId == historyAssetCategoryId)
     }
-
     Scaffold(
         topBar = {
             TopAppBar(
@@ -190,7 +210,16 @@ fun BudgetApprovalScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
-                windowInsets = WindowInsets(0, 0, 0, 0)
+                windowInsets = WindowInsets(0, 0, 0, 0),
+                actions = {
+                    if (historySelectionMode && selectedHistoryIds.isNotEmpty()) {
+                        TextButton(onClick = { deleteHistoryTarget = visible.filter { it.id in selectedHistoryIds } }) { Text("${selectedHistoryIds.size} ${strings.delete}") }
+                        TextButton(onClick = { selectedHistoryIds.clear(); historySelectionMode = false }) { Text(strings.cancel) }
+                    } else if (history) {
+                        IconButton(onClick = { isHistorySearchExpanded = !isHistorySearchExpanded }) { Icon(Icons.Default.Search, strings.search) }
+                        IconButton(onClick = { showHistoryFilterDialog = true }) { Icon(Icons.Default.FilterList, strings.filter) }
+                    }
+                }
             )
         },
         floatingActionButton = {
@@ -221,6 +250,9 @@ fun BudgetApprovalScreen(
                     onClick = { approver = true },
                     label = { Text(strings.approvalApprover) }
                 )
+            }
+            if (history && isHistorySearchExpanded) {
+                OutlinedTextField(value = searchQuery, onValueChange = { searchQuery = it }, label = { Text(strings.approvalSearch) }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp))
             }
             TabRow(selectedTabIndex = if (history) 1 else 0) {
                 Tab(
@@ -257,13 +289,30 @@ fun BudgetApprovalScreen(
                         canManage = !approver && (!history || request.status in listOf(BudgetApprovalStatus.REJECTED, BudgetApprovalStatus.WITHDRAWN, BudgetApprovalStatus.PENDING)),
                         onView = { reviewing = request },
                         onWithdraw = { viewModel.withdrawApproval(request.id) },
-                        onEdit = { editing = request }
-                    )
+                        onEdit = { editing = request },
+                        allowDelete = history,
+                        selected = request.id in selectedHistoryIds,
+                        onSelect = { if (request.id in selectedHistoryIds) selectedHistoryIds.remove(request.id) else selectedHistoryIds.add(request.id) },
+                        onDelete = { deleteHistoryTarget = listOf(request) },
+                        onLongClick = { if (history) { historySelectionMode = true; if (request.id in selectedHistoryIds) selectedHistoryIds.remove(request.id) else selectedHistoryIds.add(request.id) } }                    )
                 }
             }
         }
     }
 
+    if (showHistoryFilterDialog) {
+        AlertDialog(onDismissRequest = { showHistoryFilterDialog = false }, title = { Text(strings.filter) }, text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { OutlinedButton(onClick = { showHistoryStartPicker = true }) { Text(historyStartAt?.let(::formatApprovalDate) ?: strings.startDate) }; OutlinedButton(onClick = { showHistoryEndPicker = true }) { Text(historyEndAt?.let(::formatApprovalDate) ?: strings.endDate) } }; Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { HistoryCategoryFilter(selectedId = historyCategoryId, categories = expenseCategories, allLabel = strings.all, onSelected = { historyCategoryId = it })
+                    HistoryCategoryFilter(selectedId = historyAssetCategoryId, categories = assetCategories.map { Category(it.id, it.name, TransactionType.ASSET) }, allLabel = strings.all, onSelected = { historyAssetCategoryId = it }) } } }, confirmButton = { TextButton(onClick = { showHistoryFilterDialog = false }) { Text(strings.ok) } }, dismissButton = { TextButton(onClick = { searchQuery = ""; historyCategoryId = null; historyAssetCategoryId = null; historyStartAt = null; historyEndAt = null }) { Text(strings.approvalClearFilters) } })
+    }
+    deleteHistoryTarget?.let { targets ->
+        AlertDialog(
+            onDismissRequest = { deleteHistoryTarget = null },
+            title = { Text("删除审批历史") },
+            text = { Text("将删除 ${targets.size} 条审批历史。关联资产未确定失去的记录将不会被删除。") },
+            confirmButton = { Button(onClick = { targets.forEach { viewModel.deleteHistoryApproval(it.id) }; selectedHistoryIds.removeAll(targets.map { it.id }.toSet()); historySelectionMode = false; deleteHistoryTarget = null }) { Text("删除") } },
+            dismissButton = { TextButton(onClick = { deleteHistoryTarget = null }) { Text(strings.cancel) } }
+        )
+    }
     if (showHistoryStartPicker) {
         val state = rememberDatePickerState(initialSelectedDateMillis = historyStartAt ?: System.currentTimeMillis())
         DatePickerDialog(onDismissRequest = { showHistoryStartPicker = false }, confirmButton = { TextButton(onClick = { historyStartAt = state.selectedDateMillis; showHistoryStartPicker = false }) { Text(strings.ok) } }, dismissButton = { TextButton(onClick = { showHistoryStartPicker = false }) { Text(strings.cancel) } }) { DatePicker(state = state) }
@@ -295,6 +344,7 @@ fun BudgetApprovalScreen(
 }
 
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 private fun ApprovalCard(
     request: BudgetApprovalRequest,
     categoryName: String?,
@@ -303,9 +353,17 @@ private fun ApprovalCard(
     canManage: Boolean,
     onView: () -> Unit,
     onWithdraw: () -> Unit,
-    onEdit: () -> Unit
+    onEdit: () -> Unit,
+    allowDelete: Boolean,
+    selected: Boolean,
+    onSelect: () -> Unit,
+    onDelete: () -> Unit,
+    onLongClick: () -> Unit
 ) {
-    AppSectionCard(modifier = Modifier.fillMaxWidth()) {
+    var dragOffset by remember { mutableStateOf(0f) }
+    Box(modifier = Modifier.fillMaxWidth()) {
+        if (allowDelete) Button(onClick = onDelete, modifier = Modifier.align(Alignment.CenterEnd).width(72.dp), contentPadding = PaddingValues(0.dp)) { Icon(Icons.Default.Delete, strings.delete) }
+        AppSectionCard(modifier = Modifier.fillMaxWidth().offset { IntOffset(dragOffset.roundToInt(), 0) }.pointerInput(allowDelete) { if (allowDelete) detectHorizontalDragGestures(onHorizontalDrag = { _, amount -> dragOffset = (dragOffset + amount).coerceIn(-240f, 0f) }, onDragEnd = { if (dragOffset < -120f) dragOffset = -240f else dragOffset = 0f }) }.then(Modifier.combinedClickable(onClick = { if (selected) onSelect() else onView() }, onLongClick = onLongClick))) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -362,7 +420,8 @@ private fun ApprovalCard(
             }
         }
     }
-}
+}    }
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -784,6 +843,19 @@ private fun DetailLine(label: String, value: String) {
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Text(value)
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun HistoryCategoryFilter(selectedId: Long?, categories: List<Category>, allLabel: String, onSelected: (Long?) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
+        OutlinedTextField(value = categories.firstOrNull { it.id == selectedId }?.name ?: allLabel, onValueChange = {}, readOnly = true, label = { Text(if (categories.firstOrNull { it.id == selectedId } == null) allLabel else categories.first { it.id == selectedId }.name) }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) }, modifier = Modifier.menuAnchor().width(170.dp))
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenuItem(text = { Text(allLabel) }, onClick = { onSelected(null); expanded = false })
+            categories.forEach { category -> DropdownMenuItem(text = { Text(category.name) }, onClick = { onSelected(category.id); expanded = false }) }
+        }
     }
 }
 

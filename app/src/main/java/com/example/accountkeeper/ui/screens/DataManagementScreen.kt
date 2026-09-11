@@ -794,8 +794,7 @@ fun DataManagementScreen(
                 Button(
                     onClick = {
                         scope.launch {
-                            viewModel.deleteAllTransactions()
-                            assetViewModel.deleteAllAssets()
+                            financialArchiveViewModel.clearAllBusinessData()
                             showClearDataDialog = false
                             snackbarHostState.showSnackbar(strings.clearAllDataSuccess)
                         }
@@ -1070,16 +1069,11 @@ fun ManualBackupsDialog(
     assetViewModel: AssetViewModel,
     financialArchiveViewModel: FinancialArchiveViewModel = hiltViewModel()
 ) {
+    val autoBackups by remember(refreshTrigger) { mutableStateOf(backupManager.getAllZipAutoBackups()) }
     val manualBackups by remember(refreshTrigger) { mutableStateOf(backupManager.getAllZipManualBackups()) }
     val scope = rememberCoroutineScope()
     val isChinese = strings.language == "界面语言"
-
-    // 增量备份链信息
-    val (baseBackupTime, deltaSteps) = remember(refreshTrigger) { backupManager.getBackupChainInfo() }
-    val hasDeltaBackup = baseBackupTime != null
-
     var showRestoreConfirmDialog by remember { mutableStateOf<java.io.File?>(null) }
-    var showDeltaRestoreDialog by remember { mutableStateOf<Int?>(null) } // 步骤号，-1表示最新
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1089,84 +1083,23 @@ fun ManualBackupsDialog(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.verticalScroll(rememberScrollState())
             ) {
-                // 增量备份链部分
-                if (hasDeltaBackup) {
+                if (autoBackups.isNotEmpty()) {
                     Text(
-                        text = if (isChinese) "增量备份链" else "Incremental Backup Chain",
+                        text = if (isChinese) "自动完整备份 (${autoBackups.size})" else "Automatic Full Backups (${autoBackups.size})",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF07C160)
                     )
-
-                    // 基准备份信息
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                    autoBackups.forEach { backup ->
+                        BackupFileItem(
+                            backup = backup,
+                            isChinese = isChinese,
+                            onRestore = { showRestoreConfirmDialog = backup },
+                            onDelete = { backupManager.deleteBackupFile(backup); onRefresh() }
                         )
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(12.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    if (isChinese) "基准备份" else "Base Backup",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    baseBackupTime ?: "",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            TextButton(onClick = { showDeltaRestoreDialog = 0 }) {
-                                Text(if (isChinese) "还原到此" else "Restore")
-                            }
-                        }
                     }
-
-                    // 步骤列表
-                    if (deltaSteps.isNotEmpty()) {
-                        Text(
-                            text = if (isChinese) "备份步骤 (${deltaSteps.size})" else "Backup Steps (${deltaSteps.size})",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-
-                        deltaSteps.forEachIndexed { index, step ->
-                            DeltaStepItem(
-                                stepNumber = step.stepNumber,
-                                timestamp = step.timestamp,
-                                changeCount = step.changeCount,
-                                isChinese = isChinese,
-                                onRestore = { showDeltaRestoreDialog = step.stepNumber }
-                            )
-                        }
-
-                        // 还原到最新
-                        OutlinedButton(
-                            onClick = { showDeltaRestoreDialog = -1 },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Icon(Icons.Default.Restore, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(if (isChinese) "还原到最新状态" else "Restore to Latest")
-                        }
-                    }
-
-                    if (manualBackups.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        HorizontalDivider()
-                        Spacer(modifier = Modifier.height(8.dp))
-                    }
+                    if (manualBackups.isNotEmpty()) HorizontalDivider()
                 }
-
                 // 手动备份分组
                 if (manualBackups.isNotEmpty()) {
                     Text(
@@ -1189,7 +1122,7 @@ fun ManualBackupsDialog(
                 }
 
                 // 如果没有备份
-                if (!hasDeltaBackup && manualBackups.isEmpty()) {
+                if (autoBackups.isEmpty() && manualBackups.isEmpty()) {
                     Text(strings.noManualBackups)
                 }
             }
@@ -1197,71 +1130,6 @@ fun ManualBackupsDialog(
         confirmButton = { TextButton(onClick = onDismiss) { Text(strings.close) } },
         shape = RoundedCornerShape(8.dp)
     )
-
-    // 增量备份还原确认对话框
-    showDeltaRestoreDialog?.let { targetStep ->
-        val stepLabel = when (targetStep) {
-            0 -> if (isChinese) "基准备份" else "Base Backup"
-            -1 -> if (isChinese) "最新状态" else "Latest"
-            else -> if (isChinese) "第 $targetStep 步" else "Step $targetStep"
-        }
-
-        AlertDialog(
-            onDismissRequest = { showDeltaRestoreDialog = null },
-            title = {
-                Text(
-                    if (isChinese) "还原到 $stepLabel" else "Restore to $stepLabel",
-                    color = MaterialTheme.colorScheme.primary
-                )
-            },
-            text = {
-                Column {
-                    Text(if (isChinese) "确定要还原到 $stepLabel 吗？" else "Are you sure you want to restore to $stepLabel?")
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        if (isChinese) "注意：此操作将清除现有数据并恢复到选定状态。"
-                        else "Note: This will clear existing data and restore to the selected state.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        scope.launch(Dispatchers.IO) {
-                            try {
-                                withContext(Dispatchers.Main) {
-                                    financialArchiveViewModel.restoreAutoBackupStep(targetStep) { message: String ->
-                                        scope.launch {
-                                            showDeltaRestoreDialog = null
-                                            snackbarHostState.showSnackbar(message)
-                                        }
-                                    }
-                                }
-                            } catch (e: Exception) {
-                                e.printStackTrace()
-                                withContext(Dispatchers.Main) {
-                                    snackbarHostState.showSnackbar(
-                                        if (isChinese) "恢复失败: ${e.localizedMessage}"
-                                        else "Restore failed: ${e.localizedMessage}"
-                                    )
-                                }
-                            }
-                        }
-                    }
-                ) {
-                    Text(if (isChinese) "还原" else "Restore")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeltaRestoreDialog = null }) {
-                    Text(strings.cancel)
-                }
-            },
-            shape = RoundedCornerShape(8.dp)
-        )
-    }
 
     // 手动备份恢复确认对话框
     showRestoreConfirmDialog?.let { backupFile ->
@@ -1878,4 +1746,3 @@ fun BillFileItem(
         }
     }
 }
-
