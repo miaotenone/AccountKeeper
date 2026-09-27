@@ -301,8 +301,56 @@ fun BudgetApprovalScreen(
     }
 
     if (showHistoryFilterDialog) {
-        AlertDialog(onDismissRequest = { showHistoryFilterDialog = false }, title = { Text(strings.filter) }, text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { OutlinedButton(onClick = { showHistoryStartPicker = true }) { Text(historyStartAt?.let(::formatApprovalDate) ?: strings.startDate) }; OutlinedButton(onClick = { showHistoryEndPicker = true }) { Text(historyEndAt?.let(::formatApprovalDate) ?: strings.endDate) } }; Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { HistoryCategoryFilter(selectedId = historyCategoryId, categories = expenseCategories, allLabel = strings.all, onSelected = { historyCategoryId = it })
-                    HistoryCategoryFilter(selectedId = historyAssetCategoryId, categories = assetCategories.map { Category(it.id, it.name, TransactionType.ASSET) }, allLabel = strings.all, onSelected = { historyAssetCategoryId = it }) } } }, confirmButton = { TextButton(onClick = { showHistoryFilterDialog = false }) { Text(strings.ok) } }, dismissButton = { TextButton(onClick = { searchQuery = ""; historyCategoryId = null; historyAssetCategoryId = null; historyStartAt = null; historyEndAt = null }) { Text(strings.approvalClearFilters) } })
+        AlertDialog(
+            onDismissRequest = { showHistoryFilterDialog = false },
+            title = { Text(strings.filter) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = { showHistoryStartPicker = true },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(historyStartAt?.let(::formatApprovalDate) ?: strings.startDate)
+                        }
+                        OutlinedButton(
+                            onClick = { showHistoryEndPicker = true },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(historyEndAt?.let(::formatApprovalDate) ?: strings.endDate)
+                        }
+                    }
+                    HistoryCategoryFilter(
+                        selectedId = historyCategoryId,
+                        categories = expenseCategories,
+                        allLabel = strings.all,
+                        onSelected = { historyCategoryId = it }
+                    )
+                    HistoryCategoryFilter(
+                        selectedId = historyAssetCategoryId,
+                        categories = assetCategories.map { Category(it.id, it.name, TransactionType.ASSET) },
+                        allLabel = strings.all,
+                        onSelected = { historyAssetCategoryId = it }
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showHistoryFilterDialog = false }) {
+                    Text(strings.ok)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    searchQuery = ""
+                    historyCategoryId = null
+                    historyAssetCategoryId = null
+                    historyStartAt = null
+                    historyEndAt = null
+                }) {
+                    Text(strings.approvalClearFilters)
+                }
+            }
+        )
     }
     deleteHistoryTarget?.let { targets ->
         AlertDialog(
@@ -851,7 +899,16 @@ private fun DetailLine(label: String, value: String) {
 private fun HistoryCategoryFilter(selectedId: Long?, categories: List<Category>, allLabel: String, onSelected: (Long?) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
-        OutlinedTextField(value = categories.firstOrNull { it.id == selectedId }?.name ?: allLabel, onValueChange = {}, readOnly = true, label = { Text(if (categories.firstOrNull { it.id == selectedId } == null) allLabel else categories.first { it.id == selectedId }.name) }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) }, modifier = Modifier.menuAnchor().width(170.dp))
+        OutlinedTextField(
+            value = categories.firstOrNull { it.id == selectedId }?.name ?: allLabel,
+            onValueChange = {},
+            readOnly = true,
+            label = {
+                Text(if (categories.firstOrNull { it.id == selectedId } == null) allLabel else categories.first { it.id == selectedId }.name)
+            },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
+            modifier = Modifier.menuAnchor().fillMaxWidth()
+        )
         ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             DropdownMenuItem(text = { Text(allLabel) }, onClick = { onSelected(null); expanded = false })
             categories.forEach { category -> DropdownMenuItem(text = { Text(category.name) }, onClick = { onSelected(category.id); expanded = false }) }
