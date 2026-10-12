@@ -24,15 +24,15 @@ import java.net.URL
 class UpdateManager(internal val context: Context) {
 
     companion object {
-        // GitHub 仓库信息（主）
-        private const val GITHUB_OWNER = "miaotenone"
-        private const val GITHUB_REPO = "AccountKeeper"
-        private const val GITHUB_API_RELEASES = "https://api.github.com/repos/$GITHUB_OWNER/$GITHUB_REPO/releases/latest"
-        
-        // Gitee 仓库信息（备用）
+        // Gitee 仓库信息（主）
         private const val GITEE_OWNER = "di-renjie"
         private const val GITEE_REPO = "AccountKeeper"
         private const val GITEE_API_RELEASES = "https://gitee.com/api/v5/repos/$GITEE_OWNER/$GITEE_REPO/releases/latest"
+        
+        // GitHub 仓库信息（备用）
+        private const val GITHUB_OWNER = "miaotenone"
+        private const val GITHUB_REPO = "AccountKeeper"
+        private const val GITHUB_API_RELEASES = "https://api.github.com/repos/$GITHUB_OWNER/$GITHUB_REPO/releases/latest"
         
         // 下载超时时间
         private const val CONNECT_TIMEOUT = 15000
@@ -111,17 +111,17 @@ class UpdateManager(internal val context: Context) {
 
     /**
      * 获取最新 Release 信息
-     * 优先使用 GitHub，失败时回退到 Gitee
+     * 优先使用 Gitee，失败时回退到 GitHub
      */
     private fun fetchLatestRelease(): GitHubRelease? {
-        // 优先尝试 GitHub
-        val githubRelease = fetchFromGitHub()
-        if (githubRelease != null) {
-            return githubRelease
+        // 优先尝试 Gitee
+        val giteeRelease = fetchFromGitee()
+        if (giteeRelease != null) {
+            return giteeRelease
         }
         
-        // GitHub 失败，尝试 Gitee
-        return fetchFromGitee()
+        // Gitee 失败，尝试 GitHub
+        return fetchFromGitHub()
     }
 
     /**

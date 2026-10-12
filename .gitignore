@@ -66,3 +66,7 @@ opencode.json
 # OS files
 .DS_Store
 Thumbs.db
+
+#vibe coding agent
+/.workbuddy
+/.workbuddy
