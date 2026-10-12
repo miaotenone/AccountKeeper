@@ -18,6 +18,20 @@ object AssetCategorySeed {
         insertDefaultFields(db, now)
     }
 
+    /**
+     * Seed used by migrations that still run against the pre-v24 schema, where
+     * `asset_categories` still has `rootType`/`parentCategoryId` columns and
+     * `asset_field_definitions`/`direction` do not exist yet.
+     *
+     * Must NOT use the modern [insertDefaults]: that one requires the v24+
+     * columns and would throw "no such column: direction" while upgrading.
+     */
+    fun insertLegacyDefaults(db: SupportSQLiteDatabase) {
+        val now = System.currentTimeMillis()
+        db.execSQL("INSERT INTO asset_categories(name,rootType,parentCategoryId,isDefault,createdAt,updatedAt) SELECT 'Equipment','PHYSICAL',NULL,1,$now,$now WHERE NOT EXISTS(SELECT 1 FROM asset_categories WHERE rootType='PHYSICAL' AND parentCategoryId IS NULL)")
+        db.execSQL("INSERT INTO asset_categories(name,rootType,parentCategoryId,isDefault,createdAt,updatedAt) SELECT 'Digital Service','VIRTUAL',NULL,1,$now,$now WHERE NOT EXISTS(SELECT 1 FROM asset_categories WHERE rootType='VIRTUAL' AND parentCategoryId IS NULL)")
+    }
+
     private fun insertDefaultFields(db: SupportSQLiteDatabase, now: Long) {
         db.query("SELECT id, name, isDefault FROM asset_categories").use { categories ->
             while (categories.moveToNext()) {
