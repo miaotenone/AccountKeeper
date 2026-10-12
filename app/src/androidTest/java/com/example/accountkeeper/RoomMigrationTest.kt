@@ -62,7 +62,9 @@ class RoomMigrationTest {
         AppDatabase.MIGRATION_22_23,
         AppDatabase.MIGRATION_23_24,
         AppDatabase.MIGRATION_24_25,
-        AppDatabase.MIGRATION_25_26
+        AppDatabase.MIGRATION_25_26,
+        AppDatabase.MIGRATION_26_27,
+        AppDatabase.MIGRATION_27_28
     )
 
     private fun createVersion1Schema(db: SupportSQLiteDatabase) {
@@ -163,7 +165,7 @@ class RoomMigrationTest {
     }
 
     @Test
-    fun migrateAll_from1To21() {
+    fun migrateAll_from1ToLatest() {
         val db = openDbAtVersion(1) { createVersion1Schema(it) }
         runMigrations(db, allMigrations())
         assertNotNull(db)
@@ -312,13 +314,14 @@ class RoomMigrationTest {
     }
 
     @Test
-    fun fullMigration_from1To21_preservesSchema() {
+    fun fullMigration_from1ToLatest_preservesSchema() {
         val db = openDbAtVersion(1) { createVersion1Schema(it) }
         runMigrations(db, allMigrations())
 
         val expectedTables = listOf(
             "transactions", "categories", "assets", "budgets", "budget_months",
-            "budget_approval_requests", "attachments", "asset_categories", "bill_files"
+            "budget_approval_requests", "attachments", "asset_categories", "bill_files",
+            "asset_field_definitions", "asset_field_values", "approval_field_values"
         )
         for (table in expectedTables) {
             val cursor = db.query("SELECT name FROM sqlite_master WHERE type='table' AND name='$table'")
@@ -335,16 +338,37 @@ class RoomMigrationTest {
             "index_transactions_categoryId",
             "index_assets_assetCategoryId",
             "index_assets_sourceApprovalId",
+            "index_assets_transactionId",
             "index_attachments_ownerType_ownerId",
             "index_attachments_sha256",
-            "index_asset_categories_rootType",
+            "index_asset_categories_direction",
+            "index_asset_field_definitions_assetCategoryId",
+            "index_asset_field_values_fieldId",
+            "index_approval_field_values_fieldId",
             "index_bill_files_ownerType",
+            "index_bill_files_categoryId",
             "index_budgets_monthKey_categoryId",
-            "index_budgets_categoryId"
+            "index_budgets_categoryId",
+            "index_budget_approval_requests_status",
+            "index_budget_approval_requests_createdAt",
+            "index_budget_approval_requests_categoryId",
+            "index_budget_approval_requests_assetCategoryId"
         )
         for (index in expectedIndexes) {
             val cursor = db.query("SELECT name FROM sqlite_master WHERE type='index' AND name='$index'")
             assertTrue("Index $index should exist", cursor.count == 1)
+            cursor.close()
+        }
+
+        // Indexes that belonged to schemas replaced on the way to the current version.
+        val obsoleteIndexes = listOf(
+            "index_asset_categories_rootType",
+            "index_assets_categoryId",
+            "index_budgets_monthKey_total"
+        )
+        for (index in obsoleteIndexes) {
+            val cursor = db.query("SELECT name FROM sqlite_master WHERE type='index' AND name='$index'")
+            assertTrue("Index $index should have been dropped", cursor.count == 0)
             cursor.close()
         }
 
@@ -373,7 +397,7 @@ class RoomMigrationTest {
             assetForeignKeyColumns += assetForeignKeys.getString(assetForeignKeys.getColumnIndexOrThrow("from"))
         }
         assetForeignKeys.close()
-        assertEquals(listOf("assetCategoryId"), assetForeignKeyColumns)
+        assertEquals(setOf("assetCategoryId", "transactionId"), assetForeignKeyColumns.toSet())
 
         val expectedTriggers = listOf(
             "budgets_total_insert_guard",
@@ -396,7 +420,9 @@ class RoomMigrationTest {
     @Test
     fun migration20To21_addsTransactionAttachmentColumn() {
         val db = openDbAtVersion(1) { createVersion1Schema(it) }
-        runMigrations(db, allMigrations().dropLast(1))
+        // Reach v20, then apply 20->21 in its proper position. Applying it to a
+        // later schema would replay it against columns that no longer exist.
+        runMigrations(db, allMigrations().take(19))
 
         AppDatabase.MIGRATION_20_21.migrate(db)
 
@@ -535,7 +561,9 @@ class RoomMigrationTest {
     @Test
     fun migration20To21_allowsMultipleAssetsWithNullSourceApprovalId() {
         val db = openDbAtVersion(1) { createVersion1Schema(it) }
-        runMigrations(db, allMigrations().dropLast(1))
+        // Reach v20, then apply 20->21 in its proper position. Applying it to a
+        // later schema would replay it against columns that no longer exist.
+        runMigrations(db, allMigrations().take(19))
 
         AppDatabase.MIGRATION_20_21.migrate(db)
 
@@ -550,28 +578,29 @@ class RoomMigrationTest {
     }
     @Test
     fun migration24To25_replacesAssetCategoriesAndMapsAssetDirections() {
-        val db = openDbAtVersion(24) {
-            it.execSQL("CREATE TABLE transactions (id INTEGER PRIMARY KEY NOT NULL)")
-            it.execSQL("CREATE TABLE assets (id INTEGER NOT NULL, date INTEGER NOT NULL, amount REAL NOT NULL, status TEXT NOT NULL, assetCategoryId INTEGER, categoryId INTEGER, name TEXT NOT NULL, specification TEXT NOT NULL, quantity REAL NOT NULL, purchaseDate INTEGER, sourceApprovalId INTEGER, transactionId INTEGER, targetPerson TEXT NOT NULL, targetAccount TEXT NOT NULL, note TEXT NOT NULL, isCompleted INTEGER NOT NULL, attachments TEXT NOT NULL, createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL, assetRootType TEXT NOT NULL, supplier TEXT NOT NULL, location TEXT NOT NULL, userOrDepartment TEXT NOT NULL, warranty TEXT NOT NULL, serviceStartDate INTEGER, serviceEndDate INTEGER, renewalCycle TEXT NOT NULL, accessUrl TEXT NOT NULL, PRIMARY KEY(id))")
-            it.execSQL("CREATE TABLE budget_approval_requests (id INTEGER PRIMARY KEY NOT NULL, assetCategoryId INTEGER)")
-            it.execSQL("CREATE TABLE asset_categories (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, name TEXT NOT NULL, rootType TEXT NOT NULL, parentCategoryId INTEGER, isDefault INTEGER NOT NULL DEFAULT 0, createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL)")
-            it.execSQL("CREATE TABLE asset_field_definitions (id INTEGER PRIMARY KEY NOT NULL, assetCategoryId INTEGER NOT NULL)")
-            it.execSQL("CREATE TABLE asset_field_values (assetId INTEGER NOT NULL, fieldId INTEGER NOT NULL, value TEXT NOT NULL, PRIMARY KEY(assetId, fieldId))")
-            it.execSQL("CREATE TABLE approval_field_values (approvalId INTEGER NOT NULL, fieldId INTEGER NOT NULL, value TEXT NOT NULL, PRIMARY KEY(approvalId, fieldId))")
-            it.execSQL("INSERT INTO asset_categories VALUES (1, '旧分类', 'PHYSICAL', NULL, 0, 1, 1)")
-            it.execSQL("INSERT INTO assets VALUES (1, 1, 20.0, 'OWNED', 1, NULL, '', '', 1.0, NULL, NULL, NULL, '', '', '', 0, '', 1, 1, 'PHYSICAL', '', '', '', '', NULL, NULL, '', ''), (2, 1, 30.0, 'OWNED', 1, NULL, '', '', 1.0, NULL, NULL, NULL, '', '', '', 0, '', 1, 1, 'VIRTUAL', '', '', '', '', NULL, NULL, '', '')")
-            it.execSQL("INSERT INTO budget_approval_requests VALUES (1, 1)")
-            it.execSQL("INSERT INTO asset_field_definitions VALUES (1, 1)")
-            it.execSQL("INSERT INTO asset_field_values VALUES (1, 1, 'x')")
-            it.execSQL("INSERT INTO approval_field_values VALUES (1, 1, 'x')")
-        }
+        // Build a real v24 database by replaying the migrations that shipped before
+        // 24->25, instead of hand-rolling a partial schema that drifts from it.
+        val db = openDbAtVersion(1) { createVersion1Schema(it) }
+        runMigrations(db, allMigrations().take(23))
+
+        // Migrations 17->18 and 20->21 already seeded categories, so use ids that
+        // cannot collide with them.
+        db.execSQL("INSERT INTO asset_categories (id, name, rootType, parentCategoryId, isDefault, createdAt, updatedAt) VALUES (100, '旧分类', 'PHYSICAL', NULL, 0, 1, 1)")
+        db.execSQL("INSERT INTO assets (id, date, amount, status, assetCategoryId, categoryId, name, specification, quantity, purchaseDate, sourceApprovalId, transactionId, targetPerson, targetAccount, note, isCompleted, attachments, createdAt, updatedAt, assetRootType, supplier, location, userOrDepartment, warranty, serviceStartDate, serviceEndDate, renewalCycle, accessUrl) VALUES (1, 1, 20.0, 'OWNED', 100, NULL, '', '', 1.0, NULL, NULL, NULL, '', '', '', 0, '', 1, 1, 'PHYSICAL', '', '', '', '', NULL, NULL, '', ''), (2, 1, 30.0, 'OWNED', 100, NULL, '', '', 1.0, NULL, NULL, NULL, '', '', '', 0, '', 1, 1, 'VIRTUAL', '', '', '', '', NULL, NULL, '', '')")
+        db.execSQL("INSERT INTO budget_approval_requests (id, type, categoryId, assetCategoryId, amount, purchaseDate, reason, itemName, specification, quantity, attachments, status, decisionNote, createdAt, updatedAt, decidedAt) VALUES (1, 'PURCHASE_BUDGET', NULL, 100, 20.0, NULL, '', '', '', 1.0, '', 'PENDING', '', 1, 1, NULL)")
+        db.execSQL("INSERT INTO asset_field_definitions (id, assetCategoryId, name, type, required, options, sortOrder, createdAt, updatedAt) VALUES (100, 100, '旧字段', 'TEXT', 0, '', 0, 1, 1)")
+        db.execSQL("INSERT INTO asset_field_values (assetId, fieldId, value) VALUES (1, 100, 'x')")
+        db.execSQL("INSERT INTO approval_field_values (approvalId, fieldId, value) VALUES (1, 100, 'x')")
 
         AppDatabase.MIGRATION_24_25.migrate(db)
 
         assertEquals(9, countRows(db, "asset_categories"))
         assertEquals(5, countRows(db, "asset_categories WHERE direction = 'POSITIVE'"))
         assertEquals(4, countRows(db, "asset_categories WHERE direction = 'NEGATIVE'"))
-        assertEquals(0, countRows(db, "asset_field_definitions"))
+        // Legacy field definitions are replaced by the new default templates.
+        assertEquals(0, countRows(db, "asset_field_definitions WHERE name = '旧字段'"))
+        assertTrue("default field definitions should be re-seeded", countRows(db, "asset_field_definitions") > 0)
+        assertEquals(0, countRows(db, "asset_field_definitions WHERE assetCategoryId NOT IN (SELECT id FROM asset_categories)"))
         assertEquals(0, countRows(db, "asset_field_values"))
         assertEquals(0, countRows(db, "approval_field_values"))
         assertEquals(0, countRows(db, "assets WHERE assetCategoryId IS NOT NULL"))

@@ -68,12 +68,14 @@ class PurchaseApprovalFlowTest {
     }
 
     @Test
-    fun purchaseApproval_requiresPurchaseFields() = runBlocking {
-        val request = purchaseRequest().copy(itemName = "")
+    fun purchaseApproval_requiresReason() = runBlocking {
+        // Requests require a reason; the item-name/quantity checks were replaced
+        // by the reason check when purchase approval was reworked.
+        val request = purchaseRequest().copy(reason = "")
 
         val error = expectFailure<IllegalArgumentException> { repository.submit(request) }
 
-        assertTrue(error.message!!.contains("item name"))
+        assertTrue(error.message!!.contains("reason"))
     }
 
     @Test
